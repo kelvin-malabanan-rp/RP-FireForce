@@ -1,0 +1,642 @@
+import { IconSymbol } from "@/components/ui/icon-symbol";
+import React, { useState } from "react";
+import {
+    Alert,
+    Modal,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from "react-native";
+
+interface Incident {
+  id: string;
+  title: string;
+  description: string;
+  severity: "low" | "medium" | "high" | "critical";
+  status: "open" | "investigating" | "resolved";
+  timestamp: Date;
+  reportedBy: string;
+  location?: string;
+}
+
+const mockIncidents: Incident[] = [
+  {
+    id: "1",
+    title: "Server Outage - Main Database",
+    description:
+      "Primary database server is experiencing connectivity issues affecting user authentication.",
+    severity: "critical",
+    status: "investigating",
+    timestamp: new Date("2025-01-15T10:30:00"),
+    reportedBy: "System Monitor",
+    location: "Data Center A",
+  },
+  {
+    id: "2",
+    title: "Payment Gateway Timeout",
+    description:
+      "Payment processing experiencing intermittent timeouts during checkout process.",
+    severity: "high",
+    status: "open",
+    timestamp: new Date("2025-01-15T09:45:00"),
+    reportedBy: "Customer Service",
+    location: "Payment Service",
+  },
+  {
+    id: "3",
+    title: "Email Delivery Delays",
+    description:
+      "Notification emails are being delivered with 15-20 minute delays.",
+    severity: "medium",
+    status: "investigating",
+    timestamp: new Date("2025-01-15T08:15:00"),
+    reportedBy: "Operations Team",
+    location: "Email Service",
+  },
+  {
+    id: "4",
+    title: "UI Performance Issue",
+    description:
+      "Dashboard loading times increased by 30% compared to baseline.",
+    severity: "low",
+    status: "resolved",
+    timestamp: new Date("2025-01-14T16:20:00"),
+    reportedBy: "QA Team",
+    location: "Frontend",
+  },
+];
+
+export default function IncidentsScreen() {
+  const [incidents, setIncidents] = useState<Incident[]>(mockIncidents);
+  const [refreshing, setRefreshing] = useState(false);
+  const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [modalVisible, setModalVisible] = useState(false);
+  const [newIncident, setNewIncident] = useState({
+    title: "",
+    description: "",
+    severity: "medium" as const,
+    location: "",
+  });
+
+  const onRefresh = React.useCallback(() => {
+    setRefreshing(true);
+    // Simulate API call
+    setTimeout(() => {
+      setRefreshing(false);
+    }, 1000);
+  }, []);
+
+  const getSeverityColor = (severity: string) => {
+    switch (severity) {
+      case "critical":
+        return "#DC2626";
+      case "high":
+        return "#EA580C";
+      case "medium":
+        return "#D97706";
+      case "low":
+        return "#16A34A";
+      default:
+        return "#6B7280";
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "open":
+        return "#DC2626";
+      case "investigating":
+        return "#D97706";
+      case "resolved":
+        return "#16A34A";
+      default:
+        return "#6B7280";
+    }
+  };
+
+  const filteredIncidents = incidents.filter(
+    (incident) => filterStatus === "all" || incident.status === filterStatus
+  );
+
+  const createIncident = () => {
+    if (!newIncident.title || !newIncident.description) {
+      Alert.alert("Error", "Please fill in all required fields");
+      return;
+    }
+
+    const incident: Incident = {
+      id: Date.now().toString(),
+      title: newIncident.title,
+      description: newIncident.description,
+      severity: newIncident.severity,
+      status: "open",
+      timestamp: new Date(),
+      reportedBy: "Current User",
+      location: newIncident.location,
+    };
+
+    setIncidents((prev) => [incident, ...prev]);
+    setNewIncident({
+      title: "",
+      description: "",
+      severity: "medium",
+      location: "",
+    });
+    setModalVisible(false);
+    Alert.alert("Success", "Incident created successfully");
+  };
+
+  const formatTimestamp = (timestamp: Date) => {
+    return timestamp.toLocaleString();
+  };
+
+  const getIncidentStats = () => {
+    const total = incidents.length;
+    const open = incidents.filter((i) => i.status === "open").length;
+    const investigating = incidents.filter(
+      (i) => i.status === "investigating"
+    ).length;
+    const critical = incidents.filter((i) => i.severity === "critical").length;
+
+    return { total, open, investigating, critical };
+  };
+
+  const stats = getIncidentStats();
+
+  return (
+    <View style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Incident Management</Text>
+        <TouchableOpacity
+          style={styles.addButton}
+          onPress={() => setModalVisible(true)}
+        >
+          <IconSymbol name="plus" size={24} color="#FFFFFF" />
+        </TouchableOpacity>
+      </View>
+
+      {/* Stats Cards */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.statsContainer}
+      >
+        <View style={[styles.statCard, styles.totalCard]}>
+          <Text style={styles.statNumber}>{stats.total}</Text>
+          <Text style={styles.statLabel}>Total</Text>
+        </View>
+        <View style={[styles.statCard, styles.openCard]}>
+          <Text style={styles.statNumber}>{stats.open}</Text>
+          <Text style={styles.statLabel}>Open</Text>
+        </View>
+        <View style={[styles.statCard, styles.investigatingCard]}>
+          <Text style={styles.statNumber}>{stats.investigating}</Text>
+          <Text style={styles.statLabel}>Investigating</Text>
+        </View>
+        <View style={[styles.statCard, styles.criticalCard]}>
+          <Text style={styles.statNumber}>{stats.critical}</Text>
+          <Text style={styles.statLabel}>Critical</Text>
+        </View>
+      </ScrollView>
+
+      {/* Filter Buttons */}
+      <View style={styles.filterContainer}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          {["all", "open", "investigating", "resolved"].map((status) => (
+            <TouchableOpacity
+              key={status}
+              style={[
+                styles.filterButton,
+                filterStatus === status && styles.filterButtonActive,
+              ]}
+              onPress={() => setFilterStatus(status)}
+            >
+              <Text
+                style={[
+                  styles.filterText,
+                  filterStatus === status && styles.filterTextActive,
+                ]}
+              >
+                {status.charAt(0).toUpperCase() + status.slice(1)}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+
+      {/* Incidents List */}
+      <ScrollView
+        style={styles.incidentsList}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
+        {filteredIncidents.map((incident) => (
+          <View key={incident.id} style={styles.incidentCard}>
+            <View style={styles.incidentHeader}>
+              <View style={styles.incidentTitleRow}>
+                <Text style={styles.incidentTitle}>{incident.title}</Text>
+                <View
+                  style={[
+                    styles.severityBadge,
+                    { backgroundColor: getSeverityColor(incident.severity) },
+                  ]}
+                >
+                  <Text style={styles.severityText}>
+                    {incident.severity.toUpperCase()}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.incidentMeta}>
+                <Text style={styles.incidentTime}>
+                  {formatTimestamp(incident.timestamp)}
+                </Text>
+                <View
+                  style={[
+                    styles.statusBadge,
+                    { backgroundColor: getStatusColor(incident.status) },
+                  ]}
+                >
+                  <Text style={styles.statusText}>
+                    {incident.status.toUpperCase()}
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            <Text style={styles.incidentDescription}>
+              {incident.description}
+            </Text>
+
+            <View style={styles.incidentFooter}>
+              <Text style={styles.reportedBy}>
+                Reported by: {incident.reportedBy}
+              </Text>
+              {incident.location && (
+                <Text style={styles.location}>📍 {incident.location}</Text>
+              )}
+            </View>
+          </View>
+        ))}
+
+        {filteredIncidents.length === 0 && (
+          <View style={styles.emptyState}>
+            <IconSymbol
+              name="exclamationmark.triangle"
+              size={48}
+              color="#9CA3AF"
+            />
+            <Text style={styles.emptyText}>No incidents found</Text>
+            <Text style={styles.emptySubtext}>
+              {filterStatus === "all"
+                ? "All systems are operational"
+                : `No incidents with status: ${filterStatus}`}
+            </Text>
+          </View>
+        )}
+      </ScrollView>
+
+      {/* Create Incident Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={modalVisible}
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Report New Incident</Text>
+              <TouchableOpacity onPress={() => setModalVisible(false)}>
+                <IconSymbol name="xmark" size={24} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+
+            <TextInput
+              style={styles.input}
+              placeholder="Incident Title"
+              value={newIncident.title}
+              onChangeText={(text) =>
+                setNewIncident((prev) => ({ ...prev, title: text }))
+              }
+            />
+
+            <TextInput
+              style={[styles.input, styles.textArea]}
+              placeholder="Description"
+              value={newIncident.description}
+              onChangeText={(text) =>
+                setNewIncident((prev) => ({ ...prev, description: text }))
+              }
+              multiline
+              numberOfLines={4}
+            />
+
+            <TextInput
+              style={styles.input}
+              placeholder="Location (optional)"
+              value={newIncident.location}
+              onChangeText={(text) =>
+                setNewIncident((prev) => ({ ...prev, location: text }))
+              }
+            />
+
+            <View style={styles.severitySelector}>
+              <Text style={styles.severityLabel}>Severity:</Text>
+              {["low", "medium", "high", "critical"].map((sev) => (
+                <TouchableOpacity
+                  key={sev}
+                  style={[
+                    styles.severityOption,
+                    newIncident.severity === sev && styles.severityOptionActive,
+                    { borderColor: getSeverityColor(sev) },
+                  ]}
+                  onPress={() =>
+                    setNewIncident((prev) => ({
+                      ...prev,
+                      severity: sev as "low" | "medium" | "high" | "critical",
+                    }))
+                  }
+                >
+                  <Text
+                    style={[
+                      styles.severityOptionText,
+                      newIncident.severity === sev && {
+                        color: getSeverityColor(sev),
+                      },
+                    ]}
+                  >
+                    {sev.charAt(0).toUpperCase() + sev.slice(1)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <TouchableOpacity
+              style={styles.createButton}
+              onPress={createIncident}
+            >
+              <Text style={styles.createButtonText}>Create Incident</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#F3F4F6",
+  },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 20,
+    paddingTop: 60,
+    backgroundColor: "#FFFFFF",
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E7EB",
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: "#111827",
+  },
+  addButton: {
+    backgroundColor: "#3B82F6",
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  statsContainer: {
+    backgroundColor: "#FFFFFF",
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+  },
+  statCard: {
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginRight: 12,
+    minWidth: 80,
+  },
+  totalCard: { backgroundColor: "#EFF6FF" },
+  openCard: { backgroundColor: "#FEF2F2" },
+  investigatingCard: { backgroundColor: "#FEF3C7" },
+  criticalCard: { backgroundColor: "#FEE2E2" },
+  statNumber: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: "#111827",
+  },
+  statLabel: {
+    fontSize: 12,
+    color: "#6B7280",
+    marginTop: 4,
+  },
+  filterContainer: {
+    backgroundColor: "#FFFFFF",
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E7EB",
+  },
+  filterButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: "#F3F4F6",
+    marginRight: 8,
+  },
+  filterButtonActive: {
+    backgroundColor: "#3B82F6",
+  },
+  filterText: {
+    fontSize: 14,
+    color: "#6B7280",
+    fontWeight: "500",
+  },
+  filterTextActive: {
+    color: "#FFFFFF",
+  },
+  incidentsList: {
+    flex: 1,
+    padding: 20,
+  },
+  incidentCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  incidentHeader: {
+    marginBottom: 12,
+  },
+  incidentTitleRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 8,
+  },
+  incidentTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#111827",
+    flex: 1,
+    marginRight: 12,
+  },
+  severityBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  severityText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#FFFFFF",
+  },
+  incidentMeta: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  incidentTime: {
+    fontSize: 12,
+    color: "#6B7280",
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  statusText: {
+    fontSize: 10,
+    fontWeight: "500",
+    color: "#FFFFFF",
+  },
+  incidentDescription: {
+    fontSize: 14,
+    color: "#374151",
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  incidentFooter: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  reportedBy: {
+    fontSize: 12,
+    color: "#6B7280",
+    fontStyle: "italic",
+  },
+  location: {
+    fontSize: 12,
+    color: "#6B7280",
+  },
+  emptyState: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 60,
+  },
+  emptyText: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#6B7280",
+    marginTop: 16,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: "#9CA3AF",
+    marginTop: 8,
+    textAlign: "center",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 20,
+    width: "90%",
+    maxHeight: "80%",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "600",
+    color: "#111827",
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    marginBottom: 16,
+    backgroundColor: "#FFFFFF",
+  },
+  textArea: {
+    height: 100,
+    textAlignVertical: "top",
+  },
+  severitySelector: {
+    marginBottom: 20,
+  },
+  severityLabel: {
+    fontSize: 16,
+    fontWeight: "500",
+    color: "#374151",
+    marginBottom: 12,
+  },
+  severityOption: {
+    borderWidth: 2,
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    marginBottom: 8,
+  },
+  severityOptionActive: {
+    backgroundColor: "#F9FAFB",
+  },
+  severityOptionText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#6B7280",
+  },
+  createButton: {
+    backgroundColor: "#3B82F6",
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  createButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#FFFFFF",
+  },
+});
