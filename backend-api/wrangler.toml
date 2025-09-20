@@ -1,0 +1,11 @@
+name = "incident-webhook-api"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+[vars]
+AWS_REGION = "us-east-1"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "incident-management"
+database_id = "c3c21ca1-204d-4db3-ab18-2cf69ec7418c"
