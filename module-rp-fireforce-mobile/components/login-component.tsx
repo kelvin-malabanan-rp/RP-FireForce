@@ -1,3 +1,4 @@
+import { LoginProps, LoginData } from "@/types";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
@@ -10,15 +11,10 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 
-interface LoginData {
-  email: string;
-  password: string;
-}
-
-export const LoginComponent = () => {
+export const LoginComponent = ({ onLogin }: LoginProps) => {
   const [formData, setFormData] = useState<LoginData>({
     email: "",
     password: "",
@@ -36,54 +32,33 @@ export const LoginComponent = () => {
     if (error) setError("");
   };
 
-  const handleSubmit = async (): Promise<void> => {
-    // setIsLoading(true);
-    // setError("");
+  const handleLogin = async () => {
+    // Remove the event parameter
+    setIsLoading(true);
+    setError("");
 
-    // // Basic validation
-    // if (!formData.email || !formData.password) {
-    //   setError("Please fill in all fields");
-    //   setIsLoading(false);
-    //   return;
-    // }
+    // Basic validation
+    if (!formData.email || !formData.password) {
+      setError("Please fill in all fields");
+      setIsLoading(false);
+      return;
+    }
 
-    // if (!formData.email.includes("@rocketpartners.io")) {
-    //   setError("Please enter a valid rocketpartners.io email address");
-    //   setIsLoading(false);
-    //   return;
-    // }
+    if (!formData.email.includes("@rocketpartners.io")) {
+      setError("Please enter a valid rocketpartners.io email address");
+      setIsLoading(false);
+      return;
+    }
 
-    // try {
-    //   // Simulate API call
-    //   await new Promise<void>((resolve) => setTimeout(resolve, 1500));
+    // Remove e.preventDefault() - not needed in React Native
 
-    //   // Replace this with your actual login logic
-    //   console.log("Login attempt:", formData);
+    // Call parent login handler with separate email/password
+    const errors = await onLogin(formData.email, formData.password);
 
-    //   // For demo purposes
-    //   if (
-    //     formData.email === "demo@rocketpartners.io" &&
-    //     formData.password === "password"
-    //   ) {
-    //     // Alert.alert("Success", "Login successful!", [
-    //     //   {
-    //     //     text: "OK",
-    //     //     onPress: () => {
-    //     //       // Navigate to explore tab after successful login
-    //     //       router.push("/(tabs)/explore");
-    //     //     },
-    //     //   },
-    //     // ]);
-    //     router.push("/(tabs)/home");
-    //   } else {
-    //     setError("Invalid email or password");
-    //   }
-    // } catch (err: unknown) {
-    //   setError("Login failed. Please try again.");
-    // } finally {
-    //   setIsLoading(false);
-    // }
-    router.push("/(tabs)/home");
+    if (errors) {
+      setError(errors.authError || "");
+      setIsLoading(false); // This should be false, not true
+    }
   };
 
   return (
@@ -151,7 +126,7 @@ export const LoginComponent = () => {
                 styles.loginButton,
                 isLoading && styles.loginButtonDisabled,
               ]}
-              onPress={handleSubmit}
+              onPress={handleLogin}
               disabled={isLoading}
             >
               {isLoading ? (
@@ -339,4 +314,3 @@ const styles = StyleSheet.create({
     marginVertical: 2,
   },
 });
-
