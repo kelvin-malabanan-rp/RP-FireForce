@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="DataSourceManagerImpl" format="xml" multifile-model="true">
+    <data-source source="LOCAL" name="FIREFORCE_DB_LOCAL" uuid="fde90ede-178b-452e-9500-a124e5a24b40">
+      <driver-ref>sqlite.xerial</driver-ref>
+      <synchronize>true</synchronize>
+      <jdbc-driver>org.sqlite.JDBC</jdbc-driver>
+      <jdbc-url>jdbc:sqlite:$PROJECT_DIR$/module-rp-fireforce-backend/.wrangler/state/v3/d1/miniflare-D1DatabaseObject/d246ca6d47b9c87fa8cfffdea326caa58b7cc14ac54c77c6b801c92e0d5a8c1d.sqlite</jdbc-url>
+      <working-dir>$ProjectFileDir$</working-dir>
+    </data-source>
+  </component>
+</project>

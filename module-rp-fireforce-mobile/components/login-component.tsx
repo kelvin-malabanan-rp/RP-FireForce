@@ -142,16 +142,17 @@ export const LoginComponent = ({ onLogin }: LoginProps) => {
 
           <View style={styles.footer}>
             <Text style={styles.footerText}>
-              Don't have an account?{" "}
-              <Text style={styles.signupLink}>Sign up</Text>
+              Don't have an account? Ask your organization to setup FireForce
+              Account
+              {/* <Text style={styles.signupLink}>Sign up</Text> */}
             </Text>
           </View>
 
-          <View style={styles.demoContainer}>
+          {/* <View style={styles.demoContainer}>
             <Text style={styles.demoTitle}>Demo credentials:</Text>
             <Text style={styles.demoText}>Email: demo@example.com</Text>
             <Text style={styles.demoText}>Password: password</Text>
-          </View>
+          </View> */}
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -289,6 +290,7 @@ const styles = StyleSheet.create({
   footerText: {
     fontSize: 14,
     color: "#6B7280",
+    textAlign: "center",
   },
   signupLink: {
     color: "#667EEA",
