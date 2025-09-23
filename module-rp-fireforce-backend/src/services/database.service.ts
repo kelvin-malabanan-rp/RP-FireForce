@@ -1,5 +1,5 @@
 // services/database.service.ts
-import { Env, Incident, IncidentFilters } from '../types';
+import {Env, Incident, IncidentFilters, User} from '../types';
 
 export class DatabaseService {
 	private env: Env;
@@ -119,23 +119,23 @@ export class DatabaseService {
 		}
 	}
 
-	// // User authentication methods
-	// async getUserByEmail(email: string): Promise<User | null> {
-	// 	const query = `
-	// 		SELECT id, email, password_hash as passwordHash, role,
-	// 			   first_name as firstName, last_name as lastName,
-	// 			   is_active as isActive, created_at as createdAt,
-	// 			   updated_at as updatedAt, last_login as lastLogin
-	// 		FROM users
-	// 		WHERE email = ? AND is_active = 1
-	// 	`;
-	//
-	// 	try {
-	// 		const result = await this.db.prepare(query).bind(email).first();
-	// 		return result as User | null;
-	// 	} catch (error) {
-	// 		console.error('Error fetching user by email:', error);
-	// 		throw error;
-	// 	}
-	// }
+	// User authentication methods
+	async getUserByEmail(email: string): Promise<User | null> {
+		const query = `
+			SELECT id, email, password_hash as passwordHash, role,
+				   first_name as firstName, last_name as lastName,
+				   is_active as isActive, created_at as createdAt,
+				   updated_at as updatedAt, last_login as lastLogin
+			FROM users
+			WHERE email = ? AND is_active = 1
+		`;
+
+		try {
+			const result = await this.db.prepare(query).bind(email).first();
+			return result as User | null;
+		} catch (error) {
+			console.error('Error fetching user by email:', error);
+			throw error;
+		}
+	}
 }

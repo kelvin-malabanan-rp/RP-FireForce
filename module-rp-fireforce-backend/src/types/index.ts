@@ -73,6 +73,12 @@ export interface LoginResponse {
 	token: string;
 }
 
+export interface ApiResponse<T> {
+	httpStatus: string;
+	message: string;
+	data: T;
+}
+
 export interface LoginRequest {
 	email: string;
 	password: string;
@@ -84,4 +90,20 @@ export interface JWTPayload {
 	role: 'admin' | 'operator' | 'viewer';
 	iat: number;
 	exp: number;
+}
+
+// User interface for database.service.ts
+export interface User {
+	id: string;
+	email: string;
+	passwordHash: string;
+	role: 'admin' | 'operator' | 'viewer';
+	firstName?: string;
+	lastName?: string;
+	isActive: boolean;
+	isVerified?: boolean;
+	phoneNumber?: string;
+	createdAt: string;
+	updatedAt: string;
+	lastLogin?: string;
 }

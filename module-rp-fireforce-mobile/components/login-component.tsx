@@ -16,12 +16,11 @@ import {
 
 export const LoginComponent = ({ onLogin }: LoginProps) => {
   const [formData, setFormData] = useState<LoginData>({
-    email: "",
-    password: "",
+      email: "kelvin.malabanan@rocketpartners.io",
+      password: "password123",
   });
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
-  const router = useRouter();
 
   const handleChange = (name: keyof LoginData, value: string): void => {
     setFormData((prev: LoginData) => ({

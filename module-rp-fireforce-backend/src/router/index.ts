@@ -1,9 +1,10 @@
 // router/index.ts
 import { Env } from '../types';
 import { CORS_HEADERS } from '../constants/cors';
-import {handleHealth} from "../handlers/health.handlers";
-import {handleGetIncidents, handleGetStats, handleTestIncident} from "../handlers/incident.handlers";
-import {handleWebhook} from "../handlers/webook.handlers";
+import { handleHealth } from "../handlers/health.handlers";
+import { handleGetIncidents, handleGetStats, handleTestIncident } from "../handlers/incident.handlers";
+import { handleWebhook } from "../handlers/webook.handlers";
+import {handleLogin, handleLogout} from "../handlers/auth.handlers";
 
 export class Router {
 	private env: Env;
@@ -26,21 +27,32 @@ export class Router {
 		}
 
 		try {
-			// Route handlers
+			// Public routes (no auth required)
 			if (path === '/health' && method === 'GET') {
 				return handleHealth(CORS_HEADERS);
 			}
 
+			// Authentication routes
+			if (path === '/api/auth/login' && method === 'POST') {
+				return handleLogin(request, this.env, CORS_HEADERS);
+			}
+
+			if (path === '/api/auth/logout' && method === 'POST') {
+				return handleLogout(request, this.env, CORS_HEADERS);
+			}
+
+			// Webhook (no auth required for AWS)
+			if (path === '/webhook/aws-cloudwatch' && method === 'POST') {
+				return handleWebhook(request, this.env, CORS_HEADERS);
+			}
+
+			// Protected routes (will add auth middleware later)
 			if (path === '/api/incidents' && method === 'GET') {
 				return handleGetIncidents(url, this.env, CORS_HEADERS);
 			}
 
 			if (path === '/api/incidents/stats' && method === 'GET') {
 				return handleGetStats(url, this.env, CORS_HEADERS);
-			}
-
-			if (path === '/webhook/aws-cloudwatch' && method === 'POST') {
-				return handleWebhook(request, this.env, CORS_HEADERS);
 			}
 
 			if (path === '/api/test/trigger-incident' && method === 'POST') {

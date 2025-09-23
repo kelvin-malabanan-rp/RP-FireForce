@@ -6,12 +6,14 @@ export type APIResponse<T = {}> = {
 };
 
 export type AuthenticateResponse = {
-  object: any;
   httpStatus: string;
-  id: number;
-  email: string;
-  password: string;
-  firstName: string;
-  lastName: string;
-  token: string;
+  message: string;
+  data: {
+      id: number;
+      email: string;
+      password: string;
+      firstName: string;
+      lastName: string;
+      token: string;
+  }
 };

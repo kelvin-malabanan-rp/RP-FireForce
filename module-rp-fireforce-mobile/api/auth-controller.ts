@@ -1,19 +1,18 @@
 import { LoginData, APIResponse, AuthenticateResponse } from "@/types";
-import { BASE_API } from "@/utils/backend-url";
+import {BASE_API, BASE_URL_LOCAL} from "@/utils/backend-url";
 import apiManager from "./api-manager";
 
 export const authenticateUser = async (
-  data: LoginData
-): Promise<APIResponse<AuthenticateResponse>> => {
-  try {
-    const response = await apiManager.post<APIResponse<AuthenticateResponse>>(
-      `${BASE_API}/v1/api/authentication`,
-      data
-    );
-    return response.data; // Axios wraps the response, so we need .data
-  } catch (error) {
-    // Handle error appropriately - throw it or return an error response
-    console.error("Authentication error:", error);
-    throw error; // Re-throw to let the caller handle it
-  }
+    data: LoginData
+): Promise<AuthenticateResponse> => {
+    try {
+        const response = await apiManager.post<AuthenticateResponse>(
+            `${BASE_URL_LOCAL}/api/auth/login`,
+            data
+        );
+        return response.data; // Axios wraps in response, so extract .data
+    } catch (error) {
+        console.error("Authentication error:", error);
+        throw error;
+    }
 };

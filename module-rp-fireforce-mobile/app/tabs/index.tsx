@@ -57,7 +57,7 @@ export default function HomeScreen() {
   };
 
   return (
-      <ThemedView style={{ flex: 1, backgroundColor: '#F3F4F6' }}>
+      <ThemedView style={{ flex: 1, backgroundColor: '#F3F4F6' , marginTop: 50}}>
         <ScrollView
             style={{ flex: 1 }}
             refreshControl={
