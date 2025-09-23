@@ -1,18 +1,29 @@
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
-    Alert,
-    Modal,
-    RefreshControl,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  Modal,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+  ActivityIndicator,
 } from "react-native";
+import {
+  getIncidents,
+  getIncidentStats,
+  createIncident
+} from "@/api/incident-controller";
+import {
+  Incident,
+  CreateIncidentData,
+  IncidentStatsResponse
+} from "@/types/response-types";
 
-interface Incident {
+interface IncidentUI {
   id: string;
   title: string;
   description: string;
@@ -21,60 +32,35 @@ interface Incident {
   timestamp: Date;
   reportedBy: string;
   location?: string;
+  assignedTo?: string;
+  resolvedBy?: string;
+  resolvedAt?: Date;
+  awsAlarmName?: string;
 }
 
-const mockIncidents: Incident[] = [
-  {
-    id: "1",
-    title: "Server Outage - Main Database",
-    description:
-      "Primary database server is experiencing connectivity issues affecting user authentication.",
-    severity: "critical",
-    status: "investigating",
-    timestamp: new Date("2025-01-15T10:30:00"),
-    reportedBy: "System Monitor",
-    location: "Data Center A",
-  },
-  {
-    id: "2",
-    title: "Payment Gateway Timeout",
-    description:
-      "Payment processing experiencing intermittent timeouts during checkout process.",
-    severity: "high",
-    status: "open",
-    timestamp: new Date("2025-01-15T09:45:00"),
-    reportedBy: "Customer Service",
-    location: "Payment Service",
-  },
-  {
-    id: "3",
-    title: "Email Delivery Delays",
-    description:
-      "Notification emails are being delivered with 15-20 minute delays.",
-    severity: "medium",
-    status: "investigating",
-    timestamp: new Date("2025-01-15T08:15:00"),
-    reportedBy: "Operations Team",
-    location: "Email Service",
-  },
-  {
-    id: "4",
-    title: "UI Performance Issue",
-    description:
-      "Dashboard loading times increased by 30% compared to baseline.",
-    severity: "low",
-    status: "resolved",
-    timestamp: new Date("2025-01-14T16:20:00"),
-    reportedBy: "QA Team",
-    location: "Frontend",
-  },
-];
+interface Stats {
+  total: number;
+  open: number;
+  investigating: number;
+  resolved: number;
+  critical: number;
+}
 
 export default function IncidentsScreen() {
-  const [incidents, setIncidents] = useState<Incident[]>(mockIncidents);
+  const [incidents, setIncidents] = useState<IncidentUI[]>([]);
+  const [stats, setStats] = useState<Stats>({
+    total: 0,
+    open: 0,
+    investigating: 0,
+    resolved: 0,
+    critical: 0
+  });
   const [refreshing, setRefreshing] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [modalVisible, setModalVisible] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [timeframe, setTimeframe] = useState<string>("24h");
   const [newIncident, setNewIncident] = useState({
     title: "",
     description: "",
@@ -82,13 +68,87 @@ export default function IncidentsScreen() {
     location: "",
   });
 
-  const onRefresh = React.useCallback(() => {
-    setRefreshing(true);
-    // Simulate API call
-    setTimeout(() => {
+  // Helper function to parse API datetime format "2025-09-23 10:58:35"
+  const parseApiDateTime = (dateTimeString: string): Date => {
+    const isoString = dateTimeString.replace(' ', 'T') + 'Z';
+    return new Date(isoString);
+  };
+
+  // Transform API incident to UI incident format
+  const transformApiIncident = (apiIncident: Incident): IncidentUI => ({
+    id: apiIncident.id,
+    title: apiIncident.title,
+    description: apiIncident.description,
+    severity: apiIncident.severity,
+    status: apiIncident.status,
+    timestamp: parseApiDateTime(apiIncident.timestamp),
+    reportedBy: apiIncident.reported_by,
+    location: apiIncident.location || undefined,
+    assignedTo: apiIncident.assigned_to || undefined,
+    resolvedBy: apiIncident.resolved_by || undefined,
+    resolvedAt: apiIncident.resolved_at ? parseApiDateTime(apiIncident.resolved_at) : undefined,
+    awsAlarmName: apiIncident.aws_alarm_name || undefined,
+  });
+
+  // Fetch incidents from API
+  const fetchIncidents = useCallback(async () => {
+    try {
+      console.log('Fetching incidents...'); // Debug log
+      const response = await getIncidents(timeframe);
+
+      if (response.httpStatus === "OK" && response.data) {
+        const transformedIncidents = response.data.map(transformApiIncident);
+        setIncidents(transformedIncidents);
+      } else {
+        throw new Error(response.data.message || "Failed to fetch incidents");
+      }
+    } catch (error) {
+      console.error('Failed to fetch incidents:', error);
+      Alert.alert(
+          "Error",
+          "Failed to load incidents. Please check your connection and try again."
+      );
+    } finally {
+      setLoading(false);
       setRefreshing(false);
-    }, 1000);
-  }, []);
+    }
+  }, [timeframe]); // Only depend on timeframe
+
+  // Fetch stats from API
+  const fetchStats = useCallback(async () => {
+    try {
+      console.log('Fetching stats...'); // Debug log
+      const response = await getIncidentStats(timeframe);
+
+      if (response.httpStatus === "OK" && response.data) {
+        const apiStats = response.data;
+        const transformedStats: Stats = {
+          total: apiStats.total,
+          open: apiStats.open,
+          investigating: apiStats.investigating,
+          resolved: apiStats.resolved,
+          critical: apiStats.severities.critical,
+        };
+        setStats(transformedStats);
+      }
+    } catch (error) {
+      console.error('Failed to fetch stats:', error);
+      // Don't calculate fallback here to avoid dependency on incidents
+      console.log('Stats fetch failed, using empty stats');
+    }
+  }, [timeframe]); // Only depend on timeframe
+
+  // Initial data load - FIX: Remove functions from dependency array
+  useEffect(() => {
+    console.log('useEffect triggered - loading initial data'); // Debug log
+    fetchIncidents();
+    fetchStats();
+  }, [timeframe]); // ✅ Only depend on timeframe, not the functions
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    Promise.all([fetchIncidents(), fetchStats()]);
+  }, [fetchIncidents, fetchStats]);
 
   const getSeverityColor = (severity: string) => {
     switch (severity) {
@@ -119,274 +179,324 @@ export default function IncidentsScreen() {
   };
 
   const filteredIncidents = incidents.filter(
-    (incident) => filterStatus === "all" || incident.status === filterStatus
+      (incident) => filterStatus === "all" || incident.status === filterStatus
   );
 
-  const createIncident = () => {
+  const createNewIncident = async () => {
     if (!newIncident.title || !newIncident.description) {
       Alert.alert("Error", "Please fill in all required fields");
       return;
     }
 
-    const incident: Incident = {
-      id: Date.now().toString(),
-      title: newIncident.title,
-      description: newIncident.description,
-      severity: newIncident.severity,
-      status: "open",
-      timestamp: new Date(),
-      reportedBy: "Current User",
-      location: newIncident.location,
-    };
+    setCreating(true);
+    try {
+      const incidentData: CreateIncidentData = {
+        title: newIncident.title,
+        description: newIncident.description,
+        severity: newIncident.severity,
+        location: newIncident.location || undefined,
+        reported_by: "Mobile App User", // You can get this from auth context
+      };
 
-    setIncidents((prev) => [incident, ...prev]);
-    setNewIncident({
-      title: "",
-      description: "",
-      severity: "medium",
-      location: "",
-    });
-    setModalVisible(false);
-    Alert.alert("Success", "Incident created successfully");
+      const response = await createIncident(incidentData);
+
+      if (response.httpStatus === "200" || response.httpStatus === "201") {
+        if (response.object) {
+          const transformedIncident = transformApiIncident(response.object);
+
+          // Add to local state for immediate UI update
+          setIncidents((prev) => [transformedIncident, ...prev]);
+
+          // Update stats
+          setStats(prev => ({
+            ...prev,
+            total: prev.total + 1,
+            open: prev.open + 1,
+            ...(newIncident.severity === 'critical' && { critical: prev.critical + 1 }),
+          }));
+
+          // Refresh data from server to ensure consistency
+          fetchStats();
+        }
+
+        // Reset form
+        setNewIncident({
+          title: "",
+          description: "",
+          severity: "medium",
+          location: "",
+        });
+        setModalVisible(false);
+        Alert.alert("Success", "Incident created successfully");
+      } else {
+        throw new Error(response.message || "Failed to create incident");
+      }
+    } catch (error) {
+      console.error('Failed to create incident:', error);
+      Alert.alert(
+          "Error",
+          "Failed to create incident. Please try again."
+      );
+    } finally {
+      setCreating(false);
+    }
   };
 
   const formatTimestamp = (timestamp: Date) => {
     return timestamp.toLocaleString();
   };
 
-  const getIncidentStats = () => {
-    const total = incidents.length;
-    const open = incidents.filter((i) => i.status === "open").length;
-    const investigating = incidents.filter(
-      (i) => i.status === "investigating"
-    ).length;
-    const critical = incidents.filter((i) => i.severity === "critical").length;
-
-    return { total, open, investigating, critical };
-  };
-
-  const stats = getIncidentStats();
+  // Show loading spinner on initial load
+  if (loading) {
+    return (
+        <View style={[styles.container, styles.loadingContainer]}>
+          <ActivityIndicator size="large" color="#3B82F6" />
+          <Text style={styles.loadingText}>Loading incidents...</Text>
+        </View>
+    );
+  }
 
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Incident Management</Text>
-        <TouchableOpacity
-          style={styles.addButton}
-          onPress={() => setModalVisible(true)}
+      <View style={styles.container}>
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Incident Management</Text>
+          <TouchableOpacity
+              style={styles.addButton}
+              onPress={() => setModalVisible(true)}
+          >
+            <IconSymbol name="plus" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Stats Cards */}
+        <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.statsContainer}
         >
-          <IconSymbol name="plus" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
-      </View>
-
-      {/* Stats Cards */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.statsContainer}
-      >
-        <View style={[styles.statCard, styles.totalCard]}>
-          <Text style={styles.statNumber}>{stats.total}</Text>
-          <Text style={styles.statLabel}>Total</Text>
-        </View>
-        <View style={[styles.statCard, styles.openCard]}>
-          <Text style={styles.statNumber}>{stats.open}</Text>
-          <Text style={styles.statLabel}>Open</Text>
-        </View>
-        <View style={[styles.statCard, styles.investigatingCard]}>
-          <Text style={styles.statNumber}>{stats.investigating}</Text>
-          <Text style={styles.statLabel}>Investigating</Text>
-        </View>
-        <View style={[styles.statCard, styles.criticalCard]}>
-          <Text style={styles.statNumber}>{stats.critical}</Text>
-          <Text style={styles.statLabel}>Critical</Text>
-        </View>
-      </ScrollView>
-
-      {/* Filter Buttons */}
-      <View style={styles.filterContainer}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          {["all", "open", "investigating", "resolved"].map((status) => (
-            <TouchableOpacity
-              key={status}
-              style={[
-                styles.filterButton,
-                filterStatus === status && styles.filterButtonActive,
-              ]}
-              onPress={() => setFilterStatus(status)}
-            >
-              <Text
-                style={[
-                  styles.filterText,
-                  filterStatus === status && styles.filterTextActive,
-                ]}
-              >
-                {status.charAt(0).toUpperCase() + status.slice(1)}
-              </Text>
-            </TouchableOpacity>
-          ))}
+          <View style={[styles.statCard, styles.totalCard]}>
+            <Text style={styles.statNumber}>{stats.total}</Text>
+            <Text style={styles.statLabel}>Total</Text>
+          </View>
+          <View style={[styles.statCard, styles.openCard]}>
+            <Text style={styles.statNumber}>{stats.open}</Text>
+            <Text style={styles.statLabel}>Open</Text>
+          </View>
+          <View style={[styles.statCard, styles.investigatingCard]}>
+            <Text style={styles.statNumber}>{stats.investigating}</Text>
+            <Text style={styles.statLabel}>Investigating</Text>
+          </View>
+          <View style={[styles.statCard, styles.resolvedCard]}>
+            <Text style={styles.statNumber}>{stats.resolved}</Text>
+            <Text style={styles.statLabel}>Resolved</Text>
+          </View>
+          <View style={[styles.statCard, styles.criticalCard]}>
+            <Text style={styles.statNumber}>{stats.critical}</Text>
+            <Text style={styles.statLabel}>Critical</Text>
+          </View>
         </ScrollView>
-      </View>
 
-      {/* Incidents List */}
-      <ScrollView
-        style={styles.incidentsList}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-      >
-        {filteredIncidents.map((incident) => (
-          <View key={incident.id} style={styles.incidentCard}>
-            <View style={styles.incidentHeader}>
-              <View style={styles.incidentTitleRow}>
-                <Text style={styles.incidentTitle}>{incident.title}</Text>
-                <View
-                  style={[
-                    styles.severityBadge,
-                    { backgroundColor: getSeverityColor(incident.severity) },
-                  ]}
-                >
-                  <Text style={styles.severityText}>
-                    {incident.severity.toUpperCase()}
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.incidentMeta}>
-                <Text style={styles.incidentTime}>
-                  {formatTimestamp(incident.timestamp)}
-                </Text>
-                <View
-                  style={[
-                    styles.statusBadge,
-                    { backgroundColor: getStatusColor(incident.status) },
-                  ]}
-                >
-                  <Text style={styles.statusText}>
-                    {incident.status.toUpperCase()}
-                  </Text>
-                </View>
-              </View>
-            </View>
-
-            <Text style={styles.incidentDescription}>
-              {incident.description}
-            </Text>
-
-            <View style={styles.incidentFooter}>
-              <Text style={styles.reportedBy}>
-                Reported by: {incident.reportedBy}
-              </Text>
-              {incident.location && (
-                <Text style={styles.location}>📍 {incident.location}</Text>
-              )}
-            </View>
-          </View>
-        ))}
-
-        {filteredIncidents.length === 0 && (
-          <View style={styles.emptyState}>
-            <IconSymbol
-              name="exclamationmark.triangle"
-              size={48}
-              color="#9CA3AF"
-            />
-            <Text style={styles.emptyText}>No incidents found</Text>
-            <Text style={styles.emptySubtext}>
-              {filterStatus === "all"
-                ? "All systems are operational"
-                : `No incidents with status: ${filterStatus}`}
-            </Text>
-          </View>
-        )}
-      </ScrollView>
-
-      {/* Create Incident Modal */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Report New Incident</Text>
-              <TouchableOpacity onPress={() => setModalVisible(false)}>
-                <IconSymbol name="xmark" size={24} color="#6B7280" />
-              </TouchableOpacity>
-            </View>
-
-            <TextInput
-              style={styles.input}
-              placeholder="Incident Title"
-              value={newIncident.title}
-              onChangeText={(text) =>
-                setNewIncident((prev) => ({ ...prev, title: text }))
-              }
-            />
-
-            <TextInput
-              style={[styles.input, styles.textArea]}
-              placeholder="Description"
-              value={newIncident.description}
-              onChangeText={(text) =>
-                setNewIncident((prev) => ({ ...prev, description: text }))
-              }
-              multiline
-              numberOfLines={4}
-            />
-
-            <TextInput
-              style={styles.input}
-              placeholder="Location (optional)"
-              value={newIncident.location}
-              onChangeText={(text) =>
-                setNewIncident((prev) => ({ ...prev, location: text }))
-              }
-            />
-
-            <View style={styles.severitySelector}>
-              <Text style={styles.severityLabel}>Severity:</Text>
-              {["low", "medium", "high", "critical"].map((sev) => (
+        {/* Filter Buttons */}
+        <View style={styles.filterContainer}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            {["all", "open", "investigating", "resolved"].map((status) => (
                 <TouchableOpacity
-                  key={sev}
-                  style={[
-                    styles.severityOption,
-                    newIncident.severity === sev && styles.severityOptionActive,
-                    { borderColor: getSeverityColor(sev) },
-                  ]}
-                  onPress={() =>
-                    setNewIncident((prev) => ({
-                      ...prev,
-                      severity: sev as "low" | "medium" | "high" | "critical",
-                    }))
-                  }
+                    key={status}
+                    style={[
+                      styles.filterButton,
+                      filterStatus === status && styles.filterButtonActive,
+                    ]}
+                    onPress={() => setFilterStatus(status)}
                 >
                   <Text
-                    style={[
-                      styles.severityOptionText,
-                      newIncident.severity === sev && {
-                        color: getSeverityColor(sev),
-                      },
-                    ]}
+                      style={[
+                        styles.filterText,
+                        filterStatus === status && styles.filterTextActive,
+                      ]}
                   >
-                    {sev.charAt(0).toUpperCase() + sev.slice(1)}
+                    {status.charAt(0).toUpperCase() + status.slice(1)}
                   </Text>
                 </TouchableOpacity>
-              ))}
-            </View>
-
-            <TouchableOpacity
-              style={styles.createButton}
-              onPress={createIncident}
-            >
-              <Text style={styles.createButtonText}>Create Incident</Text>
-            </TouchableOpacity>
-          </View>
+            ))}
+          </ScrollView>
         </View>
-      </Modal>
-    </View>
+
+        {/* Incidents List */}
+        <ScrollView
+            style={styles.incidentsList}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            }
+        >
+          {filteredIncidents.map((incident) => (
+              <View key={incident.id} style={styles.incidentCard}>
+                <View style={styles.incidentHeader}>
+                  <View style={styles.incidentTitleRow}>
+                    <Text style={styles.incidentTitle}>{incident.title}</Text>
+                    <View
+                        style={[
+                          styles.severityBadge,
+                          { backgroundColor: getSeverityColor(incident.severity) },
+                        ]}
+                    >
+                      <Text style={styles.severityText}>
+                        {incident.severity.toUpperCase()}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.incidentMeta}>
+                    <Text style={styles.incidentTime}>
+                      {formatTimestamp(incident.timestamp)}
+                    </Text>
+                    <View
+                        style={[
+                          styles.statusBadge,
+                          { backgroundColor: getStatusColor(incident.status) },
+                        ]}
+                    >
+                      <Text style={styles.statusText}>
+                        {incident.status.toUpperCase()}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                <Text style={styles.incidentDescription}>
+                  {incident.description}
+                </Text>
+
+                <View style={styles.incidentFooter}>
+                  <Text style={styles.reportedBy}>
+                    Reported by: {incident.reportedBy}
+                  </Text>
+                  {incident.location && (
+                      <Text style={styles.location}>📍 {incident.location}</Text>
+                  )}
+                </View>
+
+                {/* Additional info from API */}
+                {incident.assignedTo && (
+                    <Text style={styles.assignedTo}>
+                      Assigned to: {incident.assignedTo}
+                    </Text>
+                )}
+                {incident.awsAlarmName && (
+                    <Text style={styles.awsInfo}>
+                      AWS Alarm: {incident.awsAlarmName}
+                    </Text>
+                )}
+              </View>
+          ))}
+
+          {filteredIncidents.length === 0 && !loading && (
+              <View style={styles.emptyState}>
+                <IconSymbol
+                    name="exclamationmark.triangle"
+                    size={48}
+                    color="#9CA3AF"
+                />
+                <Text style={styles.emptyText}>No incidents found</Text>
+                <Text style={styles.emptySubtext}>
+                  {filterStatus === "all"
+                      ? "All systems are operational"
+                      : `No incidents with status: ${filterStatus}`}
+                </Text>
+              </View>
+          )}
+        </ScrollView>
+
+        {/* Create Incident Modal */}
+        <Modal
+            animationType="slide"
+            transparent={true}
+            visible={modalVisible}
+            onRequestClose={() => setModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Report New Incident</Text>
+                <TouchableOpacity onPress={() => setModalVisible(false)}>
+                  <IconSymbol name="xmark" size={24} color="#6B7280" />
+                </TouchableOpacity>
+              </View>
+
+              <TextInput
+                  style={styles.input}
+                  placeholder="Incident Title"
+                  value={newIncident.title}
+                  onChangeText={(text) =>
+                      setNewIncident((prev) => ({ ...prev, title: text }))
+                  }
+              />
+
+              <TextInput
+                  style={[styles.input, styles.textArea]}
+                  placeholder="Description"
+                  value={newIncident.description}
+                  onChangeText={(text) =>
+                      setNewIncident((prev) => ({ ...prev, description: text }))
+                  }
+                  multiline
+                  numberOfLines={4}
+              />
+
+              <TextInput
+                  style={styles.input}
+                  placeholder="Location (optional)"
+                  value={newIncident.location}
+                  onChangeText={(text) =>
+                      setNewIncident((prev) => ({ ...prev, location: text }))
+                  }
+              />
+
+              <View style={styles.severitySelector}>
+                <Text style={styles.severityLabel}>Severity:</Text>
+                {["low", "medium", "high", "critical"].map((sev) => (
+                    <TouchableOpacity
+                        key={sev}
+                        style={[
+                          styles.severityOption,
+                          newIncident.severity === sev && styles.severityOptionActive,
+                          { borderColor: getSeverityColor(sev) },
+                        ]}
+                        onPress={() =>
+                            setNewIncident((prev) => ({
+                              ...prev,
+                              severity: sev as "low" | "medium" | "high" | "critical",
+                            }))
+                        }
+                    >
+                      <Text
+                          style={[
+                            styles.severityOptionText,
+                            newIncident.severity === sev && {
+                              color: getSeverityColor(sev),
+                            },
+                          ]}
+                      >
+                        {sev.charAt(0).toUpperCase() + sev.slice(1)}
+                      </Text>
+                    </TouchableOpacity>
+                ))}
+              </View>
+
+              <TouchableOpacity
+                  style={[styles.createButton, creating && styles.createButtonDisabled]}
+                  onPress={createNewIncident}
+                  disabled={creating}
+              >
+                {creating ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                    <Text style={styles.createButtonText}>Create Incident</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+      </View>
   );
 }
 
@@ -394,6 +504,15 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#F3F4F6",
+  },
+  loadingContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: "#6B7280",
   },
   header: {
     flexDirection: "row",
@@ -434,6 +553,7 @@ const styles = StyleSheet.create({
   totalCard: { backgroundColor: "#EFF6FF" },
   openCard: { backgroundColor: "#FEF2F2" },
   investigatingCard: { backgroundColor: "#FEF3C7" },
+  resolvedCard: { backgroundColor: "#F0FDF4" },
   criticalCard: { backgroundColor: "#FEE2E2" },
   statNumber: {
     fontSize: 24,
@@ -546,6 +666,18 @@ const styles = StyleSheet.create({
     color: "#6B7280",
     fontStyle: "italic",
   },
+  assignedTo: {
+    fontSize: 12,
+    color: "#6B7280",
+    fontStyle: "italic",
+    marginTop: 4,
+  },
+  awsInfo: {
+    fontSize: 12,
+    color: "#6B7280",
+    fontStyle: "italic",
+    marginTop: 2,
+  },
   location: {
     fontSize: 12,
     color: "#6B7280",
@@ -633,6 +765,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingVertical: 12,
     alignItems: "center",
+  },
+  createButtonDisabled: {
+    backgroundColor: "#9CA3AF",
   },
   createButtonText: {
     fontSize: 16,

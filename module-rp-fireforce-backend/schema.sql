@@ -39,11 +39,14 @@ CREATE TABLE IF NOT EXISTS incidents (
 	metric_name TEXT,
 	aws_console_url TEXT,
 	resolved_at DATETIME,
-	assigned_to TEXT REFERENCES users(id),
-	resolved_by TEXT REFERENCES users(id),
 	created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 	updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
+
+-- Add assigned_to column (will fail silently if exists)
+ALTER TABLE incidents ADD COLUMN assigned_to TEXT REFERENCES users(id);
+-- Add resolved_by column (will fail silently if exists)
+ALTER TABLE incidents ADD COLUMN resolved_by TEXT REFERENCES users(id);
 
 -- Create incidents indexes
 CREATE INDEX IF NOT EXISTS idx_severity ON incidents(severity);

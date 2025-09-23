@@ -1,5 +1,5 @@
 // handlers/incident.handler.ts
-import { Env, IncidentFilters } from '../types';
+import {ApiResponse, Env, Incident, IncidentFilters, IncidentStats} from '../types';
 import {IncidentService} from "../services/incident.services";
 
 // @ts-ignore
@@ -18,10 +18,10 @@ export async function handleGetIncidents(
 		const incidentService = new IncidentService(env);
 		const incidents = await incidentService.getIncidents(params);
 
-		const response = {
-			incidents,
-			total: incidents.length,
-			timeframe: params.timeframe
+		const response: ApiResponse<Incident> = {
+			httpStatus: "OK",
+			message: "Login successful",
+			data: incidents
 		};
 
 		return new Response(JSON.stringify(response), {
@@ -47,8 +47,13 @@ export async function handleGetStats(
 	try {
 		const incidentService = new IncidentService(env);
 		const stats = await incidentService.getStats(timeframe);
+		const response: ApiResponse<IncidentStats> = {
+			httpStatus: "OK",
+			message: "Login successful",
+			data: stats
+		};
 
-		return new Response(JSON.stringify(stats), {
+		return new Response(JSON.stringify(response), {
 			status: 200,
 			headers: corsHeaders
 		});
