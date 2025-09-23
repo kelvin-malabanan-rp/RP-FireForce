@@ -1,6 +1,6 @@
 -- Migration: Add user management to existing incident management system
 
--- Step 1: Create users table
+-- Step 1: Create users and incident table
 CREATE TABLE IF NOT EXISTS users (
 									 id TEXT PRIMARY KEY,
 									 email TEXT NOT NULL UNIQUE,
@@ -21,6 +21,34 @@ CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
 CREATE INDEX IF NOT EXISTS idx_users_active ON users(is_active);
+
+CREATE TABLE IF NOT EXISTS incidents (
+                                         id TEXT PRIMARY KEY,
+                                         title TEXT NOT NULL,
+                                         description TEXT,
+                                         severity TEXT CHECK(severity IN ('low', 'medium', 'high', 'critical')) DEFAULT 'medium',
+    status TEXT CHECK(status IN ('open', 'investigating', 'resolved')) DEFAULT 'open',
+    timestamp DATETIME NOT NULL,
+    reported_by TEXT DEFAULT 'AWS CloudWatch',
+    location TEXT,
+    aws_alarm_name TEXT,
+    aws_account_id TEXT,
+    state_reason TEXT,
+    metric_name TEXT,
+    aws_console_url TEXT,
+    resolved_at DATETIME,
+    assigned_to TEXT REFERENCES users(id),
+    resolved_by TEXT REFERENCES users(id),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+CREATE INDEX IF NOT EXISTS idx_severity ON incidents(severity);
+CREATE INDEX IF NOT EXISTS idx_status ON incidents(status);
+CREATE INDEX IF NOT EXISTS idx_timestamp ON incidents(timestamp);
+CREATE INDEX IF NOT EXISTS idx_aws_alarm ON incidents(aws_alarm_name);
+CREATE INDEX IF NOT EXISTS idx_assigned_to ON incidents(assigned_to);
+CREATE INDEX IF NOT EXISTS idx_resolved_by ON incidents(resolved_by);
 
 -- Step 2: Create user sessions table
 CREATE TABLE IF NOT EXISTS user_sessions (
@@ -47,20 +75,7 @@ CREATE TABLE IF NOT EXISTS incident_comments (
 CREATE INDEX IF NOT EXISTS idx_comments_incident ON incident_comments(incident_id);
 CREATE INDEX IF NOT EXISTS idx_comments_user ON incident_comments(user_id);
 
--- Step 4: Add new columns to incidents table if they don't exist
--- SQLite doesn't support "ADD COLUMN IF NOT EXISTS", so we'll add them one by one
--- These statements will fail silently if columns already exist
-
--- Try to add assigned_to column
-ALTER TABLE incidents ADD COLUMN assigned_to TEXT REFERENCES users(id);
-
--- Try to add resolved_by column
-ALTER TABLE incidents ADD COLUMN resolved_by TEXT REFERENCES users(id);
-
--- Step 5: Create index for the new column (will fail silently if exists)
-CREATE INDEX IF NOT EXISTS idx_assigned_to ON incidents(assigned_to);
-
--- Step 6: Insert default users
+-- Step 4: Insert default users and test incidents
 INSERT OR IGNORE INTO users
 (id, email, username, password_hash, first_name, last_name, role, is_active, is_verified)
 VALUES
@@ -68,7 +83,14 @@ VALUES
 ('user-2', 'operator@rocketpartners.io', 'operator1', '$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe', 'John', 'Doe', 'operator', TRUE, TRUE),
 ('user-3', 'viewer@rocketpartners.io', 'viewer1', '$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe', 'Jane', 'Smith', 'viewer', TRUE, TRUE);
 
--- Step 7: Update existing incidents to assign them to the operator user (optional)
+INSERT OR REPLACE INTO incidents
+(id, title, description, severity, status, timestamp, location, aws_alarm_name)
+VALUES
+('test-1', 'Database Connection Pool Exhausted', 'Primary database connection pool has reached maximum capacity.', 'critical', 'investigating', datetime('now', '-2 hours'), 'Data Center A', 'TEST-HighCPU-WebServer'),
+('test-2', 'API Response Time Elevated', 'Authentication API experiencing 5x normal response times.', 'high', 'open', datetime('now', '-4 hours'), 'API Gateway', 'TEST-HighErrorRate-API'),
+('test-3', 'Memory Usage Resolved', 'High memory usage on database server has been resolved.', 'medium', 'resolved', datetime('now', '-12 hours'), 'Database Server', 'TEST-HighMemory-Database');
+
+-- Step 5: Update existing incidents to assign them to the operator user (optional)
 UPDATE incidents
 SET assigned_to = 'user-2'
 WHERE status IN ('open', 'investigating')
