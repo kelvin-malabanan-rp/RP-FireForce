@@ -5,6 +5,7 @@ import { handleHealth } from "../handlers/health.handlers";
 import { handleGetIncidents, handleGetStats, handleTestIncident } from "../handlers/incident.handlers";
 import { handleWebhook } from "../handlers/webook.handlers";
 import {handleLogin, handleLogout} from "../handlers/auth.handlers";
+import {handleRegisterPushToken, handleSendTestAlert} from "../handlers/push-notification.handlers";
 
 export class Router {
 	private env: Env;
@@ -44,6 +45,15 @@ export class Router {
 			// Webhook (no auth required for AWS)
 			if (path === '/webhook/aws-cloudwatch' && method === 'POST') {
 				return handleWebhook(request, this.env, CORS_HEADERS);
+			}
+
+			// Push notification routes (add these two lines here)
+			if (path === '/api/push-token' && method === 'POST') {
+				return handleRegisterPushToken(request, this.env, CORS_HEADERS);
+			}
+
+			if (path === '/api/test/send-alert' && method === 'POST') {
+				return handleSendTestAlert(request, this.env, CORS_HEADERS);
 			}
 
 			// Protected routes (will add auth middleware later)

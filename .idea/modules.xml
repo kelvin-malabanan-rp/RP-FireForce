@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/RP-Fireforce-Pager.iml" filepath="$PROJECT_DIR$/.idea/RP-Fireforce-Pager.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/RPFireForce-Mobile.iml" filepath="$PROJECT_DIR$/.idea/RPFireForce-Mobile.iml" />
     </modules>
   </component>
 </project>

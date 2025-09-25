@@ -9,12 +9,12 @@ export type AuthenticateResponse = {
   httpStatus: string;
   message: string;
   data: {
-      id: number;
-      email: string;
-      password: string;
-      firstName: string;
-      lastName: string;
-      token: string;
+    id: number;
+    email: string;
+    password: string;
+    firstName: string;
+    lastName: string;
+    token: string;
   }
 };
 
@@ -124,3 +124,56 @@ export interface UpdateIncidentData {
   assigned_to?: string;
   resolved_by?: string;
 }
+
+export interface AlertSettings {
+  enableAlerts: boolean;
+  criticalOnly: boolean;
+  soundEnabled: boolean;
+  vibrationEnabled: boolean;
+  pollInterval?: number;
+}
+
+export interface PushTokenRegistration {
+  token: string;
+  deviceType: string;
+  settings?: AlertSettings;
+  userId?: string;
+}
+
+export interface DeviceInfo {
+  deviceId: string;
+  platform: string;
+  appVersion: string;
+  registeredAt: string;
+}
+
+// Push Token Response Types
+export type PushTokenRegistrationResponse = {
+  success: boolean;
+  deviceId: string;
+  registeredAt?: string;
+};
+
+export type PushTokenStatusResponse = {
+  isRegistered: boolean;
+  settings?: AlertSettings;
+  lastNotification?: string;
+  deviceInfo?: DeviceInfo;
+};
+
+// Test Alert Response Types
+export type TestAlertResponse = {
+  sent: boolean;
+  notificationId?: string;
+  deliveredAt?: string;
+};
+
+// Backend Health Response
+export type BackendHealthResponse = {
+  status: 'healthy' | 'degraded' | 'error';
+  timestamp: string;
+  environment: string;
+  alertsEnabled?: boolean;
+  connectedDevices?: number;
+  databaseStatus?: string;
+};

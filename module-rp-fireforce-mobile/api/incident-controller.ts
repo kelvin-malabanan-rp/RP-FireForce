@@ -1,110 +1,14 @@
-import { BASE_URL_LOCAL } from "@/utils/backend-url";
+import { BASE_URL_DEV } from "@/utils/backend-url";
 import {
   APIResponse,
   Incident,
   IncidentsResponse,
   IncidentStatsResponse,
   IncidentResponse,
-  IncidentsListResponse,
-  IncidentStatsResponseType,
   CreateIncidentData,
   UpdateIncidentData
 } from "@/types/response-types";
 import apiManager from "./api-manager";
-
-// Types for incident operations
-export interface Incident {
-  id: string;
-  title: string;
-  description: string;
-  severity: "low" | "medium" | "high" | "critical";
-  status: "open" | "investigating" | "resolved";
-  timestamp: string;
-  reported_by: string;
-  location?: string | null;
-  assigned_to?: string | null;
-  resolved_by?: string | null;
-  resolved_at?: string | null;
-  aws_alarm_name?: string | null;
-  aws_account_id?: string | null;
-  state_reason?: string | null;
-  metric_name?: string | null;
-  aws_console_url?: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-// Response types for incident operations
-export type IncidentResponse = {
-  object: Incident;
-  httpStatus: string;
-  id: string;
-  title: string;
-  description: string;
-  severity: "low" | "medium" | "high" | "critical";
-  status: "open" | "investigating" | "resolved";
-  timestamp: string;
-  reported_by: string;
-  location?: string | null;
-  assigned_to?: string | null;
-  resolved_by?: string | null;
-  resolved_at?: string | null;
-  aws_alarm_name?: string | null;
-  aws_account_id?: string | null;
-  state_reason?: string | null;
-  metric_name?: string | null;
-  aws_console_url?: string | null;
-  created_at: string;
-  updated_at: string;
-};
-
-export type IncidentsListResponse = {
-  object: IncidentsResponse;
-  httpStatus: string;
-  incidents: Incident[];
-  total: number;
-  timeframe: string;
-};
-
-export type IncidentStatsResponseType = {
-  object: IncidentStatsResponse;
-  httpStatus: string;
-  total: number;
-  open: number;
-  investigating: number;
-  resolved: number;
-  severities: {
-    critical: number;
-    high: number;
-    medium: number;
-    low: number;
-  };
-};
-
-export interface CreateIncidentData {
-  title: string;
-  description: string;
-  severity: "low" | "medium" | "high" | "critical";
-  location?: string;
-  reported_by?: string;
-}
-
-export interface UpdateIncidentData {
-  title?: string;
-  description?: string;
-  severity?: "low" | "medium" | "high" | "critical";
-  status?: "open" | "investigating" | "resolved";
-  location?: string;
-  assigned_to?: string;
-  resolved_by?: string;
-}
-
-export type APIResponse<T = {}> = {
-  data: any;
-  httpStatus: string;
-  message: string;
-  object: T;
-};
 
 // Get all incidents
 export const getIncidents = async (
@@ -112,7 +16,7 @@ export const getIncidents = async (
 ): Promise<IncidentsResponse> => {
   try {
     const response = await apiManager.get<IncidentsResponse>(
-        `${BASE_URL_LOCAL}/api/incidents?timeframe=${timeframe}`
+        `${BASE_URL_DEV}/api/incidents?timeframe=${timeframe}`
     );
     return response.data;
   } catch (error) {
@@ -127,7 +31,7 @@ export const getIncident = async (
 ): Promise<Incident> => {
   try {
     const response = await apiManager.get<Incident>(
-        `${BASE_URL_LOCAL}/api/incidents/${id}`
+        `${BASE_URL_DEV}/api/incidents/${id}`
     );
     return response.data;
   } catch (error) {
@@ -142,7 +46,7 @@ export const createIncident = async (
 ): Promise<Incident> => {
   try {
     const response = await apiManager.post<Incident>(
-        `${BASE_URL_LOCAL}/api/incidents`,
+        `${BASE_URL_DEV}/api/incidents`,
         data
     );
     return response.data;
@@ -159,7 +63,7 @@ export const updateIncident = async (
 ): Promise<Incident> => {
   try {
     const response = await apiManager.put<Incident>(
-        `${BASE_URL_LOCAL}/api/incidents/${id}`,
+        `${BASE_URL_DEV}/api/incidents/${id}`,
         data
     );
     return response.data;
@@ -175,7 +79,7 @@ export const deleteIncident = async (
 ): Promise<void> => {
   try {
     const response = await apiManager.delete<void>(
-        `${BASE_URL_LOCAL}/api/incidents/${id}`
+        `${BASE_URL_DEV}/api/incidents/${id}`
     );
     return response.data;
   } catch (error) {
@@ -191,7 +95,7 @@ export const getIncidentsByStatus = async (
 ): Promise<IncidentsResponse> => {
   try {
     const response = await apiManager.get<IncidentsResponse>(
-        `${BASE_URL_LOCAL}/api/incidents?status=${status}&timeframe=${timeframe}`
+        `${BASE_URL_DEV}/api/incidents?status=${status}&timeframe=${timeframe}`
     );
     return response.data;
   } catch (error) {
@@ -206,7 +110,7 @@ export const getIncidentStats = async (
 ): Promise<IncidentStatsResponse> => {
   try {
     const response = await apiManager.get<IncidentStatsResponse>(
-        `${BASE_URL_LOCAL}/api/incidents/stats?timeframe=${timeframe}`
+        `${BASE_URL_DEV}/api/incidents/stats?timeframe=${timeframe}`
     );
     return response.data;
   } catch (error) {
@@ -222,7 +126,7 @@ export const assignIncident = async (
 ): Promise<APIResponse<IncidentResponse>> => {
   try {
     const response = await apiManager.put<APIResponse<IncidentResponse>>(
-        `${BASE_URL_LOCAL}/v1/api/incidents/${id}`,
+        `${BASE_URL_DEV}/v1/api/incidents/${id}`,
         { assigned_to: userId }
     );
     return response.data;
@@ -239,7 +143,7 @@ export const resolveIncident = async (
 ): Promise<APIResponse<IncidentResponse>> => {
   try {
     const response = await apiManager.put<APIResponse<IncidentResponse>>(
-        `${BASE_URL_LOCAL}/v1/api/incidents/${id}`,
+        `${BASE_URL_DEV}/v1/api/incidents/${id}`,
         {
           status: "resolved",
           resolved_by: resolvedBy,
@@ -267,7 +171,7 @@ export const changeIncidentStatus = async (
     }
 
     const response = await apiManager.put<APIResponse<IncidentResponse>>(
-        `${BASE_URL_LOCAL}/v1/api/incidents/${id}`,
+        `${BASE_URL_DEV}/v1/api/incidents/${id}`,
         updateData
     );
     return response.data;

@@ -73,28 +73,37 @@ export class DatabaseService {
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`;
 
+		// Critical fix: Convert all undefined values to null for D1 compatibility
 		const params = [
-			incident.id,
-			incident.title,
-			incident.description,
-			incident.severity,
-			incident.status,
-			incident.timestamp,
+			incident.id || null,
+			incident.title || 'Unknown Incident',
+			incident.description || null,
+			incident.severity || 'medium',
+			incident.status || 'open',
+			incident.timestamp || new Date().toISOString(),
 			incident.reportedBy || 'AWS CloudWatch',
-			incident.location,
-			incident.awsAlarmName,
-			incident.awsAccountId,
-			incident.stateReason,
-			incident.metricName,
-			incident.awsConsoleUrl
+			incident.location || null,
+			incident.awsAlarmName || null,
+			incident.awsAccountId || null,
+			incident.stateReason || null,
+			incident.metricName || null,
+			incident.awsConsoleUrl || null
 		];
 
+		console.log('Database insert - sanitized params:', params);
+
 		try {
+			if (!this.db) {
+				throw new Error('Database connection not available');
+			}
+
 			const result = await this.db.prepare(query).bind(...params).run();
-			console.log('Incident inserted with ID:', incident.id);
+			console.log('Incident inserted successfully with ID:', incident.id);
 			return { id: incident.id!, changes: result.changes || 1 };
 		} catch (error) {
-			console.error('Error inserting incident:', error);
+			console.error('Database insert error:', error);
+			console.error('Failed incident object:', incident);
+			console.error('Failed query params:', params);
 			throw error;
 		}
 	}
@@ -111,7 +120,17 @@ export class DatabaseService {
 		`;
 
 		try {
-			const result = await this.db.prepare(query).bind(status, resolvedAt, awsAlarmName).run();
+			if (!this.db) {
+				throw new Error('Database connection not available');
+			}
+
+			const result = await this.db.prepare(query).bind(
+				status,
+				resolvedAt || null,
+				awsAlarmName
+			).run();
+
+			console.log('Incident status updated for alarm:', awsAlarmName);
 			return { changes: result.changes || 0 };
 		} catch (error) {
 			console.error('Error updating incident:', error);
@@ -131,6 +150,10 @@ export class DatabaseService {
 		`;
 
 		try {
+			if (!this.db) {
+				throw new Error('Database connection not available');
+			}
+
 			const result = await this.db.prepare(query).bind(email).first();
 			return result as User | null;
 		} catch (error) {

@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { ScrollView, RefreshControl } from 'react-native';
-import { fetchAlarms } from '@/lib/api';
+import { getIncidents, getIncidentStats } from '@/api/incident-controller';
 import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
 import Section from '@/components/section';
 import AlarmCard from '@/components/alarm-card';
 import IncidentSummary from '@/components/incident-summary';
+import AlertManager from '@/components/alert-manager';
 
 console.log('🏠 HOME SCREEN FILE IS LOADING');
 
@@ -15,32 +16,10 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   console.log('Home screen loaded!')
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        console.log('About to fetch alarms...');
-        // Temporarily comment out the API call
-        // const data = await fetchAlarms();
-
-        // Use mock data instead for testing
-        const mockData = [
-          { alarmName: 'Test Alarm', stateValue: 'ALARM' },
-          { alarmName: 'Another Alarm', stateValue: 'OK' }
-        ];
-
-        setAlarms(mockData);
-        console.log('Mock data set successfully');
-      } catch (error) {
-        console.error('Error in load function:', error);
-      }
-    };
-    load();
-  }, []);
-
   const onRefresh = async () => {
     setRefreshing(true);
     try {
-      const data = await fetchAlarms();
+      const data = await getIncidents();
       setAlarms(data);
     } catch (error) {
       console.error('Failed to refresh alarms:', error);
@@ -65,6 +44,9 @@ export default function HomeScreen() {
             }
             showsVerticalScrollIndicator={false}
         >
+          {/* Add AlertManager here */}
+          <AlertManager />
+
           {/* Incident Summary Component */}
           <IncidentSummary timeframe="24h" />
 
