@@ -8,7 +8,11 @@ export async function handleRegisterPushToken(
 	corsHeaders: Record<string, string>
 ): Promise<Response> {
 	try {
-		const body = await request.json();
+		const body = await request.json() as {
+			token: string;
+			deviceType?: string;
+			settings?: any;
+		};
 		const { token, deviceType, settings } = body;
 
 		if (!token) {
@@ -47,7 +51,10 @@ export async function handleSendTestAlert(
 	corsHeaders: Record<string, string>
 ): Promise<Response> {
 	try {
-		const body = await request.json();
+		const body = await request.json() as {
+			token: string;
+			alertType?: string;
+		};
 		const { token, alertType = 'high' } = body;
 
 		if (!token) {

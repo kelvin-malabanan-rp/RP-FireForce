@@ -1,21 +1,18 @@
 import { BASE_URL_DEV } from "@/utils/backend-url";
 import {
-  APIResponse,
-  Incident,
-  IncidentsResponse,
-  IncidentStatsResponse,
-  IncidentResponse,
-  CreateIncidentData,
-  UpdateIncidentData
+    APIResponse,
+    IncidentResponse,
+    WrappedIncidentsResponse,
+    WrappedIncidentByIdResponse, WrappedIncidentStatsResponse,
 } from "@/types/response-types";
 import apiManager from "./api-manager";
+import {AllIncidents, CreateIncidentData, Incident, UpdateIncidentData} from "@/types/incident-types";
 
 // Get all incidents
-export const getIncidents = async (
-    timeframe: string = '24h'
-): Promise<IncidentsResponse> => {
+export const getIncidents = async (): Promise<WrappedIncidentsResponse> => {
   try {
-    const response = await apiManager.get<IncidentsResponse>(
+    const timeframe: string = '24h'
+    const response = await apiManager.get<WrappedIncidentsResponse>(
         `${BASE_URL_DEV}/api/incidents?timeframe=${timeframe}`
     );
     return response.data;
@@ -26,11 +23,11 @@ export const getIncidents = async (
 };
 
 // Get incident by ID
-export const getIncident = async (
+export const getIncidentById = async (
     id: string
-): Promise<Incident> => {
+): Promise<WrappedIncidentByIdResponse> => {
   try {
-    const response = await apiManager.get<Incident>(
+    const response = await apiManager.get<WrappedIncidentByIdResponse>(
         `${BASE_URL_DEV}/api/incidents/${id}`
     );
     return response.data;
@@ -43,9 +40,9 @@ export const getIncident = async (
 // Create new incident
 export const createIncident = async (
     data: CreateIncidentData
-): Promise<Incident> => {
+): Promise<WrappedIncidentByIdResponse> => {
   try {
-    const response = await apiManager.post<Incident>(
+    const response = await apiManager.post<WrappedIncidentByIdResponse>(
         `${BASE_URL_DEV}/api/incidents`,
         data
     );
@@ -92,9 +89,9 @@ export const deleteIncident = async (
 export const getIncidentsByStatus = async (
     status: string,
     timeframe: string = '24h'
-): Promise<IncidentsResponse> => {
+): Promise<AllIncidents> => {
   try {
-    const response = await apiManager.get<IncidentsResponse>(
+    const response = await apiManager.get<AllIncidents>(
         `${BASE_URL_DEV}/api/incidents?status=${status}&timeframe=${timeframe}`
     );
     return response.data;
@@ -107,9 +104,9 @@ export const getIncidentsByStatus = async (
 // Get incident statistics
 export const getIncidentStats = async (
     timeframe: string = '24h'
-): Promise<IncidentStatsResponse> => {
+): Promise<WrappedIncidentStatsResponse> => {
   try {
-    const response = await apiManager.get<IncidentStatsResponse>(
+    const response = await apiManager.get<WrappedIncidentStatsResponse>(
         `${BASE_URL_DEV}/api/incidents/stats?timeframe=${timeframe}`
     );
     return response.data;

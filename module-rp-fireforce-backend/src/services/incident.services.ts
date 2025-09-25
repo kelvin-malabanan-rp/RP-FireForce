@@ -18,7 +18,7 @@ export class IncidentService {
 		return this.dbService.getIncidents(params);
 	}
 
-	async getStats(timeframe: '24h' | '7d' | '30d'): Promise<IncidentStats> {
+	async getStats(timeframe: "24h" | "7d" | "30d" | "all"): Promise<IncidentStats> {
 		try {
 			const incidents = await this.dbService.getIncidents({ timeframe });
 
@@ -91,7 +91,7 @@ export class IncidentService {
 			awsAccountId: alarm.AWSAccountId || null,
 			stateReason: alarm.StateReason || null,
 			metricName: null,
-			awsConsoleUrl: alarm.AlarmName ? this.generateAwsConsoleUrl(alarm) : null
+			aws_console_url: alarm.AlarmName ? this.generateAwsConsoleUrl(alarm) : null
 		};
 
 		// Insert incident using DatabaseService

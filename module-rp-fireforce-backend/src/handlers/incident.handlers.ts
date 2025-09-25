@@ -2,25 +2,23 @@
 import {ApiResponse, Env, Incident, IncidentFilters, IncidentStats} from '../types';
 import {IncidentService} from "../services/incident.services";
 
-// @ts-ignore
 export async function handleGetIncidents(
 	url: URL,
 	env: Env,
 	corsHeaders: Record<string, string>
 ): Promise<Response> {
 	const params: IncidentFilters = {
-		timeframe: (url.searchParams.get('timeframe') as '24h' | '7d' | '30d') || '24h',
+		timeframe: (url.searchParams.get('timeframe') as '24h' | '7d' | '30d' | 'all') || 'all', // Add 'all' here and change default
 		status: url.searchParams.get('status') || undefined,
 		severity: url.searchParams.get('severity') || undefined
 	};
-
 	try {
 		const incidentService = new IncidentService(env);
 		const incidents = await incidentService.getIncidents(params);
 
-		const response: ApiResponse<Incident> = {
+		const response: ApiResponse<Incident[]> = {
 			httpStatus: "OK",
-			message: "Login successful",
+			message: "Successfully retrieved incidents",
 			data: incidents
 		};
 
@@ -42,14 +40,14 @@ export async function handleGetStats(
 	env: Env,
 	corsHeaders: Record<string, string>
 ): Promise<Response> {
-	const timeframe = (url.searchParams.get('timeframe') as '24h' | '7d' | '30d') || '24h';
+	const timeframe = (url.searchParams.get('timeframe') as '24h' | '7d' | '30d' | 'all') || 'all';
 
 	try {
 		const incidentService = new IncidentService(env);
 		const stats = await incidentService.getStats(timeframe);
 		const response: ApiResponse<IncidentStats> = {
 			httpStatus: "OK",
-			message: "Login successful",
+			message: "Successfully retrieved incidents",
 			data: stats
 		};
 

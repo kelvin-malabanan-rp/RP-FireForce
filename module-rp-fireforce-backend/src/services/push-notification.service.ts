@@ -116,7 +116,10 @@ export class PushNotificationService {
 		}
 	}
 
-	async registerPushToken(token: string, deviceType: string, settings: any): Promise<{ success: boolean; deviceId: string }> {
+	async registerPushToken(token: string, deviceType: string | undefined, settings: any): Promise<{
+		success: boolean;
+		deviceId: string
+	}> {
 		const query = `
             INSERT OR REPLACE INTO push_tokens
             (id, token, device_type, settings, is_active, created_at, updated_at)

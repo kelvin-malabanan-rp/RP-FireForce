@@ -17,8 +17,8 @@ export interface Incident {
 	awsAlarmName: string;
 	awsAccountId: string;
 	stateReason: string;
-	metricName: string;
-	awsConsoleUrl: string;
+	metricName: string | null;
+	aws_console_url?: string | null;
 	resolvedAt?: string;
 	createdAt?: string;
 	updatedAt?: string;
@@ -46,7 +46,7 @@ export interface SNSMessage {
 }
 
 export interface IncidentFilters {
-	timeframe?: '24h' | '7d' | '30d';
+	timeframe?: '24h' | '7d' | '30d' | 'all';
 	status?: string;
 	severity?: string;
 }

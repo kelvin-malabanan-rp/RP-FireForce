@@ -18,33 +18,9 @@ import {
   createIncident
 } from "@/api/incident-controller";
 import {
-  Incident,
-  CreateIncidentData,
-  IncidentStatsResponse
 } from "@/types/response-types";
-
-interface IncidentUI {
-  id: string;
-  title: string;
-  description: string;
-  severity: "low" | "medium" | "high" | "critical";
-  status: "open" | "investigating" | "resolved";
-  timestamp: Date;
-  reportedBy: string;
-  location?: string;
-  assignedTo?: string;
-  resolvedBy?: string;
-  resolvedAt?: Date;
-  awsAlarmName?: string;
-}
-
-interface Stats {
-  total: number;
-  open: number;
-  investigating: number;
-  resolved: number;
-  critical: number;
-}
+import {getSeverityColor, getStatusColor} from "@/constants/colors";
+import {CreateIncidentData, Incident, IncidentUI, Stats} from "@/types/incident-types";
 
 export default function IncidentsScreen() {
   const [incidents, setIncidents] = useState<IncidentUI[]>([]);
@@ -62,10 +38,10 @@ export default function IncidentsScreen() {
   const [creating, setCreating] = useState(false);
   const [timeframe, setTimeframe] = useState<string>("24h");
   const [newIncident, setNewIncident] = useState({
-    title: "",
-    description: "",
-    severity: "medium" as const,
-    location: "",
+        title: "",
+        description: "",
+        severity: "medium" as "low" | "medium" | "high" | "critical",
+        location: "",
   });
 
   // Helper function to parse API datetime format "2025-09-23 10:58:35"
@@ -90,29 +66,29 @@ export default function IncidentsScreen() {
     awsAlarmName: apiIncident.aws_alarm_name || undefined,
   });
 
-  // Fetch incidents from API
-  const fetchIncidents = useCallback(async () => {
-    try {
-      console.log('Fetching incidents...'); // Debug log
-      const response = await getIncidents(timeframe);
+    // Fetch incidents from API
+    const fetchIncidents = useCallback(async () => {
+        try {
+            console.log('Fetching incidents...'); // Debug log
+            const response = await getIncidents();
 
-      if (response.httpStatus === "OK" && response.data) {
-        const transformedIncidents = response.data.map(transformApiIncident);
-        setIncidents(transformedIncidents);
-      } else {
-        throw new Error(response.data.message || "Failed to fetch incidents");
-      }
-    } catch (error) {
-      console.error('Failed to fetch incidents:', error);
-      Alert.alert(
-          "Error",
-          "Failed to load incidents. Please check your connection and try again."
-      );
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [timeframe]); // Only depend on timeframe
+            if (response.httpStatus === "OK" && response.object) {
+                const transformedIncidents = response.object.map(transformApiIncident);
+                setIncidents(transformedIncidents);
+            } else {
+                throw new Error(response.message || "Failed to fetch incidents");
+            }
+        } catch (error) {
+            console.error('Failed to fetch incidents:', error);
+            Alert.alert(
+                "Error",
+                "Failed to load incidents. Please check your connection and try again."
+            );
+        } finally {
+            setLoading(false);
+            setRefreshing(false);
+        }
+    }, [timeframe]); // Only depend on timeframe
 
   // Fetch stats from API
   const fetchStats = useCallback(async () => {
@@ -120,8 +96,8 @@ export default function IncidentsScreen() {
       console.log('Fetching stats...'); // Debug log
       const response = await getIncidentStats(timeframe);
 
-      if (response.httpStatus === "OK" && response.data) {
-        const apiStats = response.data;
+      if (response.httpStatus === "OK" && response.object) {
+        const apiStats = response.object;
         const transformedStats: Stats = {
           total: apiStats.total,
           open: apiStats.open,
@@ -150,33 +126,7 @@ export default function IncidentsScreen() {
     Promise.all([fetchIncidents(), fetchStats()]);
   }, [fetchIncidents, fetchStats]);
 
-  const getSeverityColor = (severity: string) => {
-    switch (severity) {
-      case "critical":
-        return "#DC2626";
-      case "high":
-        return "#EA580C";
-      case "medium":
-        return "#D97706";
-      case "low":
-        return "#16A34A";
-      default:
-        return "#6B7280";
-    }
-  };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "open":
-        return "#DC2626";
-      case "investigating":
-        return "#D97706";
-      case "resolved":
-        return "#16A34A";
-      default:
-        return "#6B7280";
-    }
-  };
 
   const filteredIncidents = incidents.filter(
       (incident) => filterStatus === "all" || incident.status === filterStatus

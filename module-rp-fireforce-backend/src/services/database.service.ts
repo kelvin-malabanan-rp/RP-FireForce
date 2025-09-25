@@ -8,7 +8,7 @@ export class DatabaseService {
 		this.env = env;
 	}
 
-	private get db() {
+	get db() {
 		return this.env.DB || this.env.incident_management;
 	}
 
@@ -17,8 +17,10 @@ export class DatabaseService {
 		const conditions: string[] = [];
 		const queryParams: string[] = [];
 
+		console.log('Input params:', params); // Add this
+
 		// Filter by timeframe
-		if (params.timeframe) {
+		if (params.timeframe && params.timeframe !== 'all') {
 			const now = new Date();
 			let cutoffDate: Date;
 
@@ -36,6 +38,7 @@ export class DatabaseService {
 
 			conditions.push('timestamp >= ?');
 			queryParams.push(cutoffDate.toISOString());
+			console.log('Cutoff date:', cutoffDate.toISOString()); // Add this
 		}
 
 		// Filter by status
@@ -56,8 +59,13 @@ export class DatabaseService {
 
 		query += ' ORDER BY timestamp DESC';
 
+		console.log('Final query:', query); // Add this
+		console.log('Query params:', queryParams); // Add this
+
 		try {
 			const { results } = await this.db.prepare(query).bind(...queryParams).all();
+			console.log('Raw results:', results); // Add this
+			console.log('Results count:', results?.length || 0); // Add this
 			return (results as unknown as Incident[]) || [];
 		} catch (error) {
 			console.error('Database query error:', error);
@@ -87,7 +95,7 @@ export class DatabaseService {
 			incident.awsAccountId || null,
 			incident.stateReason || null,
 			incident.metricName || null,
-			incident.awsConsoleUrl || null
+			incident.aws_console_url || null
 		];
 
 		console.log('Database insert - sanitized params:', params);

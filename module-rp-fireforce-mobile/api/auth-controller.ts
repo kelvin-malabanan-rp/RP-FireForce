@@ -1,5 +1,5 @@
 import { LoginData, APIResponse, AuthenticateResponse } from "@/types";
-import {BASE_API, BASE_URL_DEV} from "@/utils/backend-url";
+import {BASE_URL_DEV} from "@/utils/backend-url";
 import apiManager from "./api-manager";
 
 export const authenticateUser = async (

@@ -10,9 +10,10 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.RP-Fireforce-Pager"
+      "bundleIdentifier": "com.rocketpartners.rpfireforcepager"
     },
     "android": {
+      "package": "com.rocketpartners.rpfireforcepager",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -20,8 +21,7 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.RPFireforcePager"
+      "predictiveBackGestureEnabled": false
     },
     "web": {
       "output": "static",
@@ -57,9 +57,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "ed4b748d-8758-4d6a-999c-549c023d50d0"
+        "projectId": "eb3ea97b-b328-4afa-a231-ae23ed68263d"
       }
     },
-    "owner": "rp-keannubrillante"
+    "owner": "kelbeans.dev"
   }
 }
