@@ -5,104 +5,76 @@ import {
     StyleSheet,
     ScrollView,
     TouchableOpacity,
+    ActivityIndicator,
 } from 'react-native';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-
-interface Incident {
-    id: string;
-    title: string;
-    description: string;
-    severity: "low" | "medium" | "high" | "critical";
-    status: "open" | "investigating" | "resolved";
-    timestamp: Date;
-    reportedBy: string;
-    location?: string;
-}
+import { getAllIncidents, getIncidentStats } from '@/api/incident-controller';
+import { Incident, IncidentStatsResponse } from '@/types/incident-types';
 
 interface IncidentSummaryProps {
     timeframe?: '24h' | '7d' | '30d';
-    incidents?: Incident[];
     onTimeframeChange?: (timeframe: '24h' | '7d' | '30d') => void;
 }
 
 const IncidentSummary: React.FC<IncidentSummaryProps> = ({
                                                              timeframe = '24h',
-                                                             incidents = [],
                                                              onTimeframeChange
                                                          }) => {
     const [selectedTimeframe, setSelectedTimeframe] = useState(timeframe);
-    const [localIncidents, setLocalIncidents] = useState<Incident[]>(incidents);
+    const [incidents, setIncidents] = useState<Incident[]>([]);
+    const [stats, setStats] = useState<IncidentStatsResponse | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [refreshing, setRefreshing] = useState(false);
 
-    // If no incidents prop provided, use mock data
-    useEffect(() => {
-        if (incidents.length === 0) {
-            const mockIncidents: Incident[] = [
-                {
-                    id: "1",
-                    title: "Database Connection Pool Exhausted",
-                    description: "Primary database connection pool has reached maximum capacity.",
-                    severity: "critical",
-                    status: "investigating",
-                    timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
-                    reportedBy: "System Monitor",
-                    location: "Data Center A",
-                },
-                {
-                    id: "2",
-                    title: "API Response Time Elevated",
-                    description: "Authentication API experiencing 5x normal response times.",
-                    severity: "high",
-                    status: "open",
-                    timestamp: new Date(Date.now() - 4 * 60 * 60 * 1000), // 4 hours ago
-                    reportedBy: "Performance Monitor",
-                    location: "API Gateway",
-                },
-                {
-                    id: "3",
-                    title: "Cache Hit Rate Below Threshold",
-                    description: "Redis cache hit rate dropped to 60%, below 85% threshold.",
-                    severity: "medium",
-                    status: "investigating",
-                    timestamp: new Date(Date.now() - 6 * 60 * 60 * 1000), // 6 hours ago
-                    reportedBy: "Cache Monitor",
-                    location: "Redis Cluster",
-                },
-                {
-                    id: "4",
-                    title: "SSL Certificate Expiring Soon",
-                    description: "SSL certificate for api.example.com expires in 7 days.",
-                    severity: "low",
-                    status: "open",
-                    timestamp: new Date(Date.now() - 8 * 60 * 60 * 1000), // 8 hours ago
-                    reportedBy: "Certificate Monitor",
-                    location: "Load Balancer",
-                },
-                {
-                    id: "5",
-                    title: "Memory Usage Spike Resolved",
-                    description: "Application memory usage returned to normal levels.",
-                    severity: "medium",
-                    status: "resolved",
-                    timestamp: new Date(Date.now() - 12 * 60 * 60 * 1000), // 12 hours ago
-                    reportedBy: "Resource Monitor",
-                    location: "Application Server",
-                },
-                {
-                    id: "6",
-                    title: "Failed Login Attempts High",
-                    description: "Unusual spike in failed login attempts detected.",
-                    severity: "high",
-                    status: "resolved",
-                    timestamp: new Date(Date.now() - 18 * 60 * 60 * 1000), // 18 hours ago
-                    reportedBy: "Security Monitor",
-                    location: "Authentication Service",
-                },
-            ];
-            setLocalIncidents(mockIncidents);
-        } else {
-            setLocalIncidents(incidents);
+    // Auto-refresh interval (30 seconds)
+    const AUTO_REFRESH_INTERVAL = 30000;
+
+    const loadIncidentData = async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            console.log('Starting to load incident data...');
+
+            // Fetch both incidents and stats in parallel
+            const [incidentsResponse, statsResponse] = await Promise.all([
+                getAllIncidents(),
+                getIncidentStats(selectedTimeframe)
+            ]);
+
+            console.log('Incidents Response:', incidentsResponse);
+            console.log('Stats Response:', statsResponse);
+
+            // Extract incidents - they're directly in data array
+            if (incidentsResponse.data && Array.isArray(incidentsResponse.data)) {
+                setIncidents(incidentsResponse.data);
+            } else if (incidentsResponse.data?.incidents) {
+                setIncidents(incidentsResponse.data.incidents);
+            }
+
+            // Extract stats
+            if (statsResponse.data) {
+                setStats(statsResponse.data);
+            }
+        } catch (err) {
+            console.error('Failed to load incident data:', err);
+            setError('Unable to load incident data. Please try again.');
+        } finally {
+            setLoading(false);
         }
-    }, [incidents]);
+    };
+
+    // Load data from API
+    useEffect(() => {
+        loadIncidentData();
+    }, [selectedTimeframe]);
+
+    // Sync with parent timeframe changes
+    useEffect(() => {
+        if (timeframe !== selectedTimeframe) {
+            setSelectedTimeframe(timeframe);
+        }
+    }, [timeframe]);
 
     const getSeverityColor = (severity: string) => {
         switch (severity) {
@@ -150,25 +122,43 @@ const IncidentSummary: React.FC<IncidentSummaryProps> = ({
                 cutoffDate = new Date(0);
         }
 
-        return incidents.filter(incident => incident.timestamp >= cutoffDate);
+        return incidents.filter(incident => {
+            const incidentDate = new Date(incident.timestamp || incident.created_at);
+            return incidentDate >= cutoffDate;
+        });
     };
 
     const getIncidentStats = () => {
-        const filteredIncidents = filterIncidentsByTimeframe(localIncidents, selectedTimeframe);
+        // Use API stats if available
+        if (stats) {
+            return {
+                total: stats.total || 0,
+                open: stats.open || 0,
+                investigating: stats.investigating || 0,
+                resolved: stats.resolved || 0,
+                severities: stats.severities || {
+                    critical: 0,
+                    high: 0,
+                    medium: 0,
+                    low: 0,
+                }
+            };
+        }
 
-        const total = filteredIncidents.length;
-        const open = filteredIncidents.filter((i) => i.status === "open").length;
-        const investigating = filteredIncidents.filter((i) => i.status === "investigating").length;
-        const resolved = filteredIncidents.filter((i) => i.status === "resolved").length;
-
-        const critical = filteredIncidents.filter((i) => i.severity === "critical").length;
-        const high = filteredIncidents.filter((i) => i.severity === "high").length;
-        const medium = filteredIncidents.filter((i) => i.severity === "medium").length;
-        const low = filteredIncidents.filter((i) => i.severity === "low").length;
+        // Fallback to manual calculation from incidents
+        const filteredIncidents = filterIncidentsByTimeframe(incidents, selectedTimeframe);
 
         return {
-            total, open, investigating, resolved,
-            severities: { critical, high, medium, low }
+            total: filteredIncidents.length,
+            open: filteredIncidents.filter(i => i.status === "open").length,
+            investigating: filteredIncidents.filter(i => i.status === "investigating").length,
+            resolved: filteredIncidents.filter(i => i.status === "resolved").length,
+            severities: {
+                critical: filteredIncidents.filter(i => i.severity === "critical").length,
+                high: filteredIncidents.filter(i => i.severity === "high").length,
+                medium: filteredIncidents.filter(i => i.severity === "medium").length,
+                low: filteredIncidents.filter(i => i.severity === "low").length,
+            }
         };
     };
 
@@ -178,9 +168,9 @@ const IncidentSummary: React.FC<IncidentSummaryProps> = ({
     };
 
     const renderSeverityChart = () => {
-        const stats = getIncidentStats();
-        const { critical, high, medium, low } = stats.severities;
-        const total = stats.total;
+        const currentStats = getIncidentStats();
+        const { critical, high, medium, low } = currentStats.severities;
+        const total = currentStats.total;
 
         if (total === 0) {
             return (
@@ -197,7 +187,7 @@ const IncidentSummary: React.FC<IncidentSummaryProps> = ({
             { label: 'Low', count: low, color: getSeverityColor('low') },
         ];
 
-        const maxCount = Math.max(...severityData.map(item => item.count));
+        const maxCount = Math.max(...severityData.map(item => item.count), 1);
 
         return (
             <View style={styles.chartContainer}>
@@ -210,7 +200,7 @@ const IncidentSummary: React.FC<IncidentSummaryProps> = ({
                                     style={[
                                         styles.bar,
                                         {
-                                            height: Math.max(maxCount > 0 ? (item.count / maxCount) * 80 : 4, 4),
+                                            height: Math.max((item.count / maxCount) * 80, 4),
                                             backgroundColor: item.color,
                                         },
                                     ]}
@@ -226,8 +216,8 @@ const IncidentSummary: React.FC<IncidentSummaryProps> = ({
     };
 
     const renderStatusChart = () => {
-        const stats = getIncidentStats();
-        const { open, investigating, resolved, total } = stats;
+        const currentStats = getIncidentStats();
+        const { open, investigating, resolved, total } = currentStats;
 
         if (total === 0) {
             return null;
@@ -237,7 +227,7 @@ const IncidentSummary: React.FC<IncidentSummaryProps> = ({
             { label: 'Open', count: open, color: getStatusColor('open') },
             { label: 'Investigating', count: investigating, color: getStatusColor('investigating') },
             { label: 'Resolved', count: resolved, color: getStatusColor('resolved') },
-        ].filter(item => item.count > 0); // Only show statuses with incidents
+        ].filter(item => item.count > 0);
 
         return (
             <View style={styles.chartContainer}>
@@ -259,6 +249,16 @@ const IncidentSummary: React.FC<IncidentSummaryProps> = ({
         );
     };
 
+    const formatIncidentTime = (incident: Incident) => {
+        const date = new Date(incident.timestamp || incident.created_at);
+        return date.toLocaleString([], {
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+        });
+    };
+
     const getTimeframeLabel = (timeframe: string) => {
         switch (timeframe) {
             case '24h': return 'Last 24 Hours';
@@ -268,7 +268,23 @@ const IncidentSummary: React.FC<IncidentSummaryProps> = ({
         }
     };
 
-    const stats = getIncidentStats();
+    if (loading) {
+        return (
+            <View style={[styles.container, styles.loadingContainer]}>
+                <ActivityIndicator size="large" color="#3B82F6" />
+                <Text style={styles.loadingText}>Loading incident summary...</Text>
+            </View>
+        );
+    }
+
+    const currentStats = getIncidentStats();
+    const recentIncidents = filterIncidentsByTimeframe(incidents, selectedTimeframe)
+        .sort((a, b) => {
+            const dateA = new Date(a.timestamp || a.created_at).getTime();
+            const dateB = new Date(b.timestamp || b.created_at).getTime();
+            return dateB - dateA;
+        })
+        .slice(0, 3);
 
     return (
         <View style={styles.container}>
@@ -283,6 +299,7 @@ const IncidentSummary: React.FC<IncidentSummaryProps> = ({
                                 selectedTimeframe === period && styles.timeframeButtonActive,
                             ]}
                             onPress={() => handleTimeframeChange(period as '24h' | '7d' | '30d')}
+                            disabled={loading}
                         >
                             <Text
                                 style={[
@@ -299,38 +316,50 @@ const IncidentSummary: React.FC<IncidentSummaryProps> = ({
 
             <Text style={styles.subtitle}>{getTimeframeLabel(selectedTimeframe)}</Text>
 
+            {error && (
+                <View style={styles.errorContainer}>
+                    <Text style={styles.errorText}>{error}</Text>
+                    <TouchableOpacity onPress={loadIncidentData} style={styles.retryButton}>
+                        <Text style={styles.retryText}>Retry</Text>
+                    </TouchableOpacity>
+                </View>
+            )}
+
             <ScrollView showsVerticalScrollIndicator={false}>
                 {/* Quick Stats */}
                 <View style={styles.quickStats}>
                     <View style={[styles.statCard, styles.totalCard]}>
                         <IconSymbol name="exclamationmark.triangle" size={20} color="#3B82F6" />
-                        <Text style={styles.statNumber}>{stats.total}</Text>
+                        <Text style={styles.statNumber}>{currentStats.total}</Text>
                         <Text style={styles.statLabel}>Total Incidents</Text>
                     </View>
 
                     <View style={[styles.statCard, styles.criticalCard]}>
                         <IconSymbol name="exclamationmark.circle.fill" size={20} color="#DC2626" />
-                        <Text style={styles.statNumber}>{stats.severities.critical}</Text>
+                        <Text style={styles.statNumber}>{currentStats.severities.critical}</Text>
                         <Text style={styles.statLabel}>Critical</Text>
                     </View>
 
                     <View style={[styles.statCard, styles.openCard]}>
                         <IconSymbol name="clock" size={20} color="#EA580C" />
-                        <Text style={styles.statNumber}>{stats.open + stats.investigating}</Text>
+                        <Text style={styles.statNumber}>{currentStats.open + currentStats.investigating}</Text>
                         <Text style={styles.statLabel}>Active</Text>
                     </View>
                 </View>
 
                 {/* Charts */}
-                {renderSeverityChart()}
-                {renderStatusChart()}
+                {!error && (
+                    <>
+                        {renderSeverityChart()}
+                        {renderStatusChart()}
+                    </>
+                )}
 
                 {/* Recent Incidents Preview */}
-                <View style={styles.recentIncidents}>
-                    <Text style={styles.sectionTitle}>Recent Incidents</Text>
-                    {filterIncidentsByTimeframe(localIncidents, selectedTimeframe)
-                        .slice(0, 3)
-                        .map((incident) => (
+                {!error && (
+                    <View style={styles.recentIncidents}>
+                        <Text style={styles.sectionTitle}>Recent Incidents</Text>
+                        {recentIncidents.map((incident) => (
                             <View key={incident.id} style={styles.incidentPreview}>
                                 <View style={styles.incidentPreviewHeader}>
                                     <Text style={styles.incidentPreviewTitle} numberOfLines={1}>
@@ -352,23 +381,19 @@ const IncidentSummary: React.FC<IncidentSummaryProps> = ({
                                     </View>
                                 </View>
                                 <Text style={styles.incidentPreviewTime}>
-                                    {incident.timestamp.toLocaleString([], {
-                                        month: 'short',
-                                        day: 'numeric',
-                                        hour: '2-digit',
-                                        minute: '2-digit',
-                                    })}
+                                    {formatIncidentTime(incident)}
                                 </Text>
                             </View>
                         ))}
 
-                    {filterIncidentsByTimeframe(localIncidents, selectedTimeframe).length === 0 && (
-                        <View style={styles.emptyState}>
-                            <Text style={styles.emptyText}>No incidents in this timeframe</Text>
-                            <Text style={styles.emptySubtext}>All systems operational</Text>
-                        </View>
-                    )}
-                </View>
+                        {recentIncidents.length === 0 && (
+                            <View style={styles.emptyState}>
+                                <Text style={styles.emptyText}>No incidents in this timeframe</Text>
+                                <Text style={styles.emptySubtext}>All systems operational</Text>
+                            </View>
+                        )}
+                    </View>
+                )}
             </ScrollView>
         </View>
     );
@@ -385,6 +410,42 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.1,
         shadowRadius: 4,
         elevation: 2,
+    },
+    loadingContainer: {
+        minHeight: 200,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    loadingText: {
+        marginTop: 12,
+        fontSize: 14,
+        color: '#6B7280',
+    },
+    errorContainer: {
+        backgroundColor: '#FEE2E2',
+        padding: 12,
+        borderRadius: 8,
+        marginBottom: 16,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    errorText: {
+        color: '#DC2626',
+        fontSize: 14,
+        flex: 1,
+    },
+    retryButton: {
+        backgroundColor: '#DC2626',
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 6,
+        marginLeft: 12,
+    },
+    retryText: {
+        color: '#FFFFFF',
+        fontSize: 14,
+        fontWeight: '500',
     },
     header: {
         flexDirection: 'row',
@@ -470,7 +531,7 @@ const styles = StyleSheet.create({
     },
     barChart: {
         flexDirection: 'row',
-        alignItems: 'end',
+        alignItems: 'flex-end',
         justifyContent: 'space-between',
         height: 140,
         paddingHorizontal: 8,

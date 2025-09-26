@@ -4,7 +4,8 @@ import {
     AllIncidents,
     CreateIncidentData, CreateIncidentResponseApi,
     Incident, IncidentPayloadApi, IncidentResponseApi,
-    UpdateIncidentData
+    UpdateIncidentData,
+    IncidentStatsResponse
 } from "@/types/incident-types";
 
 // Get all incidents
@@ -16,6 +17,19 @@ export const getAllIncidents = async (): Promise<IncidentResponseApi> => {
     return response.data;
   } catch (error) {
     console.error("Get incidents error:", error);
+    throw error;
+  }
+};
+
+// Get incident statistics
+export const getIncidentStats = async (timeframe: string = '24h'): Promise<{ data: IncidentStatsResponse }> => {
+  try {
+    const response = await apiManager.get<{ data: IncidentStatsResponse }>(
+        `${BASE_URL_DEV}/api/incidents/stats?timeframe=${timeframe}`
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Get incident stats error:", error);
     throw error;
   }
 };
