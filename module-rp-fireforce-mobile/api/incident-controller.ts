@@ -1,19 +1,17 @@
 import { BASE_URL_DEV } from "@/utils/backend-url";
-import {
-    APIResponse,
-    IncidentResponse,
-    WrappedIncidentsResponse,
-    WrappedIncidentByIdResponse, WrappedIncidentStatsResponse,
-} from "@/types/response-types";
 import apiManager from "./api-manager";
-import {AllIncidents, CreateIncidentData, Incident, UpdateIncidentData} from "@/types/incident-types";
+import {
+    AllIncidents,
+    CreateIncidentData, CreateIncidentResponseApi,
+    Incident, IncidentPayloadApi, IncidentResponseApi,
+    UpdateIncidentData
+} from "@/types/incident-types";
 
 // Get all incidents
-export const getIncidents = async (): Promise<WrappedIncidentsResponse> => {
+export const getAllIncidents = async (): Promise<IncidentResponseApi> => {
   try {
-    const timeframe: string = '24h'
-    const response = await apiManager.get<WrappedIncidentsResponse>(
-        `${BASE_URL_DEV}/api/incidents?timeframe=${timeframe}`
+    const response = await apiManager.get<IncidentResponseApi>(
+        `${BASE_URL_DEV}/api/incidents`
     );
     return response.data;
   } catch (error) {
@@ -25,9 +23,9 @@ export const getIncidents = async (): Promise<WrappedIncidentsResponse> => {
 // Get incident by ID
 export const getIncidentById = async (
     id: string
-): Promise<WrappedIncidentByIdResponse> => {
+): Promise<IncidentResponseApi> => {
   try {
-    const response = await apiManager.get<WrappedIncidentByIdResponse>(
+    const response = await apiManager.get<IncidentResponseApi>(
         `${BASE_URL_DEV}/api/incidents/${id}`
     );
     return response.data;
@@ -40,9 +38,9 @@ export const getIncidentById = async (
 // Create new incident
 export const createIncident = async (
     data: CreateIncidentData
-): Promise<WrappedIncidentByIdResponse> => {
+): Promise<CreateIncidentResponseApi> => {
   try {
-    const response = await apiManager.post<WrappedIncidentByIdResponse>(
+    const response = await apiManager.post<CreateIncidentResponseApi>(
         `${BASE_URL_DEV}/api/incidents`,
         data
     );
@@ -101,28 +99,13 @@ export const getIncidentsByStatus = async (
   }
 };
 
-// Get incident statistics
-export const getIncidentStats = async (
-    timeframe: string = '24h'
-): Promise<WrappedIncidentStatsResponse> => {
-  try {
-    const response = await apiManager.get<WrappedIncidentStatsResponse>(
-        `${BASE_URL_DEV}/api/incidents/stats?timeframe=${timeframe}`
-    );
-    return response.data;
-  } catch (error) {
-    console.error("Get incident stats error:", error);
-    throw error;
-  }
-};
-
 // Assign incident to user
 export const assignIncident = async (
     id: string,
     userId: string
-): Promise<APIResponse<IncidentResponse>> => {
+): Promise<IncidentPayloadApi> => {
   try {
-    const response = await apiManager.put<APIResponse<IncidentResponse>>(
+    const response = await apiManager.put<IncidentPayloadApi>(
         `${BASE_URL_DEV}/v1/api/incidents/${id}`,
         { assigned_to: userId }
     );
@@ -137,9 +120,9 @@ export const assignIncident = async (
 export const resolveIncident = async (
     id: string,
     resolvedBy: string
-): Promise<APIResponse<IncidentResponse>> => {
+): Promise<IncidentPayloadApi> => {
   try {
-    const response = await apiManager.put<APIResponse<IncidentResponse>>(
+    const response = await apiManager.put<IncidentPayloadApi>(
         `${BASE_URL_DEV}/v1/api/incidents/${id}`,
         {
           status: "resolved",
@@ -158,7 +141,7 @@ export const resolveIncident = async (
 export const changeIncidentStatus = async (
     id: string,
     status: "open" | "investigating" | "resolved"
-): Promise<APIResponse<IncidentResponse>> => {
+): Promise<IncidentPayloadApi> => {
   try {
     const updateData: UpdateIncidentData = { status };
 
@@ -167,7 +150,7 @@ export const changeIncidentStatus = async (
       updateData.resolved_at = new Date().toISOString();
     }
 
-    const response = await apiManager.put<APIResponse<IncidentResponse>>(
+    const response = await apiManager.put<IncidentPayloadApi>(
         `${BASE_URL_DEV}/v1/api/incidents/${id}`,
         updateData
     );

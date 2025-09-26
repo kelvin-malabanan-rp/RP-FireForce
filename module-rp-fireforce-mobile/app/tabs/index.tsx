@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { ScrollView, RefreshControl } from 'react-native';
-import { getIncidents, getIncidentStats } from '@/api/incident-controller';
 import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
 import Section from '@/components/section';
 import AlarmCard from '@/components/alarm-card';
 import IncidentSummary from '@/components/incident-summary';
+import {getAllIncidents} from "@/api/incident-controller";
 
 console.log('🏠 HOME SCREEN FILE IS LOADING');
 
@@ -18,8 +18,9 @@ export default function HomeScreen() {
   const onRefresh = async () => {
     setRefreshing(true);
     try {
-      const data = await getIncidents();
-      setAlarms(data);
+      const data = await getAllIncidents();
+      // @ts-ignore
+        setAlarms(data);
     } catch (error) {
       console.error('Failed to refresh alarms:', error);
     } finally {
@@ -35,7 +36,7 @@ export default function HomeScreen() {
   };
 
   return (
-      <ThemedView style={{ flex: 1, backgroundColor: '#F3F4F6' , marginTop: 50}}>
+      <ThemedView style={{ flex: 1, backgroundColor: '#F3F4F6'}}>
         <ScrollView
             style={{ flex: 1 }}
             refreshControl={

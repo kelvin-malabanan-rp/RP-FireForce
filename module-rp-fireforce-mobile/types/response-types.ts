@@ -1,11 +1,5 @@
 import {AllIncidents, Incident, IncidentStatsResponse} from "@/types/incident-types";
 
-export type APIResponse<T> = {
-  httpStatus: string;
-  message: string;
-  object: T;
-};
-
 export type AuthenticateResponse = {
   httpStatus: string;
   message: string;
@@ -18,42 +12,6 @@ export type AuthenticateResponse = {
     token: string;
   }
 };
-
-export type WrappedIncidentByIdResponse = APIResponse<Incident>;
-
-export type WrappedIncidentsResponse = APIResponse<Incident[]>;
-
-export type WrappedIncidentStatsResponse = APIResponse<IncidentStatsResponse>;
-
-export type WrappedIncidentsListResponse = APIResponse<AllIncidents>;
-
-export type WrappedCreateIncidentResponse = APIResponse<Incident>;
-
-
-// Response types for incident operations
-export type IncidentResponse = {
-  object: Incident;
-  httpStatus: string;
-  id: string;
-  title: string;
-  description: string;
-  severity: "low" | "medium" | "high" | "critical";
-  status: "open" | "investigating" | "resolved";
-  timestamp: string;
-  reported_by: string;
-  location?: string | null;
-  assigned_to?: string | null;
-  resolved_by?: string | null;
-  resolved_at?: string | null;
-  aws_alarm_name?: string | null;
-  aws_account_id?: string | null;
-  state_reason?: string | null;
-  metric_name?: string | null;
-  aws_console_url?: string | null;
-  created_at: string;
-  updated_at: string;
-};
-
 
 export type IncidentStatsResponseType = {
   object: IncidentStatsResponse;

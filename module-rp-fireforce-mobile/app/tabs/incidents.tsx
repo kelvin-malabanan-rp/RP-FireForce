@@ -13,9 +13,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import {
-  getIncidents,
-  getIncidentStats,
-  createIncident
+    createIncident, getAllIncidents
 } from "@/api/incident-controller";
 import {
 } from "@/types/response-types";
@@ -67,16 +65,14 @@ export default function IncidentsScreen() {
   });
 
     // Fetch incidents from API
-    const fetchIncidents = useCallback(async () => {
+    const fetchAllIncidents = async () => {
         try {
             console.log('Fetching incidents...'); // Debug log
-            const response = await getIncidents();
+            const response = await getAllIncidents();
 
-            if (response.httpStatus === "OK" && response.object) {
-                const transformedIncidents = response.object.map(transformApiIncident);
+            if (response.httpStatus === "OK" && response.data) {
+                const transformedIncidents = response.data.map(transformApiIncident);
                 setIncidents(transformedIncidents);
-            } else {
-                throw new Error(response.message || "Failed to fetch incidents");
             }
         } catch (error) {
             console.error('Failed to fetch incidents:', error);
@@ -88,45 +84,18 @@ export default function IncidentsScreen() {
             setLoading(false);
             setRefreshing(false);
         }
-    }, [timeframe]); // Only depend on timeframe
-
-  // Fetch stats from API
-  const fetchStats = useCallback(async () => {
-    try {
-      console.log('Fetching stats...'); // Debug log
-      const response = await getIncidentStats(timeframe);
-
-      if (response.httpStatus === "OK" && response.object) {
-        const apiStats = response.object;
-        const transformedStats: Stats = {
-          total: apiStats.total,
-          open: apiStats.open,
-          investigating: apiStats.investigating,
-          resolved: apiStats.resolved,
-          critical: apiStats.severities.critical,
-        };
-        setStats(transformedStats);
-      }
-    } catch (error) {
-      console.error('Failed to fetch stats:', error);
-      // Don't calculate fallback here to avoid dependency on incidents
-      console.log('Stats fetch failed, using empty stats');
-    }
-  }, [timeframe]); // Only depend on timeframe
+    };
 
   // Initial data load - FIX: Remove functions from dependency array
   useEffect(() => {
     console.log('useEffect triggered - loading initial data'); // Debug log
-    fetchIncidents();
-    fetchStats();
-  }, [timeframe]); // ✅ Only depend on timeframe, not the functions
+    fetchAllIncidents();
+  }, []); // ✅ Only depend on timeframe, not the functions
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    Promise.all([fetchIncidents(), fetchStats()]);
-  }, [fetchIncidents, fetchStats]);
-
-
+    Promise.all([fetchAllIncidents()]);
+  }, [fetchAllIncidents]);
 
   const filteredIncidents = incidents.filter(
       (incident) => filterStatus === "all" || incident.status === filterStatus
@@ -151,8 +120,8 @@ export default function IncidentsScreen() {
       const response = await createIncident(incidentData);
 
       if (response.httpStatus === "200" || response.httpStatus === "201") {
-        if (response.object) {
-          const transformedIncident = transformApiIncident(response.object);
+        if (response.data){
+          const transformedIncident = transformApiIncident(response.data);
 
           // Add to local state for immediate UI update
           setIncidents((prev) => [transformedIncident, ...prev]);
@@ -164,9 +133,6 @@ export default function IncidentsScreen() {
             open: prev.open + 1,
             ...(newIncident.severity === 'critical' && { critical: prev.critical + 1 }),
           }));
-
-          // Refresh data from server to ensure consistency
-          fetchStats();
         }
 
         // Reset form
@@ -218,35 +184,6 @@ export default function IncidentsScreen() {
             <IconSymbol name="plus" size={24} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
-
-        {/* Stats Cards */}
-        <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.statsContainer}
-        >
-          <View style={[styles.statCard, styles.totalCard]}>
-            <Text style={styles.statNumber}>{stats.total}</Text>
-            <Text style={styles.statLabel}>Total</Text>
-          </View>
-          <View style={[styles.statCard, styles.openCard]}>
-            <Text style={styles.statNumber}>{stats.open}</Text>
-            <Text style={styles.statLabel}>Open</Text>
-          </View>
-          <View style={[styles.statCard, styles.investigatingCard]}>
-            <Text style={styles.statNumber}>{stats.investigating}</Text>
-            <Text style={styles.statLabel}>Investigating</Text>
-          </View>
-          <View style={[styles.statCard, styles.resolvedCard]}>
-            <Text style={styles.statNumber}>{stats.resolved}</Text>
-            <Text style={styles.statLabel}>Resolved</Text>
-          </View>
-          <View style={[styles.statCard, styles.criticalCard]}>
-            <Text style={styles.statNumber}>{stats.critical}</Text>
-            <Text style={styles.statLabel}>Critical</Text>
-          </View>
-        </ScrollView>
-
         {/* Filter Buttons */}
         <View style={styles.filterContainer}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -469,7 +406,6 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     padding: 20,
-    paddingTop: 60,
     backgroundColor: "#FFFFFF",
     borderBottomWidth: 1,
     borderBottomColor: "#E5E7EB",
@@ -509,11 +445,6 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "700",
     color: "#111827",
-  },
-  statLabel: {
-    fontSize: 12,
-    color: "#6B7280",
-    marginTop: 4,
   },
   filterContainer: {
     backgroundColor: "#FFFFFF",

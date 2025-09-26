@@ -43,6 +43,50 @@ export interface Incident {
     updated_at: string;
 }
 
+// AllIncidentApiResponse
+export interface IncidentResponseApi {
+    httpStatus: string;
+    message: string;
+    data: Incident[];
+}
+
+// AllIncidentApiResponse
+export interface CreateIncidentResponseApi {
+    httpStatus: string;
+    message: string;
+    data: Incident;
+}
+
+export type IncidentPayload = {
+    object: Incident;
+    httpStatus: string;
+    id: string;
+    title: string;
+    description: string;
+    severity: "low" | "medium" | "high" | "critical";
+    status: "open" | "investigating" | "resolved";
+    timestamp: string;
+    reported_by: string;
+    location?: string | null;
+    assigned_to?: string | null;
+    resolved_by?: string | null;
+    resolved_at?: string | null;
+    aws_alarm_name?: string | null;
+    aws_account_id?: string | null;
+    state_reason?: string | null;
+    metric_name?: string | null;
+    aws_console_url?: string | null;
+    created_at: string;
+    updated_at: string;
+};
+
+export type IncidentPayloadApi = {
+    httpStatus: string;
+    message: string;
+    data: IncidentPayload[];
+}
+
+
 export interface AllIncidents {
     incidents: Incident[];
     total: number;
