@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { ScrollView, RefreshControl } from 'react-native';
 import { getIncidents, getIncidentStats } from '@/api/incident-controller';
 import { ThemedView } from '@/components/themed-view';
@@ -6,7 +6,6 @@ import { ThemedText } from '@/components/themed-text';
 import Section from '@/components/section';
 import AlarmCard from '@/components/alarm-card';
 import IncidentSummary from '@/components/incident-summary';
-import AlertManager from '@/components/alert-manager';
 
 console.log('🏠 HOME SCREEN FILE IS LOADING');
 
@@ -44,9 +43,6 @@ export default function HomeScreen() {
             }
             showsVerticalScrollIndicator={false}
         >
-          {/* Add AlertManager here */}
-          <AlertManager />
-
           {/* Incident Summary Component */}
           <IncidentSummary timeframe="24h" />
 

@@ -9,9 +9,11 @@ import {
     Dimensions,
     Alert,
     TouchableWithoutFeedback,
+    Modal,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
+import AlertManager from "./alert-manager";
 
 const { width } = Dimensions.get("window");
 const MENU_WIDTH = width * 0.7;
@@ -25,6 +27,7 @@ export function SlideMenu({ isOpen, onClose }: SlideMenuProps) {
     const slideAnim = useRef(new Animated.Value(-MENU_WIDTH)).current;
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const [isVisible, setIsVisible] = useState(false);
+    const [showAlertManager, setShowAlertManager] = useState(false);
 
     useEffect(() => {
         if (isOpen) {
@@ -75,6 +78,10 @@ export function SlideMenu({ isOpen, onClose }: SlideMenuProps) {
                 },
             ]
         );
+    };
+
+    const handleNotifications = () => {
+        setShowAlertManager(true);
     };
 
     if (!isVisible) {
@@ -131,7 +138,12 @@ export function SlideMenu({ isOpen, onClose }: SlideMenuProps) {
                         <Text style={styles.menuText}>Settings</Text>
                     </TouchableOpacity>
 
-                    <TouchableOpacity style={styles.menuItem} onPress={onClose}>
+                    <TouchableOpacity
+                        style={styles.menuItem}
+                        onPress={() => {
+                            setShowAlertManager(true); // Open AlertManager modal
+                        }}
+                    >
                         <Ionicons name="notifications-outline" size={24} color="#374151" />
                         <Text style={styles.menuText}>Notifications</Text>
                     </TouchableOpacity>
@@ -148,6 +160,26 @@ export function SlideMenu({ isOpen, onClose }: SlideMenuProps) {
                     <Text style={styles.footerText}>RP Fire Force v1.0.0</Text>
                 </View>
             </Animated.View>
+
+            {/* AlertManager Modal */}
+            <Modal
+                animationType="slide"
+                transparent={true}
+                visible={showAlertManager}
+                onRequestClose={() => setShowAlertManager(false)}
+            >
+                <View style={styles.alertModalOverlay}>
+                    <View style={styles.alertModalContainer}>
+                        <TouchableOpacity
+                            style={styles.closeButton}
+                            onPress={() => setShowAlertManager(false)}
+                        >
+                            <Ionicons name="close" size={24} color="#6B7280" />
+                        </TouchableOpacity>
+                        <AlertManager />
+                    </View>
+                </View>
+            </Modal>
         </>
     );
 }
@@ -234,5 +266,37 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: "#9ca3af",
         textAlign: "center",
+    },
+    // AlertManager modal styles
+    alertModalOverlay: {
+        flex: 1,
+        backgroundColor: "rgba(0, 0, 0, 0.5)",
+        justifyContent: "center",
+        alignItems: "center",
+    },
+    alertModalContainer: {
+        backgroundColor: "transparent",
+        borderRadius: 16,
+        margin: 20,
+        position: "relative",
+        width: "90%",
+        maxHeight: "80%",
+    },
+    closeButton: {
+        position: "absolute",
+        top: 16,
+        right: 16,
+        zIndex: 1000,
+        backgroundColor: "rgba(255, 255, 255, 0.9)",
+        borderRadius: 20,
+        width: 40,
+        height: 40,
+        justifyContent: "center",
+        alignItems: "center",
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3,
     },
 });
