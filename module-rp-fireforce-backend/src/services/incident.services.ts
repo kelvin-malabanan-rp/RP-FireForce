@@ -1,5 +1,5 @@
 // services/incident.services.ts
-import { Env, Incident, IncidentFilters, IncidentStats } from '../types';
+import {CreateIncidentTypes, Env, Incident, IncidentFilters, IncidentStats} from '../types';
 import { DatabaseService } from './database.service';
 import { PushNotificationService } from './push-notification.service';
 
@@ -128,5 +128,31 @@ export class IncidentService {
 	private generateAwsConsoleUrl(alarm: any): string {
 		const region = alarm.Region || 'us-east-1';
 		return `https://console.aws.amazon.com/cloudwatch/home?region=${region}#alarmsV2:alarm/${encodeURIComponent(alarm.AlarmName)}`;
+	}
+
+	// Updated createIncident method to handle async operations and return the created incident
+	public async createIncident(data: CreateIncidentTypes) {
+		await this.validateUser(data.reportedBy);
+
+		const incidentData: Partial<Incident> = {
+			title: data.title,
+			description: data.description,
+			location: data.location,
+			reportedBy: data.reportedBy,
+			severity: data.severity,
+			status: 'open',
+			timestamp: new Date().toISOString()
+		};
+
+		return await this.dbService.insertIncident(incidentData);
+	}
+
+	private validateUser(email: string){
+		try {
+			this.dbService.getUserByEmail(email);
+		}
+		catch (error) {
+			console.error(error);
+		}
 	}
 }

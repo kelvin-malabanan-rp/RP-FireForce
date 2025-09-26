@@ -111,8 +111,20 @@ export interface CreateIncidentData {
     title: string;
     description: string;
     severity: "low" | "medium" | "high" | "critical";
-    location?: string;
-    reported_by?: string;
+    location?: string | null;
+    reportedBy: string;  // Changed from reported_by and made required to match backend
+}
+
+// Response types for created incident
+export interface CreatedIncidentData {
+    id: string;
+    title: string;
+    description: string;
+    location: string | null;
+    reportedBy: string;
+    severity: "low" | "medium" | "high" | "critical";
+    status: "open" | "investigating" | "resolved";
+    timestamp: string;
 }
 
 export interface UpdateIncidentData {

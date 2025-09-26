@@ -12,6 +12,7 @@ import { getAllIncidents, getIncidentStats } from '@/api/incident-controller';
 import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
 import IncidentSummary from '@/components/incident-summary';
+
 import { Incident } from '@/types/incident-types';
 import {getStatusColor} from "@/constants/colors";
 
@@ -64,8 +65,8 @@ export default function HomeScreen() {
       // Extract incidents - they're directly in data array
       if (incidentsResponse.data && Array.isArray(incidentsResponse.data)) {
         setIncidents(incidentsResponse.data);
-      } else if (incidentsResponse.data?.incidents) {
-        setIncidents(incidentsResponse.data.incidents);
+      } else if (incidentsResponse.data) {
+        setIncidents(incidentsResponse.data);
       }
 
       // Extract stats from the wrapped response
@@ -398,7 +399,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F3F4F6',
-    marginTop: 50,
   },
   loadingContainer: {
     flex: 1,

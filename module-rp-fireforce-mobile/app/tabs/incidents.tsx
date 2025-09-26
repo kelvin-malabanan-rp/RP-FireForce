@@ -108,54 +108,50 @@ export default function IncidentsScreen() {
     }
 
     setCreating(true);
-    try {
-      const incidentData: CreateIncidentData = {
-        title: newIncident.title,
-        description: newIncident.description,
-        severity: newIncident.severity,
-        location: newIncident.location || undefined,
-        reported_by: "Mobile App User", // You can get this from auth context
-      };
+      try {
+          const incidentData: CreateIncidentData = {
+              title: newIncident.title,
+              description: newIncident.description,
+              severity: newIncident.severity,
+              location: newIncident.location || null,
+              reportedBy: "Mobile App User", // You can get this from auth context
+          };
 
-      const response = await createIncident(incidentData);
+          const response = await createIncident(incidentData);
 
-      if (response.httpStatus === "200" || response.httpStatus === "201") {
-        if (response.data){
-          const transformedIncident = transformApiIncident(response.data);
+          // Check for successful response
+          if (response.httpStatus === "OK" && response.data) {
+              const transformedIncident = transformApiIncident(response.data);
 
-          // Add to local state for immediate UI update
-          setIncidents((prev) => [transformedIncident, ...prev]);
+              // Add to local state for immediate UI update
+              setIncidents((prev) => [transformedIncident, ...prev]);
 
-          // Update stats
-          setStats(prev => ({
-            ...prev,
-            total: prev.total + 1,
-            open: prev.open + 1,
-            ...(newIncident.severity === 'critical' && { critical: prev.critical + 1 }),
-          }));
-        }
+              // Update stats
+              setStats(prev => ({
+                  ...prev,
+                  total: prev.total + 1,
+                  open: prev.open + 1,
+                  ...(newIncident.severity === 'critical' && { critical: prev.critical + 1 }),
+              }));
 
-        // Reset form
-        setNewIncident({
-          title: "",
-          description: "",
-          severity: "medium",
-          location: "",
-        });
-        setModalVisible(false);
-        Alert.alert("Success", "Incident created successfully");
-      } else {
-        throw new Error(response.message || "Failed to create incident");
+              // Reset form
+              setNewIncident({
+                  title: "",
+                  description: "",
+                  severity: "medium",
+                  location: "",
+              });
+              setModalVisible(false);
+              Alert.alert("Success", response.message || "Incident created successfully");
+          } else {
+              // Handle API error response (httpStatus === "ERROR")
+              throw new Error(response.message || "Failed to create incident");
+          }
+      } catch (error) {
+          console.error('Failed to create incident:', error);
+      } finally {
+          setCreating(false);
       }
-    } catch (error) {
-      console.error('Failed to create incident:', error);
-      Alert.alert(
-          "Error",
-          "Failed to create incident. Please try again."
-      );
-    } finally {
-      setCreating(false);
-    }
   };
 
   const formatTimestamp = (timestamp: Date) => {

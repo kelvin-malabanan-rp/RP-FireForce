@@ -1,4 +1,4 @@
-import { LoginData, APIResponse, AuthenticateResponse } from "@/types";
+import { LoginData, AuthenticateResponse } from "@/types";
 import {BASE_URL_DEV} from "@/utils/backend-url";
 import apiManager from "./api-manager";
 

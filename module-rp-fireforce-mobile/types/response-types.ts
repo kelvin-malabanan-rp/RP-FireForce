@@ -1,4 +1,4 @@
-import {AllIncidents, Incident, IncidentStatsResponse} from "@/types/incident-types";
+import {AllIncidents, CreatedIncidentData, Incident, IncidentStatsResponse} from "@/types/incident-types";
 
 export type AuthenticateResponse = {
   httpStatus: string;
@@ -27,6 +27,13 @@ export type IncidentStatsResponseType = {
     low: number;
   };
 };
+
+export interface ResponseCreatedIncident {
+    httpStatus: string;
+    message: string;
+    data: CreatedIncidentData;
+    changes: number;
+}
 
 export interface AlertSettings {
   enableAlerts: boolean;

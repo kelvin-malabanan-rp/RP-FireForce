@@ -9,11 +9,11 @@ export interface Incident {
 	id: string;
 	title: string;
 	description: string;
-	severity: 'low' | 'medium' | 'high' | 'critical';
+	severity: string | 'low' | 'medium' | 'high' | 'critical';
 	status: 'open' | 'investigating' | 'resolved';
 	timestamp: string;
 	reportedBy: string;
-	location: string;
+	location: string | null;
 	awsAlarmName: string;
 	awsAccountId: string;
 	stateReason: string;
@@ -22,6 +22,14 @@ export interface Incident {
 	resolvedAt?: string;
 	createdAt?: string;
 	updatedAt?: string;
+}
+
+export interface CreateIncidentTypes {
+	title: string;
+	description: string;
+	location: string | null;
+	reportedBy: string;
+	severity: string | 'low' | 'medium' | 'high' | 'critical';
 }
 
 export interface CloudWatchAlarm {

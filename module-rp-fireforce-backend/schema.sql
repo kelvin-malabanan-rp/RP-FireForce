@@ -25,10 +25,10 @@ CREATE INDEX IF NOT EXISTS idx_users_active ON users(is_active);
 
 -- Create incidents table
 CREATE TABLE IF NOT EXISTS incidents (
-										 id TEXT PRIMARY KEY,
-										 title TEXT NOT NULL,
-										 description TEXT,
-										 severity TEXT CHECK(severity IN ('low', 'medium', 'high', 'critical')) DEFAULT 'medium',
+	id TEXT PRIMARY KEY,
+	title TEXT NOT NULL,
+	description TEXT,
+	severity TEXT CHECK(severity IN ('low', 'medium', 'high', 'critical')) DEFAULT 'medium',
 	status TEXT CHECK(status IN ('open', 'investigating', 'resolved')) DEFAULT 'open',
 	timestamp DATETIME NOT NULL,
 	reported_by TEXT DEFAULT 'AWS CloudWatch',

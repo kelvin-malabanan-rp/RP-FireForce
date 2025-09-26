@@ -2,7 +2,12 @@
 import { Env } from '../types';
 import { CORS_HEADERS } from '../constants/cors';
 import { handleHealth } from "../handlers/health.handlers";
-import { handleGetIncidents, handleGetStats, handleTestIncident } from "../handlers/incident.handlers";
+import {
+	handleCreateIncident,
+	handleGetIncidents,
+	handleGetStats,
+	handleTestIncident
+} from "../handlers/incident.handlers";
 import { handleWebhook } from "../handlers/webook.handlers";
 import {handleLogin, handleLogout} from "../handlers/auth.handlers";
 import {handleRegisterPushToken, handleSendTestAlert} from "../handlers/push-notification.handlers";
@@ -67,6 +72,10 @@ export class Router {
 
 			if (path === '/api/test/trigger-incident' && method === 'POST') {
 				return handleTestIncident(this.env, CORS_HEADERS);
+			}
+
+			if (path === '/api/incidents' && method === 'POST') {
+				return handleCreateIncident(request, this.env, CORS_HEADERS);
 			}
 
 			// 404 Not Found

@@ -7,6 +7,7 @@ import {
     UpdateIncidentData,
     IncidentStatsResponse
 } from "@/types/incident-types";
+import {ResponseCreatedIncident} from "@/types";
 
 // Get all incidents
 export const getAllIncidents = async (): Promise<IncidentResponseApi> => {
@@ -52,17 +53,17 @@ export const getIncidentById = async (
 // Create new incident
 export const createIncident = async (
     data: CreateIncidentData
-): Promise<CreateIncidentResponseApi> => {
-  try {
-    const response = await apiManager.post<CreateIncidentResponseApi>(
-        `${BASE_URL_DEV}/api/incidents`,
-        data
-    );
-    return response.data;
-  } catch (error) {
-    console.error("Create incident error:", error);
-    throw error;
-  }
+): Promise<ResponseCreatedIncident> => {
+    try {
+        const response = await apiManager.post<ResponseCreatedIncident>(
+            `${BASE_URL_DEV}/api/incidents`,
+            data
+        );
+        return response.data;
+    } catch (error) {
+        console.error("Error Creating Incident: ", error);
+        throw error;
+    }
 };
 
 // Update incident

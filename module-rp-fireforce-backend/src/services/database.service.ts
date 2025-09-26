@@ -73,32 +73,53 @@ export class DatabaseService {
 		}
 	}
 
+	// Updated insertIncident method - generate UUID in the service
 	async insertIncident(incident: Partial<Incident>): Promise<{ id: string; changes: number }> {
+		// Generate UUID v4
+		const generateUUID = (): string => {
+			return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+				const r = Math.random() * 16 | 0;
+				const v = c === 'x' ? r : (r & 0x3 | 0x8);
+				return v.toString(16);
+			});
+		};
+
+		const incidentId = generateUUID();
+
 		const query = `
 			INSERT INTO incidents
 			(id, title, description, severity, status, timestamp, reported_by, location,
-			 aws_alarm_name, aws_account_id, state_reason, metric_name, aws_console_url)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			 aws_alarm_name, aws_account_id, state_reason, metric_name, aws_console_url,
+			 resolved_at, assigned_to, resolved_by, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`;
 
-		// Critical fix: Convert all undefined values to null for D1 compatibility
+		const currentTime = new Date().toISOString();
+
+		// Map incident properties to match database column names and convert undefined to null
 		const params = [
-			incident.id || null,
+			incidentId,
 			incident.title || 'Unknown Incident',
 			incident.description || null,
 			incident.severity || 'medium',
 			incident.status || 'open',
-			incident.timestamp || new Date().toISOString(),
+			incident.timestamp || currentTime,
 			incident.reportedBy || 'AWS CloudWatch',
 			incident.location || null,
 			incident.awsAlarmName || null,
 			incident.awsAccountId || null,
 			incident.stateReason || null,
 			incident.metricName || null,
-			incident.aws_console_url || null
+			incident.aws_console_url || null,
+			incident.resolvedAt || null,     // resolved_at from Incident interface
+			null,                            // assigned_to (not in Incident interface, set to null)
+			null,                            // resolved_by (not in Incident interface, set to null)
+			incident.createdAt || currentTime,   // created_at from Incident interface
+			incident.updatedAt || currentTime    // updated_at from Incident interface
 		];
 
 		console.log('Database insert - sanitized params:', params);
+		console.log('Total parameters:', params.length);
 
 		try {
 			if (!this.db) {
@@ -106,8 +127,9 @@ export class DatabaseService {
 			}
 
 			const result = await this.db.prepare(query).bind(...params).run();
-			console.log('Incident inserted successfully with ID:', incident.id);
-			return { id: incident.id!, changes: result.changes || 1 };
+
+			console.log('Incident inserted successfully with generated ID:', incidentId);
+			return { id: incidentId, changes: result.changes || 1 };
 		} catch (error) {
 			console.error('Database insert error:', error);
 			console.error('Failed incident object:', incident);
