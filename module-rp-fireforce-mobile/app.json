@@ -46,7 +46,10 @@
         {
           "icon": "./assets/images/notification-icon.png",
           "color": "#ffffff",
-          "defaultChannel": "default"
+          "defaultChannel": "default",
+          "sounds": [
+            "./assets/sounds/alarm_sound.wav"
+          ]
         }
       ]
     ],
@@ -55,11 +58,10 @@
       "reactCompiler": true
     },
     "extra": {
-      "router": {},
       "eas": {
-        "projectId": "eb3ea97b-b328-4afa-a231-ae23ed68263d"
+        "projectId": "ed4b748d-8758-4d6a-999c-549c023d50d0"
       }
     },
-    "owner": "kelbeans.dev"
+    "owner": "rp-keannubrillante"
   }
 }
