@@ -12,9 +12,10 @@ import {
 } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import {checkAlertSystemHealth, AlertSettings, registerPushToken} from '@/api/alert-controller';
+import {checkAlertSystemHealth, registerPushToken} from '@/api/alert-controller';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
+import { AlertSettings } from '@/types';
 
 interface AlertManagerProps {
     style?: any;
@@ -41,6 +42,7 @@ const AlertManager: React.FC<AlertManagerProps> = ({ style }) => {
     const checkBackendHealth = async () => {
         try {
             const health = await checkAlertSystemHealth();
+            console.log('health:', health);
             setBackendStatus(health.status);
         } catch (error) {
             console.error('Backend health check failed:', error);
@@ -56,6 +58,8 @@ const AlertManager: React.FC<AlertManagerProps> = ({ style }) => {
                     shouldShowAlert: true,
                     shouldPlaySound: settings.soundEnabled,
                     shouldSetBadge: true,
+                    shouldShowBanner: false,
+                    shouldShowList: false,
                 }),
             });
 
@@ -130,12 +134,12 @@ const AlertManager: React.FC<AlertManagerProps> = ({ style }) => {
                 settings
             });
 
-            if (response.httpStatus === 'OK') {
+            if (response.httpStatus === 200) {
                 setRegistrationStatus('registered');
                 console.log('Retry registration successful');
             } else {
                 setRegistrationStatus('failed');
-                console.error('Retry registration failed:', response.message);
+                console.error('Retry registration failed:', response.data);
             }
         } catch (error) {
             console.error('Error in retry registration:', error);
@@ -153,12 +157,18 @@ const AlertManager: React.FC<AlertManagerProps> = ({ style }) => {
                 shouldShowAlert: updatedSettings.enableAlerts,
                 shouldPlaySound: updatedSettings.soundEnabled,
                 shouldSetBadge: true,
+                shouldShowBanner: false,
+                shouldShowList: false,
             }),
         });
 
         // Update backend with new settings
         if (pushToken) {
-            registerPushToken(pushToken);
+            registerPushToken({
+                token: pushToken,
+                deviceType: Platform.OS,
+                settings: updatedSettings
+            });
         }
     };
 

@@ -41,6 +41,12 @@ export interface AlertSettings {
   soundEnabled: boolean;
   vibrationEnabled: boolean;
   pollInterval?: number;
+  channelPreferences?: {
+    critical: string;
+    high: string;
+    medium: string;
+    low: string;
+  };
 }
 
 export interface PushTokenRegistration {
@@ -86,4 +92,10 @@ export type BackendHealthResponse = {
   alertsEnabled?: boolean;
   connectedDevices?: number;
   databaseStatus?: string;
+};
+
+export type APIResponse<T> = {
+  httpStatus: number;   // keep number if that’s what your server returns
+  message: string;
+  data: T;
 };
