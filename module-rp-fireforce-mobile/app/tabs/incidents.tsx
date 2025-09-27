@@ -67,7 +67,6 @@ export default function IncidentsScreen() {
     // Fetch incidents from API
     const fetchAllIncidents = async () => {
         try {
-            console.log('Fetching incidents...'); // Debug log
             const response = await getAllIncidents();
 
             if (response.httpStatus === "OK" && response.data) {
@@ -88,7 +87,6 @@ export default function IncidentsScreen() {
 
   // Initial data load - FIX: Remove functions from dependency array
   useEffect(() => {
-    console.log('useEffect triggered - loading initial data'); // Debug log
     fetchAllIncidents();
   }, []); // ✅ Only depend on timeframe, not the functions
 

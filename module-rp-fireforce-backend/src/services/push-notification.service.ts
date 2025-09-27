@@ -108,7 +108,6 @@ export class PushNotificationService {
 			}
 
 			const result = await response.json();
-			console.log('Push notification sent successfully:', result);
 			return true;
 		} catch (error) {
 			console.error('Error sending push notification:', error);
@@ -141,7 +140,6 @@ export class PushNotificationService {
 				true
 			).run();
 
-			console.log('Push token registered:', deviceId);
 			return { success: true, deviceId };
 		} catch (error) {
 			console.error('Error registering push token:', error);

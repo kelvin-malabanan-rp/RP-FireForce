@@ -75,6 +75,5 @@ export const checkAlertSystemHealth = async (): Promise<BackendHealthResponse> =
     const { data } = await apiManager.get<BackendHealthResponse>(
         `${ALERT_API_BASE_URL}/health`
     );
-    console.log('Alert system health:', data);
     return data; // unwrap inner data, then return status
 };

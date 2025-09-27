@@ -15,7 +15,6 @@ app.post('/sns', (req, res) => {
 
     if (Type === 'SubscriptionConfirmation') {
         // Auto‑confirm the subscription
-        fetch(Message).then(() => console.log('Subscribed!'));
         return res.sendStatus(200);
     }
 
@@ -36,7 +35,6 @@ app.post('/sns', (req, res) => {
     };
 
     alarms.push(alarmInfo);
-    console.log('Received alarm:', alarmInfo);
 
     res.sendStatus(200);
 });
@@ -47,5 +45,4 @@ app.get('/alarms', (_req, res) => {
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () =>
-    console.log(`SNS webhook listening on http://localhost:${PORT}`)
 );

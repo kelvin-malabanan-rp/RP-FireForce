@@ -6,20 +6,10 @@ const enableLogs = true;
 
 if (enableLogs) {
   apiManager.interceptors.request.use((request) => {
-    const method = request.method ? request.method.toUpperCase() : "UNKNOWN";
-    console.log(method, request.url);
-    console.log("Headers:", JSON.stringify(request.headers));
-    if (request.params !== undefined && request.params !== null)
-      console.log("Params:", JSON.stringify(request.params));
-    if (request.data !== undefined && request.data !== null)
-      console.log("Data:", JSON.stringify(request.data));
     return request;
   });
 
   apiManager.interceptors.response.use((response) => {
-    console.log("Status:", JSON.stringify(response.status));
-    if (response.data !== undefined && response.data !== null)
-      console.log("Data:", JSON.stringify(response.data));
     return response;
   });
 }

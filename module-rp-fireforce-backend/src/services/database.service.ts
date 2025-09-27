@@ -64,8 +64,6 @@ export class DatabaseService {
 
 		try {
 			const { results } = await this.db.prepare(query).bind(...queryParams).all();
-			console.log('Raw results:', results); // Add this
-			console.log('Results count:', results?.length || 0); // Add this
 			return (results as unknown as Incident[]) || [];
 		} catch (error) {
 			console.error('Database query error:', error);

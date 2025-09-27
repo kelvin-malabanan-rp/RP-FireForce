@@ -34,16 +34,12 @@ const IncidentSummary: React.FC<IncidentSummaryProps> = ({
         setLoading(true);
         setError(null);
         try {
-            console.log('Starting to load incident data...');
 
             // Fetch both incidents and stats in parallel
             const [incidentsResponse, statsResponse] = await Promise.all([
                 getAllIncidents(),
                 getIncidentStats(selectedTimeframe)
             ]);
-
-            console.log('Incidents Response:', incidentsResponse);
-            console.log('Stats Response:', statsResponse);
 
             // Extract incidents - they're directly in data array
             if (incidentsResponse.data && Array.isArray(incidentsResponse.data)) {

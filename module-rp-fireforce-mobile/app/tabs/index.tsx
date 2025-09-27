@@ -43,7 +43,6 @@ export default function HomeScreen() {
   // Set up auto-refresh
   useEffect(() => {
     const interval = setInterval(() => {
-      console.log('Auto-refreshing incidents...');
       loadData(true);
     }, AUTO_REFRESH_INTERVAL);
 
@@ -314,8 +313,6 @@ export default function HomeScreen() {
             {/* Incident Cards */}
             <View style={styles.cardsContainer}>
               {currentStatusIncidents.map((incident) => {
-                console.log('Incident data:', incident);
-                console.log('Alarm data:', incidentToAlarm(incident));
                 return (
                     <View key={incident.id} style={styles.cardWrapper}>
                       {/* Temporary: Use custom renderer until AlarmCard is fixed */}

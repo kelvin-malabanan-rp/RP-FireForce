@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "688145840657",
+    "project_id": "rpfireforce",
+    "storage_bucket": "rpfireforce.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:688145840657:android:be2fd8b3d0864a95b68fb0",
+        "android_client_info": {
+          "package_name": "com.rocketpartners.rpfireforcepager"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC4Es7B06Ve75Gd2tN78evb91aAvT3fu3k"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
