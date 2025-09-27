@@ -4,7 +4,7 @@
     "slug": "RP-Fireforce-Pager",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/notification-icon.png",
+    "icon": "./assets/images/rp-ff-icon-with-bg.png",
     "scheme": "rpfireforcepager",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -15,7 +15,7 @@
     "android": {
       "package": "com.rocketpartners.rpfireforcepager",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#1da0d6",
         "foregroundImage": "./assets/images/notification-icon.png",
         "backgroundImage": "./assets/images/notification-icon.png",
         "monochromeImage": "./assets/images/notification-icon.png"
@@ -37,9 +37,9 @@
           "image": "./assets/images/notification-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff",
+          "backgroundColor": "#1da0d6",
           "dark": {
-            "backgroundColor": "#000000"
+            "backgroundColor": "#1da0d6"
           }
         }
       ],
@@ -47,8 +47,8 @@
         "expo-notifications",
         {
           "icon": "./assets/images/notification-icon.png",
-          "color": "#ffffff",
-          "defaultChannel": "default-v3",
+          "color": "#1da0d6",
+          "defaultChannel": "default-v4",
           "sounds": [
             "./assets/sounds/alarm_sound.mp3",
             "./assets/sounds/alarm_sound_ios.wav"

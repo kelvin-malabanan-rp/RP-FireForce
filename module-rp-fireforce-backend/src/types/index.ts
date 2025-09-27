@@ -1,5 +1,6 @@
 // types/index.ts
 export interface Env {
+	FCM_SERVER_KEY: string;
 	DB: D1Database;
 	incident_management: D1Database;
 	AWS_REGION: string;
@@ -9,7 +10,7 @@ export interface Incident {
 	id: string;
 	title: string;
 	description: string;
-	severity: string | 'low' | 'medium' | 'high' | 'critical';
+	severity: 'low' | 'medium' | 'high' | 'critical';
 	status: 'open' | 'investigating' | 'resolved';
 	timestamp: string;
 	reportedBy: string;

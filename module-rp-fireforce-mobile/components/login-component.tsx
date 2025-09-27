@@ -69,7 +69,7 @@ export const LoginComponent = ({ onLogin }: LoginProps) => {
         {/* Header with Logo */}
         <View style={styles.headerContainer}>
           <Image
-            source={require("@/assets/images/partial-react-logo.png")}
+            source={require("@/assets/images/notification-icon.png")}
             style={styles.logo}
           />
           <Text style={styles.appTitle}>Welcome to Rocket Partners App</Text>
@@ -161,7 +161,7 @@ export const LoginComponent = ({ onLogin }: LoginProps) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#667EEA",
+    backgroundColor: "#1da0d6",
   },
   scrollContainer: {
     flexGrow: 1,

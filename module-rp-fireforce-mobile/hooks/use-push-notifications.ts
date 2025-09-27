@@ -135,7 +135,6 @@ export const usePushNotifications = () => {
             const response = await registerPushToken({
                 token: expoTok.data, // existing field (Expo token)
                 deviceType: Platform.OS,
-                // @ts-expect-error: if your type doesn’t have this yet, add it
                 fcmToken: Platform.OS === 'android' ? (platformTok as any).data : undefined,
                 settings: {
                     enableAlerts: true,

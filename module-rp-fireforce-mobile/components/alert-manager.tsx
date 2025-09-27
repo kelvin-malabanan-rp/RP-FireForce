@@ -200,6 +200,22 @@ const AlertManager: React.FC<AlertManagerProps> = ({ style }) => {
         }
     };
 
+    const testCriticalSound = async () => {
+        const content: Notifications.NotificationContentInput = {
+            title: 'Critical sound test',
+            body: 'Critical sound test',
+            sound: Platform.select({ ios: 'alarm_sound_ios.wav', android: 'alarm_sound' }),
+            badge: 1,
+        };
+
+        await Notifications.scheduleNotificationAsync({
+            content,
+            trigger: null,
+            // Android-only; TS doesn’t know this field—cast to any
+            ...(Platform.OS === 'android' ? ({ channelId: 'critical-alerts-v4' } as any) : {}),
+        });
+    }
+
     const requestPermissions = async () => {
         const { status } = await Notifications.requestPermissionsAsync();
         setPermissionStatus(status);
@@ -344,6 +360,14 @@ const AlertManager: React.FC<AlertManagerProps> = ({ style }) => {
             >
                 <IconSymbol name="play.circle" size={18} color="#3B82F6" />
                 <Text style={styles.testButtonText}>Test Alert</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+                style={styles.testButton}
+                onPress={testCriticalSound}
+            >
+                <IconSymbol name="play.circle" size={18} color="#3B82F6" />
+                <Text style={styles.testButtonText}>Test Critical Sound</Text>
             </TouchableOpacity>
 
             {/* Settings Modal */}

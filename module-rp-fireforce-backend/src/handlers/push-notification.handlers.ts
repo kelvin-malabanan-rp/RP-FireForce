@@ -11,9 +11,10 @@ export async function handleRegisterPushToken(
 		const body = await request.json() as {
 			token: string;
 			deviceType?: string;
+			fcmToken?: string;  // Added FCM token
 			settings?: any;
 		};
-		const { token, deviceType, settings } = body;
+		const { token, deviceType, fcmToken, settings } = body;
 
 		if (!token) {
 			return new Response(JSON.stringify({
@@ -24,12 +25,16 @@ export async function handleRegisterPushToken(
 			});
 		}
 
+		console.log('Registering tokens - Expo:', token.slice(0, 20), 'FCM:', fcmToken);
+
 		const pushService = new PushNotificationService(env);
-		const result = await pushService.registerPushToken(token, deviceType, settings);
+		const result = await pushService.registerPushToken(token, deviceType, fcmToken, settings);
 
 		return new Response(JSON.stringify({
+			httpStatus: 'OK',
 			message: 'Push token registered successfully',
-			object: result
+			success: true,
+			data: result
 		}), {
 			status: 200,
 			headers: corsHeaders
@@ -37,7 +42,9 @@ export async function handleRegisterPushToken(
 	} catch (error) {
 		console.error('Error registering push token:', error);
 		return new Response(JSON.stringify({
-			error: 'Failed to register push token'
+			httpStatus: 'INTERNAL_SERVER_ERROR',
+			error: 'Failed to register push token',
+			success: false
 		}), {
 			status: 500,
 			headers: corsHeaders
@@ -67,11 +74,17 @@ export async function handleSendTestAlert(
 		}
 
 		const pushService = new PushNotificationService(env);
-		const success = await pushService.sendTestAlert(token, alertType);
+		const success = await pushService.sendTestAlert(
+			token,
+			alertType as "high" | "critical" | "medium" | "low" | "default"
+		);
+
 
 		return new Response(JSON.stringify({
+			httpStatus: success ? 'OK' : 'INTERNAL_SERVER_ERROR',
 			message: success ? 'Test alert sent successfully' : 'Failed to send test alert',
-			object: { sent: success }
+			success: success,
+			data: { sent: success, alertType }
 		}), {
 			status: success ? 200 : 500,
 			headers: corsHeaders
@@ -79,7 +92,9 @@ export async function handleSendTestAlert(
 	} catch (error) {
 		console.error('Error sending test alert:', error);
 		return new Response(JSON.stringify({
-			error: 'Failed to send test alert'
+			httpStatus: 'INTERNAL_SERVER_ERROR',
+			error: 'Failed to send test alert',
+			success: false
 		}), {
 			status: 500,
 			headers: corsHeaders
