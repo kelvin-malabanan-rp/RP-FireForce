@@ -4,20 +4,84 @@ import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
-import { registerPushToken } from '@/api/alert-controller';
+import {registerPushToken, respondToIncident} from '@/api/alert-controller';
+import {router} from "expo-router";
 
 export const usePushNotifications = () => {
     const [expoPushToken, setExpoPushToken] = useState<string | null>(null);
-    const [fcmToken, setFcmToken] = useState<string | null>(null); // <-- NEW
+    const [fcmToken, setFcmToken] = useState<string | null>(null);
     const [permissionStatus, setPermissionStatus] = useState<string>('unknown');
     const [registrationStatus, setRegistrationStatus] =
         useState<'pending' | 'registered' | 'failed'>('pending');
+    // PLEASE IMPLEMENT AFTER LOGIN
+    const userId = 'kelbs'
+    //const userId = currentUser.id;
+
+    useEffect(() => {
+        const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+            const data = response.notification.request.content.data as any;
+
+            if (data?.incidentId) {
+                // 👇 This triggers app/incident/[id].tsx
+                router.push(`/incident/${data.incidentId}`);
+            }
+        });
+
+        return () => sub.remove();
+    }, []);
+
+    // ► response listener (runs once) TODO
+    useEffect(() => {
+        const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+            const { actionIdentifier, notification } = response;
+            const data = response.notification.request.content.data as
+                | { incidentId?: string }
+                | undefined;
+
+            if (!data?.incidentId) return;
+            const incidentId = data.incidentId;
+
+            if (actionIdentifier === "ACKNOWLEDGE") {
+                console.log("User acknowledged incident", incidentId);
+                // Call backend to respond
+                respondToIncident(incidentId, "acknowledge", userId);
+            } else if (actionIdentifier === "DECLINE") {
+                console.log("User declined incident", incidentId);
+                respondToIncident(incidentId, "decline", userId);
+            } else {
+                // Default tap → navigate inside app
+                if (data.incidentId) {
+                    router.push(`/incident/${incidentId}`);
+                }
+            }
+        });
+
+        return () => sub.remove();
+    }, []);
+
+
 
     useEffect(() => {
         console.log('[push] useEffect start');
         setupNotifications();
     }, []);
-    
+
+    // ► register the category (2 buttons)
+    const ensureCategoriesAsync = async () => {
+        await Notifications.setNotificationCategoryAsync('incident-actions', [
+            {
+                identifier: 'ACK',
+                buttonTitle: "I've got this ✅",
+                options: { opensAppToForeground: false },
+            },
+            {
+                identifier: 'DECLINE',
+                buttonTitle: "I can't right now ❌",
+                options: { opensAppToForeground: false },
+            },
+        ]);
+    };
+
     const setupNotifications = async () => {
         try {
             await Notifications.setNotificationHandler({
@@ -42,6 +106,8 @@ export const usePushNotifications = () => {
             console.log('[push] permissions:', status);
 
             if (status === 'granted') {
+                // ► make sure category exists before any notifications arrive
+                await ensureCategoriesAsync();
                 await createNotificationChannels();
                 await registerDevice();
             }
@@ -95,13 +161,10 @@ export const usePushNotifications = () => {
     };
 
     const getChannelBySeverity = (s: string) =>
-        s === 'critical'
-            ? CHANNELS.critical
-            : s === 'high'
-                ? CHANNELS.high
-                : s === 'medium'
-                    ? CHANNELS.medium
-                    : CHANNELS.default;
+        s === 'critical' ? CHANNELS.critical :
+            s === 'high'     ? CHANNELS.high :
+                s === 'medium'   ? CHANNELS.medium :
+                    CHANNELS.default;
 
     const registerDevice = async () => {
         if (!Device.isDevice) {
@@ -110,30 +173,20 @@ export const usePushNotifications = () => {
         }
 
         try {
-            // 1) Expo token (for Expo Push API)
             const expoTok = await Notifications.getExpoPushTokenAsync({
                 projectId: Constants.expoConfig?.extra?.eas?.projectId,
             });
             setExpoPushToken(expoTok.data);
             console.log('[push] expo token:', expoTok.data?.slice(0, 32) + '...');
 
-            // 2) Platform token (FCM on Android, APNs on iOS)
             const platformTok = await Notifications.getDevicePushTokenAsync();
-            console.log(
-                '[push] platform token:',
-                platformTok.type,
-                (platformTok as any).data?.slice?.(0, 32) + '...',
-            );
-
-            // Save only if Android/FCM; APNs token is not used by your backend
+            console.log('[push] platform token:', platformTok.type, (platformTok as any).data?.slice?.(0, 32) + '...');
             if (Platform.OS === 'android' && platformTok.type === 'fcm') {
                 setFcmToken((platformTok as any).data);
             }
 
-            // 3) Register with your backend — keep `token` as Expo token for
-            //    backward compatibility and send `fcmToken` additionally.
             const response = await registerPushToken({
-                token: expoTok.data, // existing field (Expo token)
+                token: expoTok.data,
                 deviceType: Platform.OS,
                 fcmToken: Platform.OS === 'android' ? (platformTok as any).data : undefined,
                 settings: {
@@ -157,7 +210,6 @@ export const usePushNotifications = () => {
                 setRegistrationStatus('failed');
                 console.warn('[push] backend registration non-200:', response);
             }
-
             return expoTok.data;
         } catch (err) {
             console.error('[push] register error:', err);
@@ -166,7 +218,7 @@ export const usePushNotifications = () => {
         }
     };
 
-    // Local notification helper (uses channels)
+    // Local notification helper (► attach categoryIdentifier)
     const sendIncidentNotification = async (incident: any) => {
         const channelId = getChannelBySeverity(incident.severity);
         const notificationContent = getNotificationContent(incident);
@@ -179,7 +231,8 @@ export const usePushNotifications = () => {
                 sound: notificationContent.sound,
                 badge: notificationContent.badge ?? 1,
                 data: { incidentId: incident.id, severity: incident.severity },
-                channelId, // Android channel
+                channelId, // Android
+                categoryIdentifier: 'incident-actions', // ► shows the two buttons
             },
             trigger: null,
             identifier: `incident-${incident.id}`,
@@ -194,6 +247,7 @@ export const usePushNotifications = () => {
                     badge: 99,
                     data: { incidentId: incident.id, severity: 'critical', isReminder: true },
                     channelId: CHANNELS.critical,
+                    categoryIdentifier: 'incident-actions', // ► include here too
                 },
                 trigger: { seconds: 30, repeats: false } as Notifications.TimeIntervalTriggerInput,
                 identifier: `incident-${incident.id}-reminder`,
@@ -205,27 +259,14 @@ export const usePushNotifications = () => {
         const base = {
             title: `${incident.severity.toUpperCase()}: ${incident.title}`,
             body: incident.description,
-            sound: Platform.select({
-                ios: 'alarm_sound_ios.wav',
-                android: 'alarm_sound',
-            }),
+            sound: Platform.select({ ios: 'alarm_sound_ios.wav', android: 'alarm_sound' }),
             badge: 1,
         };
-
         switch (incident.severity) {
-            case 'critical':
-                return {
-                    ...base,
-                    title: `🚨 ${base.title} 🚨`,
-                    badge: 99,
-                    body: `IMMEDIATE ACTION REQUIRED\n\n${base.body}`,
-                };
-            case 'high':
-                return { ...base, title: `⚠️ ${base.title}`, badge: 10, body: `High Priority\n\n${base.body}` };
-            case 'medium':
-                return { ...base, title: `⚡ ${base.title}`, badge: 5 };
-            default:
-                return base;
+            case 'critical': return { ...base, title: `🚨 ${base.title} 🚨`, badge: 99, body: `IMMEDIATE ACTION REQUIRED\n\n${base.body}` };
+            case 'high':     return { ...base, title: `⚠️ ${base.title}`, badge: 10, body: `High Priority\n\n${base.body}` };
+            case 'medium':   return { ...base, title: `⚡ ${base.title}`, badge: 5 };
+            default:         return base;
         }
     };
 
@@ -242,7 +283,7 @@ export const usePushNotifications = () => {
 
     return {
         expoPushToken,
-        fcmToken, // <-- expose so you can confirm in UI/logs if needed
+        fcmToken,
         permissionStatus,
         registrationStatus,
         registerDevice,

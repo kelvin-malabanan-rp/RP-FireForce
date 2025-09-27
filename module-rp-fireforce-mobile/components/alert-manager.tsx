@@ -8,7 +8,7 @@ import {
     Alert,
     Platform,
     Modal,
-    ScrollView,
+    ScrollView, Button,
 } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -16,6 +16,7 @@ import {checkAlertSystemHealth, registerPushToken} from '@/api/alert-controller'
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 import { AlertSettings } from '@/types';
+import {router} from "expo-router";
 
 interface AlertManagerProps {
     style?: any;
@@ -369,7 +370,10 @@ const AlertManager: React.FC<AlertManagerProps> = ({ style }) => {
                 <IconSymbol name="play.circle" size={18} color="#3B82F6" />
                 <Text style={styles.testButtonText}>Test Critical Sound</Text>
             </TouchableOpacity>
-
+            <Button
+                title="Open Incident 555dfffb-2fa2-44c0-9cda-4f0af5ead470"
+                onPress={() => router.push("/incident/555dfffb-2fa2-44c0-9cda-4f0af5ead470.tsx")}
+            />
             {/* Settings Modal */}
             <Modal
                 animationType="slide"

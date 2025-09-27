@@ -118,3 +118,15 @@ export const checkAlertSystemHealth =
         );
         return data;
     };
+
+export const respondToIncident = async (
+    incidentId: string,
+    action: "acknowledge" | "decline",
+    userId?: string
+) => {
+    const { data } = await apiManager.post(
+        `${BASE_URL_DEV}/api/incidents/respond`,
+        { incidentId, action, userId }
+    );
+    return data;
+};

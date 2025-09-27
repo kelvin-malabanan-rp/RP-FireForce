@@ -5,7 +5,7 @@ import { handleHealth } from "../handlers/health.handlers";
 import {
 	handleCreateIncident,
 	handleGetIncidents,
-	handleGetStats,
+	handleGetStats, handleIncidentResponse,
 	handleTestIncident
 } from "../handlers/incident.handlers";
 import { handleWebhook } from "../handlers/webook.handlers";
@@ -76,6 +76,11 @@ export class Router {
 
 			if (path === '/api/incidents' && method === 'POST') {
 				return handleCreateIncident(request, this.env, CORS_HEADERS);
+			}
+
+			// Incident response (acknowledge / decline)
+			if (path === '/api/incidents/respond' && method === 'POST') {
+				return handleIncidentResponse(request, this.env, CORS_HEADERS);
 			}
 
 			// 404 Not Found

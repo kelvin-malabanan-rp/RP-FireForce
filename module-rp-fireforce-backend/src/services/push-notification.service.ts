@@ -10,6 +10,7 @@ interface PushMessage {
 	priority?: 'default' | 'normal' | 'high';
 	sound?: string | null;
 	channelId?: string;
+	categoryId?: string; // 👈 NEW
 }
 
 export class PushNotificationService {
@@ -25,9 +26,7 @@ export class PushNotificationService {
 
 	async sendIncidentAlert(incident: Incident): Promise<void> {
 		try {
-			// Get all active push tokens
 			const pushTokens = await this.getActivePushTokens();
-
 			if (pushTokens.length === 0) {
 				console.log('No push tokens registered - skipping notifications');
 				return;
@@ -36,12 +35,9 @@ export class PushNotificationService {
 			// Create notification message
 			const message = this.createNotificationMessage(incident);
 
-			// Send to all registered devices
 			let sentCount = 0;
 			for (const tokenData of pushTokens) {
-				// Check if user wants this type of alert
 				if (this.shouldSendAlert(incident, tokenData.settings)) {
-					// Use FCM token if available, otherwise fall back to Expo token
 					const token = tokenData.fcmToken || tokenData.token;
 					const success = await this.sendPushNotification(token, message);
 					if (success) sentCount++;
@@ -80,6 +76,12 @@ export class PushNotificationService {
 
 		const config = severityConfig[incident.severity] || severityConfig.low;
 
+		// 👇 Add categoryId only for actionable incidents
+		const categoryId =
+			incident.severity === 'critical' || incident.severity === 'high'
+				? 'incident-actions'
+				: undefined;
+
 		return {
 			title: `${incident.severity.toUpperCase()}: ${incident.title}`,
 			body: incident.description,
@@ -88,39 +90,27 @@ export class PushNotificationService {
 				severity: incident.severity,
 				status: incident.status,
 				type: 'incident_alert',
-				awsConsoleUrl: incident.aws_console_url
+				awsConsoleUrl: incident.aws_console_url,
 			},
 			priority: config.priority,
 			sound: config.sound,
-			channelId: config.channelId
+			channelId: config.channelId,
+			categoryId, // 👈 attach actions
 		};
 	}
 
 	private shouldSendAlert(incident: Incident, settings: any): boolean {
-		if (!settings || !settings.enableAlerts) {
-			return false;
-		}
-
-		if (settings.criticalOnly && incident.severity !== 'critical') {
-			return false;
-		}
-
-		// Don't send alerts for resolved incidents
-		if (incident.status === 'resolved') {
-			return false;
-		}
-
+		if (!settings || !settings.enableAlerts) return false;
+		if (settings.criticalOnly && incident.severity !== 'critical') return false;
+		if (incident.status === 'resolved') return false;
 		return true;
 	}
 
 	private async sendPushNotification(token: string, message: Omit<PushMessage, 'to'>): Promise<boolean> {
 		try {
-			// Check if this is FCM token (direct) or Expo token
 			if (token.startsWith('ExponentPushToken')) {
-				// For Expo tokens, use Expo's service (no custom sounds)
 				return await this.sendExpoNotification(token, message);
 			} else {
-				// For FCM tokens, send directly to FCM with custom sounds
 				return await this.sendFCMNotification(token, message);
 			}
 		} catch (error) {
@@ -134,21 +124,20 @@ export class PushNotificationService {
 			const payload: PushMessage = {
 				to: token,
 				...message,
-				sound: 'default' // Expo only supports default sound
+				sound: 'default', // Expo-only limitation
 			};
 
 			const response = await fetch(this.expoPushUrl, {
 				method: 'POST',
 				headers: {
-					'Accept': 'application/json',
+					Accept: 'application/json',
 					'Content-Type': 'application/json',
 				},
-				body: JSON.stringify(payload)
+				body: JSON.stringify(payload),
 			});
 
 			if (!response.ok) {
-				const errorText = await response.text();
-				console.error('Expo push notification failed:', response.status, errorText);
+				console.error('Expo push notification failed:', response.status, await response.text());
 				return false;
 			}
 
@@ -176,30 +165,31 @@ export class PushNotificationService {
 					sound: message.sound || 'default',
 					android_channel_id: message.channelId,
 				},
-				data: message.data,
+				data: {
+					...message.data,
+					categoryId: message.categoryId, // 👈 pass to client
+				},
 				priority: 'high',
-				// Android specific
 				android: {
 					notification: {
 						sound: message.sound || 'default',
 						channel_id: message.channelId,
 						priority: message.priority === 'high' ? 'high' : 'normal',
-					}
-				}
+					},
+				},
 			};
 
 			const response = await fetch(this.fcmUrl, {
 				method: 'POST',
 				headers: {
-					'Authorization': `key=${this.env.FCM_SERVER_KEY}`,
+					Authorization: `key=${this.env.FCM_SERVER_KEY}`,
 					'Content-Type': 'application/json',
 				},
 				body: JSON.stringify(payload),
 			});
 
 			if (!response.ok) {
-				const errorText = await response.text();
-				console.error('FCM notification failed:', response.status, errorText);
+				console.error('FCM notification failed:', response.status, await response.text());
 				return false;
 			}
 
@@ -273,34 +263,21 @@ export class PushNotificationService {
 		}
 	}
 
-	async sendTestAlert(
-		token: string,
-		alertType: 'critical' | 'high' | 'medium' | 'low' | 'default' = 'high'
-	): Promise<boolean> {
-		const severityConfig = {
-			critical: {
-				channelId: 'critical-alerts-v3',
-				sound: 'alarm_sound',
-			},
-			high: {
-				channelId: 'high-priority-v3',
-				sound: 'alarm_sound',
-			},
-			medium: {
-				channelId: 'medium-priority-v3',
-				sound: 'alarm_sound',
-			},
-			low: {
-				channelId: 'default-v3',
-				sound: 'default',
-			},
-			default: {
-				channelId: 'default-v3',
-				sound: 'default',
-			},
+	async sendTestAlert(token: string, alertType: 'critical' | 'high' | 'medium' | 'low' | 'default' = 'high'): Promise<boolean> {
+		const config = {
+			channelId: 'default-v3',
+			sound: 'default',
 		};
-
-		const config = severityConfig[alertType] || severityConfig.default;
+		if (alertType === 'critical') {
+			config.channelId = 'critical-alerts-v3';
+			config.sound = 'alarm_sound';
+		} else if (alertType === 'high') {
+			config.channelId = 'high-priority-v3';
+			config.sound = 'alarm_sound';
+		} else if (alertType === 'medium') {
+			config.channelId = 'medium-priority-v3';
+			config.sound = 'alarm_sound';
+		}
 
 		const message = {
 			title: `${alertType.toUpperCase()} Test Alert`,
@@ -308,11 +285,12 @@ export class PushNotificationService {
 			data: {
 				type: 'test',
 				severity: alertType,
-				timestamp: new Date().toISOString()
+				timestamp: new Date().toISOString(),
 			},
 			priority: 'high' as const,
 			sound: config.sound,
-			channelId: config.channelId
+			channelId: config.channelId,
+			categoryId: alertType === 'critical' ? 'incident-actions' : undefined,
 		};
 
 		return await this.sendPushNotification(token, message);

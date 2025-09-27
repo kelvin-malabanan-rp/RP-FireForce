@@ -247,3 +247,45 @@ export async function handleCreateIncident(
 		});
 	}
 }
+
+export async function handleIncidentResponse(
+	request: Request,
+	env: Env,
+	corsHeaders: Record<string, string>
+): Promise<Response> {
+	try {
+		const { incidentId, action, userId } = (await request.json()) as {
+			incidentId: string;
+			action: "acknowledge" | "decline";
+			userId?: string;
+		};
+
+		if (!incidentId || !action) {
+			return new Response(
+				JSON.stringify({ error: "incidentId and action are required" }),
+				{ status: 400, headers: corsHeaders }
+			);
+		}
+
+		const incidentService = new IncidentService(env);
+		const result = await incidentService.respondToIncident(
+			incidentId,
+			action,
+			userId
+		);
+
+		return new Response(
+			JSON.stringify({
+				message: "Incident response recorded",
+				object: result,
+			}),
+			{ status: 200, headers: corsHeaders }
+		);
+	} catch (err) {
+		console.error("Error handling incident response:", err);
+		return new Response(
+			JSON.stringify({ error: "Failed to record incident response" }),
+			{ status: 500, headers: corsHeaders }
+		);
+	}
+}

@@ -155,4 +155,63 @@ export class IncidentService {
 			console.error(error);
 		}
 	}
+
+	// services/incident.services.ts (or wherever this lives)
+	async respondToIncident(
+		incidentId: string,
+		action: "acknowledge" | "decline",
+		userId?: string
+	): Promise<{ incidentId: string; action: string; escalated?: boolean }> {
+		if (!this.dbService?.db) throw new Error("Database not available");
+
+		// 1) Verify the incident exists (optional but helpful)
+		const inc = await this.dbService.db
+			.prepare("SELECT id FROM incidents WHERE id = ?")
+			.bind(incidentId)
+			.first<{ id: string }>();
+		if (!inc) throw new Error(`Incident not found: ${incidentId}`);
+
+		// 2) If acknowledging, ensure user exists; otherwise set to NULL to avoid FK violation
+		let assignee: string | null = null;
+		if (action === "acknowledge" && userId) {
+			const user = await this.dbService.db
+				.prepare("SELECT id FROM users WHERE id = ?")
+				.bind(userId)
+				.first<{ id: string }>();
+			if (user?.id) {
+				assignee = user.id;
+			} else {
+				// User not found → don’t assign to avoid FOREIGN KEY constraint fail
+				console.warn(`[incident] User ${userId} not found; leaving assigned_to NULL`);
+				assignee = null;
+			}
+		}
+
+		// 3) Decide new status
+		const newStatus = action === "acknowledge" ? "investigating" : "open";
+
+		// 4) Update (assigned_to can be NULL; FK is only enforced when non-NULL)
+		const res = await this.dbService.db
+			.prepare(
+				`UPDATE incidents
+         SET status = ?, assigned_to = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`
+			)
+			.bind(newStatus, assignee, incidentId)
+			.run();
+
+		if ((res as any)?.meta?.changes === 0) {
+			throw new Error(`Update failed for incident ${incidentId}`);
+		}
+
+		// 5) Optional: trigger escalation if declined
+		const escalated = action === "decline";
+		if (escalated) {
+			console.log(`[incident] Incident ${incidentId} declined — escalating`);
+			// TODO: kick off real escalation here
+		}
+
+		return { incidentId, action, ...(escalated ? { escalated } : {}) };
+	}
+
 }
