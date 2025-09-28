@@ -1,44 +1,34 @@
-import { AuthenticateResponse } from "@/types/response-types";
+import {UserSession} from "@/types/response-types";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
-export interface UserSession {
-  id: number;
-  email: string;
-  password: string;
-  firstName: string;
-  lastName: string;
-  token: string;
-}
-
-export const storeUserSession = async(param: AuthenticateResponse) => {
-  console.log("Storing user session:", JSON.stringify(param));
-  try {
-    localStorage.setItem(
-      "user_session",
-      JSON.stringify({
-        id: param.id,
-        email: param.email,
-        password: param.password,
-        firstName: param?.firstName ?? "",
-        lastName: param.lastName,
-        token: param.token,
-      })
-    );
-  } catch (error) {
-    console.error("Error storing user session:", error);
-  }
+export const storeUserSession = async (param: UserSession) => {
+    console.log("Storing user session:", JSON.stringify(param));
+    try {
+        await AsyncStorage.setItem(
+            "user_session",
+            JSON.stringify({
+                id: param.id,
+                email: param.email,
+                password: null,
+                firstName: param?.firstName ?? "",
+                lastName: param.lastName,
+                token: param.token,
+            })
+        );
+    } catch (error) {
+        console.error("Error storing user session:", error);
+    }
 };
 
-// export const retrieveUserSession = async (): Promise<
-//   UserSession | undefined
-// > => {
-//   try {
-//     const session = await EncryptedStorage.getItem("user_session");
-//     if (session !== undefined && session !== null) {
-//       return handleSessions.get(sessionKeys.upin).then((data) => {
-//         return data !== null ? JSON.parse(session) : null;
-//       });
-//     }
-//   } catch (error) {
-//     console.log(JSON.stringify(error));
-//   }
-// };
+export const retrieveUserSession = async (): Promise<UserSession | undefined> => {
+    try {
+        const session = await AsyncStorage.getItem("user_session");
+        if (session !== null && session !== undefined) {
+            return JSON.parse(session) as UserSession;
+        }
+        return undefined;
+    } catch (error) {
+        console.error("Error retrieving user session:", JSON.stringify(error));
+        return undefined;
+    }
+};

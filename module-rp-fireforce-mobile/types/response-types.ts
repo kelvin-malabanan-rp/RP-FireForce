@@ -4,7 +4,7 @@ export type AuthenticateResponse = {
   httpStatus: string;
   message: string;
   data: {
-    id: number;
+    id: string;
     email: string;
     password: string;
     firstName: string;
@@ -12,6 +12,15 @@ export type AuthenticateResponse = {
     token: string;
   }
 };
+
+export interface UserSession {
+    id: string;
+    email: string;
+    password: string;
+    firstName: string;
+    lastName: string;
+    token: string;
+}
 
 export type IncidentStatsResponseType = {
   object: IncidentStatsResponse;

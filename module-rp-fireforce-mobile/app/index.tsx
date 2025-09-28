@@ -3,6 +3,7 @@ import { LoginComponent } from "@/components/login-component";
 import { router } from "expo-router";
 import React from "react";
 import { StyleSheet, View } from "react-native";
+import {storeUserSession} from "@/constants/local-storage";
 
 export default function Index() {
     // Change to separate parameters to match LoginProps interface
@@ -16,6 +17,9 @@ export default function Index() {
 
             // response is AuthenticateResponse type
             if (response && response.httpStatus === "OK") {
+                console.log("User authenticated successfully:", response.data);
+                storeUserSession(response.data)
+                console.log("Successfully store user session:", response.data);
                 router.replace("/tabs");
                 return null;
             } else {

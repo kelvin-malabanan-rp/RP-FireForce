@@ -143,7 +143,6 @@ export const LoginComponent = ({ onLogin }: LoginProps) => {
             <Text style={styles.footerText}>
               Don't have an account? Ask your organization to setup FireForce
               Account
-              {/* <Text style={styles.signupLink}>Sign up</Text> */}
             </Text>
           </View>
 
@@ -233,17 +232,17 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   forgotPasswordText: {
-    color: "#667EEA",
+    color: "#3B82F6",
     fontSize: 14,
     fontWeight: "500",
   },
   loginButton: {
-    backgroundColor: "#667EEA",
+    backgroundColor: "#3B82F6",
     borderRadius: 8,
     paddingVertical: 14,
     paddingHorizontal: 24,
     alignItems: "center",
-    shadowColor: "#667EEA",
+    shadowColor: "#3B82F6",
     shadowOffset: {
       width: 0,
       height: 4,
@@ -292,7 +291,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   signupLink: {
-    color: "#667EEA",
+    color: "#3B82F6",
     fontWeight: "500",
   },
   demoContainer: {

@@ -14,6 +14,8 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import AlertManager from "./alert-manager";
+import {retrieveUserSession} from "@/constants/local-storage";
+import {UserSession} from "@/types";
 
 const { width } = Dimensions.get("window");
 const MENU_WIDTH = width * 0.7;
@@ -28,11 +30,28 @@ export function SlideMenu({ isOpen, onClose }: SlideMenuProps) {
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const [isVisible, setIsVisible] = useState(false);
     const [showAlertManager, setShowAlertManager] = useState(false);
+    const [userSession, setUserSession] = useState<UserSession | null>(null);
 
+    // Separate the user session loading into its own effect
+    useEffect(() => {
+        const loadUserSession = async () => {
+            try {
+                const session = await retrieveUserSession();
+                setUserSession(session || null);
+            } catch (error) {
+                console.error('Error loading user session:', error);
+                setUserSession(null); // Explicitly set to null on error
+            }
+        };
+
+        loadUserSession();
+    }, []); // Only run once on mount
+
+    // Separate effect for animation handling
     useEffect(() => {
         if (isOpen) {
             setIsVisible(true);
-            // Slide in
+            // Slide in animation
             Animated.parallel([
                 Animated.timing(slideAnim, {
                     toValue: 0,
@@ -46,7 +65,7 @@ export function SlideMenu({ isOpen, onClose }: SlideMenuProps) {
                 }),
             ]).start();
         } else {
-            // Slide out
+            // Slide out animation
             Animated.parallel([
                 Animated.timing(slideAnim, {
                     toValue: -MENU_WIDTH,
@@ -62,7 +81,7 @@ export function SlideMenu({ isOpen, onClose }: SlideMenuProps) {
                 setIsVisible(false);
             });
         }
-    }, [fadeAnim, isOpen, slideAnim]);
+    }, [isOpen]); // Only depend on isOpen, remove fadeAnim and slideAnim from deps
 
     const handleLogout = () => {
         onClose();
@@ -115,10 +134,14 @@ export function SlideMenu({ isOpen, onClose }: SlideMenuProps) {
                 <View style={styles.menuHeader}>
                     <View style={styles.userInfo}>
                         <View style={styles.avatar}>
-                            <Ionicons name="person-circle" size={50} color="#667EEA" />
+                            <Ionicons name="person-circle" size={50} color="#3B82F6" />
                         </View>
-                        <Text style={styles.userName}>Kelvin Malabanan</Text>
-                        <Text style={styles.userEmail}>kelvin.malabanan@rocketpartners.io</Text>
+                        <Text style={styles.userName}>
+                            {userSession ? `${userSession.firstName} ${userSession.lastName}` : 'Guest User'}
+                        </Text>
+                        <Text style={styles.userEmail}>
+                            {userSession?.email || 'No email available'}
+                        </Text>
                     </View>
                 </View>
 
@@ -212,7 +235,7 @@ const styles = StyleSheet.create({
         elevation: 5,
     },
     menuHeader: {
-        backgroundColor: "#f3f4f6",
+        backgroundColor: "#a7c3f1",
         paddingTop: 60,
         paddingBottom: 20,
         paddingHorizontal: 20,
