@@ -77,6 +77,7 @@ export default function RootLayout() {
         <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
             <Stack>
                 <Stack.Screen name="index" options={{ headerShown: false }} />
+                <Stack.Screen name="inner-incident-page" options={{ headerShown: false, title: "", headerTitle: ""  }} />
                 <Stack.Screen name="tabs" options={{ headerShown: false, title: "", headerTitle: "" }} />
                 <Stack.Screen name="modal" options={{ presentation: "modal", title: "Modal" }} />
             </Stack>

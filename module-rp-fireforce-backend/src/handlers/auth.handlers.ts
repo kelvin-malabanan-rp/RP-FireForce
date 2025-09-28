@@ -82,7 +82,7 @@ export async function handleLogin(
 
 		// Prepare login response data
 		const loginResponse: LoginResponse = {
-			id: parseInt(user.id) || 0,
+			id: user.id,
 			email: user.email,
 			password: "",  // Never return the actual password
 			firstName: user.firstName || "",

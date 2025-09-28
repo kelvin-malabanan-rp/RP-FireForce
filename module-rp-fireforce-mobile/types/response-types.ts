@@ -44,6 +44,12 @@ export interface ResponseCreatedIncident {
     changes: number;
 }
 
+export interface GetIncidentsByIdResponse {
+    httpStatus: string;
+    message: string;
+    data: Incident;
+}
+
 export interface AlertSettings {
   enableAlerts: boolean;
   criticalOnly: boolean;

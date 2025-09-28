@@ -69,9 +69,10 @@ CREATE INDEX IF NOT EXISTS idx_sessions_expires ON user_sessions(expires_at);
 
 -- INCIDENT COMMENTS
 CREATE TABLE IF NOT EXISTS incident_comments (
-												 id          TEXT PRIMARY KEY,
-												 incident_id TEXT NOT NULL REFERENCES incidents(id),
+	id          TEXT PRIMARY KEY,
+	incident_id TEXT NOT NULL REFERENCES incidents(id),
 	user_id     TEXT NOT NULL REFERENCES users(id),
+	response	TEXT NOT NULL
 	comment     TEXT NOT NULL,
 	created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
 	);

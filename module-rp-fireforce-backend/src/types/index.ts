@@ -10,7 +10,7 @@ export interface Incident {
 	id: string;
 	title: string;
 	description: string;
-	severity: 'low' | 'medium' | 'high' | 'critical';
+	severity: 'low' | 'medium' | 'high' | 'critical' | null | undefined;
 	status: 'open' | 'investigating' | 'resolved';
 	timestamp: string;
 	reportedBy: string;
@@ -30,7 +30,7 @@ export interface CreateIncidentTypes {
 	description: string;
 	location: string | null;
 	reportedBy: string;
-	severity: string | 'low' | 'medium' | 'high' | 'critical';
+	severity: 'low' | 'medium' | 'high' | 'critical';
 }
 
 export interface CloudWatchAlarm {
@@ -74,7 +74,7 @@ export interface IncidentStats {
 }
 
 export interface LoginResponse {
-	id: number;
+	id: string;
 	email: string;
 	password: string;
 	firstName: string;
@@ -116,3 +116,20 @@ export interface User {
 	updatedAt: string;
 	lastLogin?: string;
 }
+
+// POST Incident Comment Payload
+export interface IncidentCommentPayload {
+	incidentId: string;
+	userId: string;
+	comment: string;
+	createdAt: Date;
+}
+
+export interface IncidentCommentResponse {
+	id: string;
+	incidentId: string;
+	userId: string;
+	comment: string;
+	createdAt: Date;
+}
+

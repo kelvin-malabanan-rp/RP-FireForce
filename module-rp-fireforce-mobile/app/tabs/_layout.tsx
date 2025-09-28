@@ -1,7 +1,7 @@
 // app/(tabs)/_layout.tsx
 import { Tabs } from "expo-router";
 import { useState } from "react";
-import {TouchableOpacity, useColorScheme} from "react-native";
+import {Platform, TouchableOpacity, useColorScheme} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 import {SlideMenu} from "@/components/navigation-menu";
@@ -38,7 +38,7 @@ export default function TabLayout() {
                 <Tabs.Screen
                     name="index"
                     options={{
-                        title: "Home",
+                        title: "Dashboard",
                         tabBarIcon: ({ color }) => (
                             <IconSymbol size={28} name="house.fill" color={color} />
                         ),
@@ -49,16 +49,23 @@ export default function TabLayout() {
                     options={{
                         title: "Incidents",
                         tabBarIcon: ({ color }) => (
-                            <IconSymbol
-                                size={28}
-                                name="exclamationmark.triangle.fill"
-                                color={color}
-                            />
+                            Platform.OS === 'ios' ? (
+                                <IconSymbol
+                                    size={28}
+                                    name="exclamationmark.triangle.fill"
+                                    color={color}
+                                />
+                            ) : (
+                                <Ionicons
+                                    size={28}
+                                    name="warning"
+                                    color={color}
+                                />
+                            )
                         ),
                     }}
                 />
             </Tabs>
-
             <SlideMenu isOpen={menuOpen} onClose={() => setMenuOpen(false)} />
         </>
     );

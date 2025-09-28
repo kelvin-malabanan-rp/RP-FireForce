@@ -1,7 +1,6 @@
 import { LoginProps, LoginData } from "@/types";
 import { FONT_FAMILY } from "@/constants/fonts"; // Import your font constants
 import { Image } from "expo-image";
-import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
     ActivityIndicator,

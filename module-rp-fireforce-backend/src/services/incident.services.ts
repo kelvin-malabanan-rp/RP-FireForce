@@ -1,7 +1,10 @@
 // services/incident.services.ts
-import {CreateIncidentTypes, Env, Incident, IncidentFilters, IncidentStats} from '../types';
-import { DatabaseService } from './database.service';
-import { PushNotificationService } from './push-notification.service';
+import {
+	CreateIncidentTypes, Env, Incident, IncidentCommentPayload,
+	IncidentCommentResponse, IncidentFilters, IncidentStats
+} from '../types';
+import {DatabaseService} from './database.service';
+import {PushNotificationService} from './push-notification.service';
 
 export class IncidentService {
 	private env: Env;
@@ -132,7 +135,7 @@ export class IncidentService {
 
 	// Updated createIncident method to handle async operations and return the created incident
 	public async createIncident(data: CreateIncidentTypes) {
-		await this.validateUser(data.reportedBy);
+		await this.validateUserByEmail(data.reportedBy);
 
 		const incidentData: Partial<Incident> = {
 			title: data.title,
@@ -147,12 +150,21 @@ export class IncidentService {
 		return await this.dbService.insertIncident(incidentData);
 	}
 
-	private validateUser(email: string){
+	private validateUserByEmail(email: string){
 		try {
 			this.dbService.getUserByEmail(email);
 		}
 		catch (error) {
 			console.error(error);
+		}
+	}
+
+	private validateUserById(userId: string){
+		try {
+			this.dbService.getUserById(userId);
+		} catch (error) {
+			console.error(error);
+			throw error; // Re-throw so the calling function knows validation failed
 		}
 	}
 
@@ -214,4 +226,27 @@ export class IncidentService {
 		return { incidentId, action, ...(escalated ? { escalated } : {}) };
 	}
 
+	public async selectIncidentById(incidentId: string): Promise<Incident> {
+		const incident = await this.dbService.getIncidentBy(incidentId);
+
+		if (!incident) {
+			throw new Error(`Incident with ID ${incidentId} not found`);
+		}
+
+		return incident;
+	}
+
+	async submitIncidentComment(data: IncidentCommentPayload): Promise<IncidentCommentResponse> {
+		this.validateUserById(data.userId);
+		const result = await this.dbService.postIncidentComment(data);
+
+		if (!result) {
+			throw new Error('Failed to post incident comment');
+		}
+		return result;
+	}
+
+	async fetchIncidentComments(incidentId: string): Promise<IncidentCommentResponse[]> {
+		return await this.dbService.getIncidentComments(incidentId);
+	}
 }

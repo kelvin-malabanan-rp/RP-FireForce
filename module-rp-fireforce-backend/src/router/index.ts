@@ -5,12 +5,15 @@ import { handleHealth } from "../handlers/health.handlers";
 import {
 	handleCreateIncident,
 	handleGetIncidents,
-	handleGetStats, handleIncidentResponse,
+	handleGetStats,
+	handleIncidentResponse, handlePostIncidentComment,
+	handleSelectIncident,
 	handleTestIncident
 } from "../handlers/incident.handlers";
 import { handleWebhook } from "../handlers/webook.handlers";
 import {handleLogin, handleLogout} from "../handlers/auth.handlers";
 import {handleRegisterPushToken, handleSendTestAlert} from "../handlers/push-notification.handlers";
+import {handleFetchIncidentComment} from "../handlers/incident-comment.handlers";
 
 export class Router {
 	private env: Env;
@@ -81,6 +84,21 @@ export class Router {
 			// Incident response (acknowledge / decline)
 			if (path === '/api/incidents/respond' && method === 'POST') {
 				return handleIncidentResponse(request, this.env, CORS_HEADERS);
+			}
+
+			// Get specific incident by ID
+			if (path === '/api/incidents/select' && method === 'GET') {
+				return handleSelectIncident(request, this.env, CORS_HEADERS);
+			}
+
+			// POST Incident comment
+			if (path === '/api/incidents-comment' && method === 'POST') {
+				return handlePostIncidentComment(request, this.env, CORS_HEADERS);
+			}
+
+			// Get specific incident by ID
+			if (path === '/api/incidents-comment' && method === 'GET') {
+				return handleFetchIncidentComment(request, this.env, CORS_HEADERS);
 			}
 
 			// 404 Not Found

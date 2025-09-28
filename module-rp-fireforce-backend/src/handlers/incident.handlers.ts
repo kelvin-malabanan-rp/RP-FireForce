@@ -1,5 +1,13 @@
 // handlers/incident.handler.ts
-import {ApiResponse, CreateIncidentTypes, Env, Incident, IncidentFilters, IncidentStats} from '../types';
+import {
+	ApiResponse,
+	CreateIncidentTypes,
+	Env,
+	Incident,
+	IncidentCommentPayload, IncidentCommentResponse,
+	IncidentFilters,
+	IncidentStats
+} from '../types';
 import {IncidentService} from "../services/incident.services";
 
 export async function handleGetIncidents(
@@ -287,5 +295,196 @@ export async function handleIncidentResponse(
 			JSON.stringify({ error: "Failed to record incident response" }),
 			{ status: 500, headers: corsHeaders }
 		);
+	}
+}
+
+export async function handleSelectIncident(
+	request: Request,
+	env: Env,
+	corsHeaders: Record<string, string>
+): Promise<Response> {
+	try {
+		const url = new URL(request.url);
+		const incidentId = url.searchParams.get('incidentId');
+
+		if (!incidentId) {
+			const errorResponse: ApiResponse<null> = {
+				httpStatus: "ERROR",
+				message: "incidentId query parameter is required",
+				data: null
+			};
+			return new Response(JSON.stringify(errorResponse), {
+				status: 400,
+				headers: {
+					...corsHeaders,
+					'Content-Type': 'application/json'
+				}
+			});
+		}
+
+		const incidentService = new IncidentService(env);
+		const incident = await incidentService.selectIncidentById(incidentId);
+
+		const successResponse: ApiResponse<Incident> = {
+			httpStatus: "OK",
+			message: "Incident retrieved successfully",
+			data: incident
+		};
+
+		return new Response(JSON.stringify(successResponse), {
+			status: 200,
+			headers: {
+				...corsHeaders,
+				'Content-Type': 'application/json'
+			}
+		});
+
+	} catch (err) {
+		console.error("Error selecting incident:", err);
+
+		if (err instanceof Error && err.message.includes('not found')) {
+			const notFoundResponse: ApiResponse<null> = {
+				httpStatus: "ERROR",
+				message: "Incident not found",
+				data: null
+			};
+			return new Response(JSON.stringify(notFoundResponse), {
+				status: 404,
+				headers: {
+					...corsHeaders,
+					'Content-Type': 'application/json'
+				}
+			});
+		}
+
+		if (err instanceof Error && err.message.includes('Database connection')) {
+			const errorResponse: ApiResponse<null> = {
+				httpStatus: "ERROR",
+				message: 'Database service unavailable',
+				data: null
+			};
+			return new Response(JSON.stringify(errorResponse), {
+				status: 503,
+				headers: {
+					...corsHeaders,
+					'Content-Type': 'application/json'
+				}
+			});
+		}
+
+		const errorResponse: ApiResponse<null> = {
+			httpStatus: "ERROR",
+			message: "Failed to retrieve incident",
+			data: null
+		};
+
+		return new Response(JSON.stringify(errorResponse), {
+			status: 500,
+			headers: {
+				...corsHeaders,
+				'Content-Type': 'application/json'
+			}
+		});
+	}
+}
+
+// POST Incident Comment
+export async function handlePostIncidentComment(
+	request: Request,
+	env: Env,
+	corsHeaders: Record<string, string>
+): Promise<Response> {
+	try {
+		const { incidentId, userId, comment } = (await request.json()) as {
+			incidentId: string;
+			userId: string;
+			comment: string;
+		};
+
+		if (!incidentId || !userId || !comment) {
+			const errorResponse: ApiResponse<null> = {
+				httpStatus: "ERROR",
+				message: "incidentId, userId, and comment are required",
+				data: null
+			};
+			return new Response(JSON.stringify(errorResponse), {
+				status: 400,
+				headers: {
+					...corsHeaders,
+					'Content-Type': 'application/json'
+				}
+			});
+		}
+
+		const incidentService = new IncidentService(env);
+		const commentPayload: IncidentCommentPayload = {
+			incidentId,
+			userId,
+			comment: comment.trim(),
+			createdAt: new Date()
+		};
+
+		const result = await incidentService.submitIncidentComment(commentPayload);
+
+		const successResponse: ApiResponse<IncidentCommentResponse> = {
+			httpStatus: "OK",
+			message: "Comment posted successfully",
+			data: result
+		};
+
+		return new Response(JSON.stringify(successResponse), {
+			status: 201,
+			headers: {
+				...corsHeaders,
+				'Content-Type': 'application/json'
+			}
+		});
+
+	} catch (err) {
+		console.error("Error posting incident comment:", err);
+
+		if (err instanceof Error && err.message.includes('not found')) {
+			const notFoundResponse: ApiResponse<null> = {
+				httpStatus: "ERROR",
+				message: "User or incident not found",
+				data: null
+			};
+			return new Response(JSON.stringify(notFoundResponse), {
+				status: 404,
+				headers: {
+					...corsHeaders,
+					'Content-Type': 'application/json'
+				}
+			});
+		}
+
+		if (err instanceof Error && err.message.includes('Database connection')) {
+			const errorResponse: ApiResponse<null> = {
+				httpStatus: "ERROR",
+				message: 'Database service unavailable',
+				data: null
+			};
+			return new Response(JSON.stringify(errorResponse), {
+				status: 503,
+				headers: {
+					...corsHeaders,
+					'Content-Type': 'application/json'
+				}
+			});
+		}
+
+		const errorResponse: ApiResponse<null> = {
+			httpStatus: "ERROR",
+			message: "Failed to post comment",
+			data: null
+		};
+
+		return new Response(JSON.stringify(errorResponse), {
+			status: 500,
+			headers: {
+				...corsHeaders,
+				'Content-Type': 'application/json'
+			}
+		});
 	}
 }

@@ -1,15 +1,13 @@
 import { BASE_URL_DEV } from "@/utils/backend-url";
 import apiManager from "./api-manager";
 import {
-    AllIncidents,
-    CreateIncidentData,
-    Incident,
-    IncidentPayloadApi,
+    CreateIncidentData, GetAllIncidentCommentsResponse,
     IncidentResponseApi,
-    UpdateIncidentData,
-    IncidentStatsResponse
+    IncidentStatsResponse,
+    PostIncidentComments,
+    PostIncidentCommentsResponse
 } from "@/types/incident-types";
-import {ResponseCreatedIncident} from "@/types";
+import {GetIncidentsByIdResponse, ResponseCreatedIncident} from "@/types";
 
 // Get all incidents
 export const getAllIncidents = async (): Promise<IncidentResponseApi> => {
@@ -37,19 +35,18 @@ export const getAllIncidentStats = async (timeframe: string): Promise<{ data: In
   }
 };
 
-// Get incident by ID
 export const getIncidentById = async (
-    id: string
-): Promise<IncidentResponseApi> => {
-  try {
-    const response = await apiManager.get<IncidentResponseApi>(
-        `${BASE_URL_DEV}/api/incidents/${id}`
-    );
-    return response.data;
-  } catch (error) {
-    console.error("Get incident error:", error);
-    throw error;
-  }
+    incidentId: string
+): Promise<GetIncidentsByIdResponse> => {
+    try {
+        const response = await apiManager.get<GetIncidentsByIdResponse>(
+            `${BASE_URL_DEV}/api/incidents/select?incidentId=${incidentId}`
+        );
+        return response.data;
+    } catch (error) {
+        console.error("Get incident error:", error);
+        throw error;
+    }
 };
 
 // Create new incident
@@ -68,112 +65,39 @@ export const createIncident = async (
     }
 };
 
-// Update incident
-export const updateIncident = async (
-    id: string,
-    data: UpdateIncidentData
-): Promise<Incident> => {
-  try {
-    const response = await apiManager.put<Incident>(
-        `${BASE_URL_DEV}/api/incidents/${id}`,
-        data
-    );
-    return response.data;
-  } catch (error) {
-    console.error("Update incident error:", error);
-    throw error;
-  }
-};
 
-// Delete incident
-export const deleteIncident = async (
-    id: string
-): Promise<void> => {
-  try {
-    const response = await apiManager.delete<void>(
-        `${BASE_URL_DEV}/api/incidents/${id}`
-    );
-    return response.data;
-  } catch (error) {
-    console.error("Delete incident error:", error);
-    throw error;
-  }
-};
+// Incident Comments
+export const postIncidentComment = async (
+    data: PostIncidentComments
+): Promise<PostIncidentCommentsResponse> => {
+    try {
+        console.log('Posting to URL:', `${BASE_URL_DEV}/api/incidents-comment`);
+        console.log('Payload being sent:', data);
 
-// Get incidents by status
-export const getIncidentsByStatus = async (
-    status: string,
-    timeframe: string = '24h'
-): Promise<AllIncidents> => {
-  try {
-    const response = await apiManager.get<AllIncidents>(
-        `${BASE_URL_DEV}/api/incidents?status=${status}&timeframe=${timeframe}`
-    );
-    return response.data;
-  } catch (error) {
-    console.error("Get incidents by status error:", error);
-    throw error;
-  }
-};
-
-// Assign incident to user
-export const assignIncident = async (
-    id: string,
-    userId: string
-): Promise<IncidentPayloadApi> => {
-  try {
-    const response = await apiManager.put<IncidentPayloadApi>(
-        `${BASE_URL_DEV}/v1/api/incidents/${id}`,
-        { assigned_to: userId }
-    );
-    return response.data;
-  } catch (error) {
-    console.error("Assign incident error:", error);
-    throw error;
-  }
-};
-
-// Resolve incident
-export const resolveIncident = async (
-    id: string,
-    resolvedBy: string
-): Promise<IncidentPayloadApi> => {
-  try {
-    const response = await apiManager.put<IncidentPayloadApi>(
-        `${BASE_URL_DEV}/v1/api/incidents/${id}`,
-        {
-          status: "resolved",
-          resolved_by: resolvedBy,
-          resolved_at: new Date().toISOString()
-        }
-    );
-    return response.data;
-  } catch (error) {
-    console.error("Resolve incident error:", error);
-    throw error;
-  }
-};
-
-// Change incident status
-export const changeIncidentStatus = async (
-    id: string,
-    status: "open" | "investigating" | "resolved"
-): Promise<IncidentPayloadApi> => {
-  try {
-    const updateData: UpdateIncidentData = { status };
-
-    // If resolving, add resolved timestamp
-    if (status === "resolved") {
-      updateData.resolved_at = new Date().toISOString();
+        const response = await apiManager.post<PostIncidentCommentsResponse>(
+            `${BASE_URL_DEV}/api/incidents-comment`,
+            data
+        );
+        return response.data;
+    } catch (error) {
+        console.error("Error posting comment:", error);
+        console.error("Full error:", JSON.stringify(error, null, 2));
+        throw error;
     }
+}
 
-    const response = await apiManager.put<IncidentPayloadApi>(
-        `${BASE_URL_DEV}/v1/api/incidents/${id}`,
-        updateData
-    );
-    return response.data;
-  } catch (error) {
-    console.error("Change incident status error:", error);
-    throw error;
-  }
-};
+export const getAllIncidentComments = async (
+    incidentId: string
+): Promise<GetAllIncidentCommentsResponse> => {
+    try {
+        const response = await apiManager.get<GetAllIncidentCommentsResponse>(
+            `${BASE_URL_DEV}/api/incidents-comment?incidentId=${incidentId}`
+        );
+        return response.data;
+    } catch (error) {
+        console.error("Error fetching comments:", error);
+        throw error;
+    }
+}
+
+

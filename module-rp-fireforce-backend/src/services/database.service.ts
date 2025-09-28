@@ -1,5 +1,5 @@
 // services/database.service.ts
-import {Env, Incident, IncidentFilters, User} from '../types';
+import {Env, Incident, IncidentCommentPayload, IncidentCommentResponse, IncidentFilters, User} from '../types';
 
 export class DatabaseService {
 	private env: Env;
@@ -11,6 +11,17 @@ export class DatabaseService {
 	get db() {
 		return this.env.DB || this.env.incident_management;
 	}
+
+	public generateUUID = (): string => {
+		return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+			const r = Math.random() * 16 | 0;
+			const v = c === 'x' ? r : (r & 0x3 | 0x8);
+			return v.toString(16);
+		});
+	};
+
+	public currentTime = new Date().toISOString();
+
 
 	async getIncidents(params: IncidentFilters): Promise<Incident[]> {
 		let query = 'SELECT * FROM incidents';
@@ -73,16 +84,8 @@ export class DatabaseService {
 
 	// Updated insertIncident method - generate UUID in the service
 	async insertIncident(incident: Partial<Incident>): Promise<{ id: string; changes: number }> {
-		// Generate UUID v4
-		const generateUUID = (): string => {
-			return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-				const r = Math.random() * 16 | 0;
-				const v = c === 'x' ? r : (r & 0x3 | 0x8);
-				return v.toString(16);
-			});
-		};
 
-		const incidentId = generateUUID();
+		const incidentId = this.generateUUID();
 
 		const query = `
 			INSERT INTO incidents
@@ -92,7 +95,7 @@ export class DatabaseService {
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`;
 
-		const currentTime = new Date().toISOString();
+
 
 		// Map incident properties to match database column names and convert undefined to null
 		const params = [
@@ -101,7 +104,7 @@ export class DatabaseService {
 			incident.description || null,
 			incident.severity || 'medium',
 			incident.status || 'open',
-			incident.timestamp || currentTime,
+			incident.timestamp || this.currentTime,
 			incident.reportedBy || 'AWS CloudWatch',
 			incident.location || null,
 			incident.awsAlarmName || null,
@@ -112,8 +115,8 @@ export class DatabaseService {
 			incident.resolvedAt || null,     // resolved_at from Incident interface
 			null,                            // assigned_to (not in Incident interface, set to null)
 			null,                            // resolved_by (not in Incident interface, set to null)
-			incident.createdAt || currentTime,   // created_at from Incident interface
-			incident.updatedAt || currentTime    // updated_at from Incident interface
+			incident.createdAt || this.currentTime,   // created_at from Incident interface
+			incident.updatedAt || this.currentTime   // updated_at from Incident interface
 		];
 
 		console.log('Database insert - sanitized params:', params);
@@ -166,7 +169,7 @@ export class DatabaseService {
 		}
 	}
 
-	// User authentication methods
+	// User authentication methods by email
 	async getUserByEmail(email: string): Promise<User | null> {
 		const query = `
 			SELECT id, email, password_hash as passwordHash, role,
@@ -186,6 +189,144 @@ export class DatabaseService {
 			return result as User | null;
 		} catch (error) {
 			console.error('Error fetching user by email:', error);
+			throw error;
+		}
+	}
+
+	// User authentication methods by id
+	async getUserById(userId: string): Promise<User | null> {
+		const query = `
+			SELECT id, email, password_hash as passwordHash, role,
+				   first_name as firstName, last_name as lastName,
+				   is_active as isActive, created_at as createdAt,
+				   updated_at as updatedAt, last_login as lastLogin
+			FROM users
+			WHERE id = ? AND is_active = 1
+		`;
+		try {
+			if (!this.db) {
+				throw new Error('Database connection not available');
+			}
+			const result = await this.db.prepare(query).bind(userId).first();
+			return result as User | null;
+		} catch (error) {
+			console.error('Error fetching user by id:', error);
+			throw error;
+		}
+	}
+
+	// Validate Incident if exists and GET its DATA!
+	async getIncidentBy(incidentId: string): Promise<Incident | null> {
+		const query = `
+			SELECT
+				id,
+				title,
+				description,
+				severity,
+				status,
+				timestamp,
+				reported_by as reportedBy,
+				location,
+				aws_alarm_name as awsAlarmName,
+				aws_account_id as awsAccountId,
+				state_reason as stateReason,
+				metric_name as metricName,
+				aws_console_url,
+				resolved_at as resolvedAt,
+				created_at as createdAt,
+				updated_at as updatedAt
+			FROM incidents
+			WHERE id = ?
+		`;
+
+		try {
+			if (!this.db) {
+				throw new Error('Database connection not available');
+			}
+			const result = await this.db.prepare(query).bind(incidentId).first();
+			return result as Incident | null;
+		} catch (error) {
+			console.error('Error fetching incident by incidentId:', error);
+			throw error;
+		}
+	}
+
+	// Submit Comment to Specific Incident
+	async postIncidentComment(payload: IncidentCommentPayload): Promise<IncidentCommentResponse> {
+		const commentId = this.generateUUID();
+
+		const query = `
+			INSERT INTO incident_comments (
+				id,
+				incident_id,
+				user_id,
+				comment,
+				created_at
+			) VALUES (?, ?, ?, ?, ?)
+		`;
+
+		try {
+			if (!this.db) {
+				throw new Error('Database connection not available');
+			}
+
+			const result = await this.db.prepare(query)
+				.bind(
+					commentId,
+					payload.incidentId,
+					payload.userId,
+					payload.comment,
+					payload.createdAt.toISOString() // Convert Date to string
+				)
+				.run();
+
+			if (result.success) {
+				return {
+					id: commentId,
+					incidentId: payload.incidentId,
+					userId: payload.userId,
+					comment: payload.comment,
+					createdAt: payload.createdAt
+				};
+			} else {
+				throw new Error('Failed to insert incident comment');
+			}
+		} catch (error) {
+			console.error('Error posting incident comment:', error);
+			throw error;
+		}
+	}
+
+	async getIncidentComments(incidentId: string): Promise<IncidentCommentResponse[]> {
+		const query = `
+			SELECT
+				id,
+				incident_id as incidentId,
+				user_id as userId,
+				comment,
+				created_at as createdAt
+			FROM incident_comments
+			WHERE incident_id = ?
+			ORDER BY created_at DESC`;
+
+		try {
+			if (!this.db) {
+				throw new Error('Database connection not available');
+			}
+
+			const results = await this.db.prepare(query)
+				.bind(incidentId)
+				.all();
+
+			return results.results.map(result => ({
+				id: result.id as string,
+				incidentId: result.incidentId as string,
+				userId: result.userId as string,
+				comment: result.comment as string,
+				createdAt: new Date(result.createdAt as string)
+			}));
+		} catch (error) {
+			console.error('Error fetching incident comments:', error);
 			throw error;
 		}
 	}

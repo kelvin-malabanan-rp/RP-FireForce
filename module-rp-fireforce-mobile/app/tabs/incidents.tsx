@@ -1,5 +1,6 @@
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import React, { useState, useEffect, useCallback } from "react";
+import { useRouter } from "expo-router";
 import {
     Alert,
     Modal,
@@ -15,13 +16,13 @@ import {
 import {
     createIncident, getAllIncidents
 } from "@/api/incident-controller";
-import {
-} from "@/types/response-types";
 import {getSeverityColor, getStatusColor} from "@/constants/colors";
 import {CreateIncidentData, Incident, IncidentUI, Stats} from "@/types/incident-types";
 import { FONT_FAMILY } from '@/constants/fonts';
+import {Ionicons} from "@expo/vector-icons";
 
 export default function IncidentsScreen() {
+    const router = useRouter();
     const [incidents, setIncidents] = useState<IncidentUI[]>([]);
     const [refreshing, setRefreshing] = useState(false);
     const [loading, setLoading] = useState(true);
@@ -35,10 +36,9 @@ export default function IncidentsScreen() {
         location: "",
     });
 
-    // Helper function to parse API datetime format "2025-09-23 10:58:35"
+    // Helper function to parse API datetime - now handles ISO format
     const parseApiDateTime = (dateTimeString: string): Date => {
-        const isoString = dateTimeString.replace(' ', 'T') + 'Z';
-        return new Date(isoString);
+        return new Date(dateTimeString);
     };
 
     // Transform API incident to UI incident format
@@ -49,12 +49,12 @@ export default function IncidentsScreen() {
         severity: apiIncident.severity,
         status: apiIncident.status,
         timestamp: parseApiDateTime(apiIncident.timestamp),
-        reportedBy: apiIncident.reported_by,
+        reportedBy: apiIncident.reportedBy,
         location: apiIncident.location || undefined,
-        assignedTo: apiIncident.assigned_to || undefined,
-        resolvedBy: apiIncident.resolved_by || undefined,
-        resolvedAt: apiIncident.resolved_at ? parseApiDateTime(apiIncident.resolved_at) : undefined,
-        awsAlarmName: apiIncident.aws_alarm_name || undefined,
+        assignedTo: apiIncident.assignedTo || undefined,
+        resolvedBy: apiIncident.resolvedBy || undefined,
+        resolvedAt: apiIncident.resolvedAt ? parseApiDateTime(apiIncident.resolvedAt) : undefined,
+        awsAlarmName: apiIncident.awsAlarmName || undefined,
     });
 
     // Fetch incidents from API
@@ -78,10 +78,9 @@ export default function IncidentsScreen() {
         }
     };
 
-    // Initial data load - FIX: Remove functions from dependency array
     useEffect(() => {
         fetchAllIncidents();
-    }, []); // ✅ Only depend on timeframe, not the functions
+    }, []);
 
     const onRefresh = useCallback(() => {
         setRefreshing(true);
@@ -91,6 +90,14 @@ export default function IncidentsScreen() {
     const filteredIncidents = incidents.filter(
         (incident) => filterStatus === "all" || incident.status === filterStatus
     );
+
+    // Navigate to incident detail page
+    const handleIncidentPress = (incident: IncidentUI) => {
+        router.push({
+            pathname: "/inner-incident-page",
+            params: { incidentId: incident.id }
+        });
+    };
 
     const createNewIncident = async () => {
         if (!newIncident.title || !newIncident.description) {
@@ -105,19 +112,16 @@ export default function IncidentsScreen() {
                 description: newIncident.description,
                 severity: newIncident.severity,
                 location: newIncident.location || null,
-                reportedBy: "Mobile App User", // You can get this from auth context
+                reportedBy: "Mobile App User",
             };
 
             const response = await createIncident(incidentData);
 
-            // Check for successful response
             if (response.httpStatus === "OK" && response.data) {
                 const transformedIncident = transformApiIncident(response.data);
 
-                // Add to local state for immediate UI update
                 setIncidents((prev) => [transformedIncident, ...prev]);
 
-                // Reset form
                 setNewIncident({
                     title: "",
                     description: "",
@@ -127,7 +131,6 @@ export default function IncidentsScreen() {
                 setModalVisible(false);
                 Alert.alert("Success", response.message || "Incident created successfully");
             } else {
-                // Handle API error response (httpStatus === "ERROR")
                 throw new Error(response.message || "Failed to create incident");
             }
         } catch (error) {
@@ -141,7 +144,6 @@ export default function IncidentsScreen() {
         return timestamp.toLocaleString();
     };
 
-    // Show loading spinner on initial load
     if (loading) {
         return (
             <View style={[styles.container, styles.loadingContainer]}>
@@ -160,9 +162,10 @@ export default function IncidentsScreen() {
                     style={styles.addButton}
                     onPress={() => setModalVisible(true)}
                 >
-                    <IconSymbol name="plus" size={24} color="#FFFFFF" />
+                    <Ionicons name="add" size={24} color="#FFFFFF" />
                 </TouchableOpacity>
             </View>
+
             {/* Filter Buttons */}
             <View style={styles.filterContainer}>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -196,7 +199,12 @@ export default function IncidentsScreen() {
                 }
             >
                 {filteredIncidents.map((incident) => (
-                    <View key={incident.id} style={styles.incidentCard}>
+                    <TouchableOpacity
+                        key={incident.id}
+                        style={styles.incidentCard}
+                        onPress={() => handleIncidentPress(incident)}
+                        activeOpacity={0.7}
+                    >
                         <View style={styles.incidentHeader}>
                             <View style={styles.incidentTitleRow}>
                                 <Text style={styles.incidentTitle}>{incident.title}</Text>
@@ -241,7 +249,6 @@ export default function IncidentsScreen() {
                             )}
                         </View>
 
-                        {/* Additional info from API */}
                         {incident.assignedTo && (
                             <Text style={styles.assignedTo}>
                                 Assigned to: {incident.assignedTo}
@@ -252,7 +259,12 @@ export default function IncidentsScreen() {
                                 AWS Alarm: {incident.awsAlarmName}
                             </Text>
                         )}
-                    </View>
+
+                        {/* Tap indicator */}
+                        <View style={styles.tapIndicator}>
+                            <IconSymbol name="chevron.right" size={16} color="#9CA3AF" />
+                        </View>
+                    </TouchableOpacity>
                 ))}
 
                 {filteredIncidents.length === 0 && !loading && (
@@ -273,18 +285,27 @@ export default function IncidentsScreen() {
             </ScrollView>
 
             {/* Create Incident Modal */}
+            {/* Create Incident Modal */}
             <Modal
                 animationType="slide"
                 transparent={true}
                 visible={modalVisible}
                 onRequestClose={() => setModalVisible(false)}
             >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
+                <TouchableOpacity
+                    style={styles.modalOverlay}
+                    activeOpacity={1}
+                    onPress={() => setModalVisible(false)}
+                >
+                    <TouchableOpacity
+                        style={styles.modalContent}
+                        activeOpacity={1}
+                        onPress={(e) => e.stopPropagation()}
+                    >
                         <View style={styles.modalHeader}>
                             <Text style={styles.modalTitle}>Report New Incident</Text>
                             <TouchableOpacity onPress={() => setModalVisible(false)}>
-                                <IconSymbol name="xmark" size={24} color="#6B7280" />
+                                <Ionicons name="close" size={24} color="#6B7280" />
                             </TouchableOpacity>
                         </View>
 
@@ -359,8 +380,8 @@ export default function IncidentsScreen() {
                                 <Text style={styles.createButtonText}>Create Incident</Text>
                             )}
                         </TouchableOpacity>
-                    </View>
-                </View>
+                    </TouchableOpacity>
+                </TouchableOpacity>
             </Modal>
         </View>
     );
@@ -404,30 +425,6 @@ const styles = StyleSheet.create({
         justifyContent: "center",
         alignItems: "center",
     },
-    statsContainer: {
-        backgroundColor: "#FFFFFF",
-        paddingVertical: 16,
-        paddingHorizontal: 20,
-    },
-    statCard: {
-        alignItems: "center",
-        paddingHorizontal: 20,
-        paddingVertical: 12,
-        borderRadius: 8,
-        marginRight: 12,
-        minWidth: 80,
-    },
-    totalCard: { backgroundColor: "#EFF6FF" },
-    openCard: { backgroundColor: "#FEF2F2" },
-    investigatingCard: { backgroundColor: "#FEF3C7" },
-    resolvedCard: { backgroundColor: "#F0FDF4" },
-    criticalCard: { backgroundColor: "#FEE2E2" },
-    statNumber: {
-        fontSize: 22,
-        fontWeight: "700",
-        color: "#111827",
-        fontFamily: FONT_FAMILY.POPPINS_BOLD,
-    },
     filterContainer: {
         backgroundColor: "#FFFFFF",
         paddingVertical: 12,
@@ -469,6 +466,7 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.1,
         shadowRadius: 4,
         elevation: 2,
+        position: 'relative',
     },
     incidentHeader: {
         marginBottom: 12,
@@ -530,6 +528,7 @@ const styles = StyleSheet.create({
         flexDirection: "row",
         justifyContent: "space-between",
         alignItems: "center",
+        marginBottom: 8,
     },
     reportedBy: {
         fontSize: 11,
@@ -555,6 +554,11 @@ const styles = StyleSheet.create({
         fontSize: 11,
         color: "#6B7280",
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
+    },
+    tapIndicator: {
+        position: 'absolute',
+        right: 16,
+        top: 16,
     },
     emptyState: {
         alignItems: "center",
