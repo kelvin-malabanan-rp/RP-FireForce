@@ -123,10 +123,10 @@ export const usePushNotifications = () => {
     };
 
     const CHANNELS = {
-        critical: 'critical-alerts-v3',
-        high: 'high-priority-v3',
-        medium: 'medium-priority-v3',
-        default: 'default-v3',
+        critical: 'critical-alerts-v4',
+        high: 'high-priority-v4',
+        medium: 'medium-priority-v4',
+        default: 'default-v4',
     } as const;
 
     const createNotificationChannels = async () => {
@@ -139,7 +139,7 @@ export const usePushNotifications = () => {
         await Notifications.setNotificationChannelAsync(CHANNELS.critical, {
             name: 'Critical Alerts',
             importance: Notifications.AndroidImportance.MAX,
-            sound: 'alarm_sound.mp3',
+            sound: 'alarm_sound',
             enableVibrate: true,
             enableLights: true,
             vibrationPattern: [0,500,200,500,200,500],
@@ -147,20 +147,20 @@ export const usePushNotifications = () => {
         await Notifications.setNotificationChannelAsync(CHANNELS.high, {
             name: 'High Priority',
             importance: Notifications.AndroidImportance.HIGH,
-            sound: 'alarm_sound.mp3',
+            sound: 'alarm_sound',
             enableVibrate: true,
             vibrationPattern: [0,250,250,250],
         });
         await Notifications.setNotificationChannelAsync(CHANNELS.medium, {
             name: 'Medium Priority',
             importance: Notifications.AndroidImportance.DEFAULT,
-            sound: 'alarm_sound.mp3',
+            sound: 'alarm_sound',
             enableVibrate: true,
         });
         await Notifications.setNotificationChannelAsync(CHANNELS.default, {
             name: 'Default',
             importance: Notifications.AndroidImportance.DEFAULT,
-            sound: 'alarm_sound.mp3',
+            sound: 'alarm_sound',
             enableVibrate: true,
         });
     };

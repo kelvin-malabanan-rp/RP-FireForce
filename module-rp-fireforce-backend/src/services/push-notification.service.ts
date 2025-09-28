@@ -29,8 +29,9 @@ export class PushNotificationService {
       INSERT OR IGNORE INTO incident_notifications (id, incident_id, token, fcm_token, kind)
       VALUES (?, ?, ?, ?, ?)
     `;
+		const uuid = this.dbService.generateUUID()
 		await this.dbService.db.prepare(sql).bind(
-			`deliv-${this.dbService.generateUUID()?.() ?? Date.now()}`, // fallback if no randomUUID
+			`deliv-${uuid ?? Date.now()}`, // fallback if no randomUUID
 			incidentId,
 			token ?? null,
 			fcmToken ?? null,
