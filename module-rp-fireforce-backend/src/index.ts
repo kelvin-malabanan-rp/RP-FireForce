@@ -1,4 +1,4 @@
-// index.ts
+
 import { Env } from './types';
 import { Router } from './router';
 

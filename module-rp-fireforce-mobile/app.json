@@ -54,7 +54,8 @@
             "./assets/sounds/alarm_sound_ios.wav"
           ]
         }
-      ]
+      ],
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true,

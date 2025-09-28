@@ -16,6 +16,7 @@ import { router } from "expo-router";
 import AlertManager from "./alert-manager";
 import {retrieveUserSession} from "@/constants/local-storage";
 import {UserSession} from "@/types";
+import {FONT_FAMILY} from "@/constants/fonts";
 
 const { width } = Dimensions.get("window");
 const MENU_WIDTH = width * 0.7;
@@ -249,14 +250,16 @@ const styles = StyleSheet.create({
         marginBottom: 10,
     },
     userName: {
-        fontSize: 18,
+        fontSize: 16,
         fontWeight: "600",
         color: "#111827",
         marginBottom: 4,
+        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
     userEmail: {
-        fontSize: 14,
+        fontSize: 13,
         color: "#6b7280",
+        fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     menuItems: {
         flex: 1,
@@ -270,9 +273,10 @@ const styles = StyleSheet.create({
         gap: 15,
     },
     menuText: {
-        fontSize: 16,
+        fontSize: 15,
         color: "#374151",
         fontWeight: "500",
+        fontFamily: FONT_FAMILY.POPPINS_MEDIUM,
     },
     divider: {
         height: 1,
@@ -286,9 +290,10 @@ const styles = StyleSheet.create({
         borderTopColor: "#e5e7eb",
     },
     footerText: {
-        fontSize: 12,
+        fontSize: 11,
         color: "#9ca3af",
         textAlign: "center",
+        fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     // AlertManager modal styles
     alertModalOverlay: {

@@ -2,8 +2,10 @@ import { BASE_URL_DEV } from "@/utils/backend-url";
 import apiManager from "./api-manager";
 import {
     AllIncidents,
-    CreateIncidentData, CreateIncidentResponseApi,
-    Incident, IncidentPayloadApi, IncidentResponseApi,
+    CreateIncidentData,
+    Incident,
+    IncidentPayloadApi,
+    IncidentResponseApi,
     UpdateIncidentData,
     IncidentStatsResponse
 } from "@/types/incident-types";
@@ -23,7 +25,7 @@ export const getAllIncidents = async (): Promise<IncidentResponseApi> => {
 };
 
 // Get incident statistics
-export const getIncidentStats = async (timeframe: string = '24h'): Promise<{ data: IncidentStatsResponse }> => {
+export const getAllIncidentStats = async (timeframe: string): Promise<{ data: IncidentStatsResponse }> => {
   try {
     const response = await apiManager.get<{ data: IncidentStatsResponse }>(
         `${BASE_URL_DEV}/api/incidents/stats?timeframe=${timeframe}`

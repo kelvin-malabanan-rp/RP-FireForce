@@ -8,8 +8,9 @@ import {
     ActivityIndicator,
 } from 'react-native';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { getAllIncidents, getIncidentStats } from '@/api/incident-controller';
+import { getAllIncidents, getAllIncidentStats } from '@/api/incident-controller';
 import { Incident, IncidentStatsResponse } from '@/types/incident-types';
+import {FONT_FAMILY} from "@/constants/fonts";
 
 interface IncidentSummaryProps {
     timeframe?: '24h' | '7d' | '30d';
@@ -34,18 +35,17 @@ const IncidentSummary: React.FC<IncidentSummaryProps> = ({
         setLoading(true);
         setError(null);
         try {
-
             // Fetch both incidents and stats in parallel
             const [incidentsResponse, statsResponse] = await Promise.all([
                 getAllIncidents(),
-                getIncidentStats(selectedTimeframe)
+                getAllIncidentStats(selectedTimeframe) // Actually call the API
             ]);
 
             // Extract incidents - they're directly in data array
             if (incidentsResponse.data && Array.isArray(incidentsResponse.data)) {
                 setIncidents(incidentsResponse.data);
-            } else if (incidentsResponse.data?.incidents) {
-                setIncidents(incidentsResponse.data.incidents);
+            } else if (incidentsResponse.data) {
+                setIncidents(incidentsResponse.data);
             }
 
             // Extract stats
@@ -414,8 +414,9 @@ const styles = StyleSheet.create({
     },
     loadingText: {
         marginTop: 12,
-        fontSize: 14,
+        fontSize: 13,
         color: '#6B7280',
+        fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     errorContainer: {
         backgroundColor: '#FEE2E2',
@@ -428,8 +429,9 @@ const styles = StyleSheet.create({
     },
     errorText: {
         color: '#DC2626',
-        fontSize: 14,
+        fontSize: 13,
         flex: 1,
+        fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     retryButton: {
         backgroundColor: '#DC2626',
@@ -440,8 +442,9 @@ const styles = StyleSheet.create({
     },
     retryText: {
         color: '#FFFFFF',
-        fontSize: 14,
+        fontSize: 13,
         fontWeight: '500',
+        fontFamily: FONT_FAMILY.POPPINS_MEDIUM,
     },
     header: {
         flexDirection: 'row',
@@ -450,14 +453,16 @@ const styles = StyleSheet.create({
         marginBottom: 8,
     },
     title: {
-        fontSize: 20,
+        fontSize: 18,
         fontWeight: '700',
         color: '#111827',
+        fontFamily: FONT_FAMILY.POPPINS_BOLD,
     },
     subtitle: {
-        fontSize: 14,
+        fontSize: 13,
         color: '#6B7280',
         marginBottom: 16,
+        fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     timeframeSelector: {
         flexDirection: 'row',
@@ -474,12 +479,14 @@ const styles = StyleSheet.create({
         backgroundColor: '#3B82F6',
     },
     timeframeText: {
-        fontSize: 12,
+        fontSize: 11,
         fontWeight: '500',
         color: '#6B7280',
+        fontFamily: FONT_FAMILY.POPPINS_MEDIUM,
     },
     timeframeTextActive: {
         color: '#FFFFFF',
+        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
     quickStats: {
         flexDirection: 'row',
@@ -502,16 +509,18 @@ const styles = StyleSheet.create({
     criticalCard: { backgroundColor: '#FEF2F2' },
     openCard: { backgroundColor: '#FEF3C7' },
     statNumber: {
-        fontSize: 24,
+        fontSize: 22,
         fontWeight: '800',
         color: '#111827',
         marginTop: 8,
+        fontFamily: FONT_FAMILY.POPPINS_BOLD,
     },
     statLabel: {
-        fontSize: 12,
+        fontSize: 11,
         color: '#6B7280',
         marginTop: 4,
         fontWeight: '500',
+        fontFamily: FONT_FAMILY.POPPINS_MEDIUM,
     },
     chartContainer: {
         marginBottom: 24,
@@ -520,10 +529,11 @@ const styles = StyleSheet.create({
         padding: 16,
     },
     chartTitle: {
-        fontSize: 18,
+        fontSize: 16,
         fontWeight: '700',
         color: '#111827',
         marginBottom: 16,
+        fontFamily: FONT_FAMILY.POPPINS_BOLD,
     },
     barChart: {
         flexDirection: 'row',
@@ -548,15 +558,17 @@ const styles = StyleSheet.create({
         minHeight: 8,
     },
     barLabel: {
-        fontSize: 11,
+        fontSize: 10,
         fontWeight: '600',
         color: '#6B7280',
         marginBottom: 4,
+        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
     barCount: {
-        fontSize: 14,
+        fontSize: 13,
         fontWeight: '700',
         color: '#111827',
+        fontFamily: FONT_FAMILY.POPPINS_BOLD,
     },
     pieChartContainer: {
         paddingVertical: 8,
@@ -578,13 +590,15 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
     },
     pieLabel: {
-        fontSize: 14,
+        fontSize: 13,
         color: '#374151',
+        fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     pieCount: {
-        fontSize: 14,
+        fontSize: 13,
         fontWeight: '500',
         color: '#111827',
+        fontFamily: FONT_FAMILY.POPPINS_MEDIUM,
     },
     emptyChart: {
         height: 100,
@@ -594,17 +608,19 @@ const styles = StyleSheet.create({
         borderRadius: 8,
     },
     emptyChartText: {
-        fontSize: 14,
+        fontSize: 13,
         color: '#6B7280',
+        fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     recentIncidents: {
         marginTop: 8,
     },
     sectionTitle: {
-        fontSize: 18,
+        fontSize: 16,
         fontWeight: '700',
         color: '#111827',
         marginBottom: 16,
+        fontFamily: FONT_FAMILY.POPPINS_BOLD,
     },
     incidentPreview: {
         padding: 16,
@@ -626,11 +642,12 @@ const styles = StyleSheet.create({
         marginBottom: 8,
     },
     incidentPreviewTitle: {
-        fontSize: 15,
+        fontSize: 14,
         fontWeight: '600',
         color: '#111827',
         flex: 1,
         marginRight: 12,
+        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
     incidentPreviewBadges: {
         flexDirection: 'row',
@@ -648,9 +665,10 @@ const styles = StyleSheet.create({
         borderRadius: 5,
     },
     incidentPreviewTime: {
-        fontSize: 13,
+        fontSize: 12,
         color: '#6B7280',
         fontWeight: '500',
+        fontFamily: FONT_FAMILY.POPPINS_MEDIUM,
     },
     emptyState: {
         alignItems: 'center',
@@ -658,14 +676,16 @@ const styles = StyleSheet.create({
         paddingVertical: 20,
     },
     emptyText: {
-        fontSize: 14,
+        fontSize: 13,
         fontWeight: '500',
         color: '#6B7280',
+        fontFamily: FONT_FAMILY.POPPINS_MEDIUM,
     },
     emptySubtext: {
-        fontSize: 12,
+        fontSize: 11,
         color: '#9CA3AF',
         marginTop: 4,
+        fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
 });
 
