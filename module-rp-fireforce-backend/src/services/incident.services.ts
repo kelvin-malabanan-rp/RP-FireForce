@@ -103,8 +103,11 @@ export class IncidentService {
 
 		// Send push notifications using PushNotificationService instance
 		try {
-			await this.pushService.sendIncidentAlert(incident as Incident);
-			console.log('Push notifications sent for incident:', incident.id);
+			await this.pushService.sendIncidentAlert({
+				...incident,
+				id: result.id
+			} as Incident);
+			console.log('Push notifications sent for incident:', incident);
 		} catch (error) {
 			console.error('Failed to send push notifications:', error);
 			// Don't fail the entire operation if push notifications fail
@@ -112,6 +115,26 @@ export class IncidentService {
 
 		return { action: 'created', incident: incident as Incident };
 	}
+
+	async resolveIncident(incidentId: string, resolvedBy?: string) {
+		if (!this.dbService.db) throw new Error('DB not available');
+
+		const sql = `
+    UPDATE incidents
+    SET status = 'resolved',
+        resolved_by = ?,
+        resolved_at = CURRENT_TIMESTAMP,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `;
+		await this.dbService.db.prepare(sql).bind(resolvedBy ?? null, incidentId).run();
+
+		// Fire all clear after successful resolve
+		await this.pushService.sendAllClear(incidentId);
+
+		return { incidentId, status: 'resolved' };
+	}
+
 
 	private mapAlarmToSeverity(alarm: any): 'low' | 'medium' | 'high' | 'critical' {
 		const alarmName = (alarm.AlarmName || '').toLowerCase();

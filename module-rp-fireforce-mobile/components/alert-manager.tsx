@@ -94,12 +94,12 @@ const AlertManager: React.FC<AlertManagerProps> = ({ style }) => {
 
             // Set up notification channels for Android
             if (Platform.OS === 'android') {
-                await Notifications.setNotificationChannelAsync('critical', {
+                await Notifications.setNotificationChannelAsync('critical-alerts-v4', {
                     name: 'Critical Incidents',
                     importance: Notifications.AndroidImportance.MAX,
                     vibrationPattern: [0, 250, 250, 250],
                     lightColor: '#DC2626',
-                    sound: 'default',
+                    sound: 'alarm_sound.mp3',
                 });
             }
 

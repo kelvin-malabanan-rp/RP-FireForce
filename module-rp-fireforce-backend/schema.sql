@@ -117,4 +117,19 @@ UPDATE incidents
 SET assigned_to = 'user-2'
 WHERE status IN ('open','investigating') AND assigned_to IS NULL;
 
+-- (idempotent)
+CREATE TABLE IF NOT EXISTS incident_notifications (
+													  id            TEXT PRIMARY KEY,
+													  incident_id   TEXT NOT NULL REFERENCES incidents(id),
+	token         TEXT,            -- Expo token used (if any)
+	fcm_token     TEXT,            -- FCM token used (if any)
+	kind          TEXT CHECK(kind IN ('alert','all_clear')) NOT NULL,
+	delivered_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+	UNIQUE(incident_id, token, kind),
+	UNIQUE(incident_id, fcm_token, kind)
+	);
+
+CREATE INDEX IF NOT EXISTS idx_inc_notif_incident_kind
+	ON incident_notifications(incident_id, kind);
+
 COMMIT;

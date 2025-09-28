@@ -17,11 +17,25 @@ export class PushNotificationService {
 	private env: Env;
 	private dbService: DatabaseService;
 	private expoPushUrl = 'https://exp.host/--/api/v2/push/send';
-	private fcmUrl = 'https://fcm.googleapis.com/fcm/send';
 
 	constructor(env: Env) {
 		this.env = env;
 		this.dbService = new DatabaseService(env);
+	}
+
+	private async logDelivery(incidentId: string, kind: 'alert' | 'all_clear', token?: string, fcmToken?: string) {
+		if (!this.dbService.db) return;
+		const sql = `
+      INSERT OR IGNORE INTO incident_notifications (id, incident_id, token, fcm_token, kind)
+      VALUES (?, ?, ?, ?, ?)
+    `;
+		await this.dbService.db.prepare(sql).bind(
+			`deliv-${this.dbService.generateUUID()?.() ?? Date.now()}`, // fallback if no randomUUID
+			incidentId,
+			token ?? null,
+			fcmToken ?? null,
+			kind
+		).run();
 	}
 
 	async sendIncidentAlert(incident: Incident): Promise<void> {
@@ -32,15 +46,20 @@ export class PushNotificationService {
 				return;
 			}
 
-			// Create notification message
 			const message = this.createNotificationMessage(incident);
-
 			let sentCount = 0;
+
 			for (const tokenData of pushTokens) {
 				if (this.shouldSendAlert(incident, tokenData.settings)) {
-					const token = tokenData.fcmToken || tokenData.token;
-					const success = await this.sendPushNotification(token, message);
-					if (success) sentCount++;
+					const tokenUsed = tokenData.fcmToken || tokenData.token;
+					const success = await this.sendPushNotification(tokenUsed, message);
+					if (success) {
+						sentCount++;
+						await this.logDelivery(incident.id, 'alert',
+							tokenUsed.startsWith('ExponentPushToken') ? tokenUsed : undefined,
+							tokenUsed.startsWith('ExponentPushToken') ? undefined : tokenUsed
+						);
+					}
 				}
 			}
 
@@ -50,37 +69,92 @@ export class PushNotificationService {
 		}
 	}
 
+	async sendAllClear(incidentId: string): Promise<void> {
+		if (!this.dbService.db) return;
+
+		// 1) Fetch the incident (title/body context)
+		const incidentRow = await this.dbService.db
+			.prepare('SELECT * FROM incidents WHERE id = ?')
+			.bind(incidentId)
+			.first();
+		if (!incidentRow) {
+			console.warn('[all_clear] incident not found:', incidentId);
+			return;
+		}
+
+		// 2) Find everyone who previously received 'alert' for this incident
+		const { results } = await this.dbService.db
+			.prepare(`SELECT DISTINCT token, fcm_token FROM incident_notifications
+                WHERE incident_id = ? AND kind = 'alert'`)
+			.bind(incidentId)
+			.all();
+
+		const recipients = (results as any[]) || [];
+		if (recipients.length === 0) {
+			console.log('[all_clear] no prior recipients to notify for', incidentId);
+			return;
+		}
+
+		// 3) Build an all-clear message (gentle sound/channel)
+		const message: Omit<PushMessage, 'to'> = {
+			title: `ALL CLEAR: ${incidentRow.title ?? 'Incident resolved'}`,
+			body: 'The incident has been resolved. Thanks for jumping in!',
+			data: {
+				type: 'all_clear',
+				incidentId,
+				resolved_at: new Date().toISOString(),
+			},
+			// Use default sound / a light channel
+			priority: 'normal',
+			sound: 'default',            // Expo: still default; FCM: default or your chime
+			channelId: 'default-v4',     // keep it non-intrusive
+			// no categoryId; no actions here
+		};
+
+		// 4) Send, then log as 'all_clear'
+		let sent = 0;
+		for (const r of recipients) {
+			const tokenUsed = r.fcm_token || r.token;
+			if (!tokenUsed) continue;
+
+			const ok = await this.sendPushNotification(tokenUsed, message);
+			if (ok) {
+				sent++;
+				await this.logDelivery(incidentId, 'all_clear',
+					tokenUsed.startsWith('ExponentPushToken') ? tokenUsed : undefined,
+					tokenUsed.startsWith('ExponentPushToken') ? undefined : tokenUsed
+				);
+			}
+		}
+
+		console.log(`[all_clear] sent to ${sent}/${recipients.length} recipients`, { incidentId });
+	}
+
 	private createNotificationMessage(incident: Incident): Omit<PushMessage, 'to'> {
 		const severityConfig = {
 			critical: {
-				channelId: 'critical-alerts-v3',
-				sound: 'alarm_sound',
+				channelId: 'critical-alerts-v4',
+				sound: 'alarm_sound.mp3',
 				priority: 'high' as const,
 			},
 			high: {
-				channelId: 'high-priority-v3',
-				sound: 'alarm_sound',
+				channelId: 'high-priority-v4',
+				sound: 'alarm_sound.mp3', // Changed to use same sound
 				priority: 'high' as const,
 			},
 			medium: {
-				channelId: 'medium-priority-v3',
-				sound: 'alarm_sound',
+				channelId: 'medium-priority-v4',
+				sound: 'alarm_sound.mp3', // Changed to use same sound
 				priority: 'normal' as const,
 			},
 			low: {
-				channelId: 'default-v3',
-				sound: 'default',
+				channelId: 'default-v4',
+				sound: 'alarm_sound.mp3', // Changed to use same sound
 				priority: 'normal' as const,
 			},
 		};
 
 		const config = severityConfig[incident.severity] || severityConfig.low;
-
-		// 👇 Add categoryId only for actionable incidents
-		const categoryId =
-			incident.severity === 'critical' || incident.severity === 'high'
-				? 'incident-actions'
-				: undefined;
 
 		return {
 			title: `${incident.severity.toUpperCase()}: ${incident.title}`,
@@ -95,7 +169,6 @@ export class PushNotificationService {
 			priority: config.priority,
 			sound: config.sound,
 			channelId: config.channelId,
-			categoryId, // 👈 attach actions
 		};
 	}
 
@@ -151,55 +224,191 @@ export class PushNotificationService {
 	}
 
 	private async sendFCMNotification(fcmToken: string, message: Omit<PushMessage, 'to'>): Promise<boolean> {
-		if (!this.env.FCM_SERVER_KEY) {
-			console.error('FCM_SERVER_KEY not configured');
-			return false;
-		}
-
 		try {
+			const accessToken = await this.getFirebaseAccessToken();
+
+			if (!accessToken) {
+				console.error('Failed to get Firebase access token');
+				return false;
+			}
+
 			const payload = {
-				to: fcmToken,
-				notification: {
-					title: message.title,
-					body: message.body,
-					sound: message.sound || 'default',
-					android_channel_id: message.channelId,
-				},
-				data: {
-					...message.data,
-					categoryId: message.categoryId, // 👈 pass to client
-				},
-				priority: 'high',
-				android: {
+				message: {
+					token: fcmToken,
 					notification: {
-						sound: message.sound || 'default',
-						channel_id: message.channelId,
-						priority: message.priority === 'high' ? 'high' : 'normal',
+						title: message.title,
+						body: message.body,
 					},
-				},
+					data: {
+						...message.data,
+						categoryId: message.categoryId || '',
+					},
+					android: {
+						notification: {
+							sound: message.sound || 'default',
+							channel_id: message.channelId,
+							// Remove priority from here - it's not valid in FCM v1
+						},
+						priority: message.priority === 'high' ? 'high' : 'normal', // Move priority here
+					},
+				}
 			};
 
-			const response = await fetch(this.fcmUrl, {
+			const fcmV1Url = `https://fcm.googleapis.com/v1/projects/${this.env.FIREBASE_PROJECT_ID}/messages:send`;
+
+			const response = await fetch(fcmV1Url, {
 				method: 'POST',
 				headers: {
-					Authorization: `key=${this.env.FCM_SERVER_KEY}`,
+					'Authorization': `Bearer ${accessToken}`,
 					'Content-Type': 'application/json',
 				},
 				body: JSON.stringify(payload),
 			});
 
 			if (!response.ok) {
-				console.error('FCM notification failed:', response.status, await response.text());
+				console.error('FCM v1 notification failed:', response.status, await response.text());
 				return false;
 			}
 
 			const result = await response.json();
-			console.log('FCM notification sent:', result);
+			console.log('FCM v1 notification sent:', result);
 			return true;
 		} catch (error) {
-			console.error('Error sending FCM notification:', error);
+			console.error('Error sending FCM v1 notification:', error);
 			return false;
 		}
+	}
+
+	private async getFirebaseAccessToken(): Promise<string | null> {
+		try {
+			console.log('Available env vars:', Object.keys(this.env));
+			console.log('FIREBASE_PROJECT_ID:', this.env.FIREBASE_PROJECT_ID);
+			console.log('FIREBASE_CLIENT_EMAIL:', this.env.FIREBASE_CLIENT_EMAIL);
+			console.log('FIREBASE_PRIVATE_KEY exists:', !!this.env.FIREBASE_PRIVATE_KEY);
+
+			if (!this.env.FIREBASE_PROJECT_ID || !this.env.FIREBASE_CLIENT_EMAIL || !this.env.FIREBASE_PRIVATE_KEY) {
+				console.log('Firebase credentials not configured, skipping FCM');
+				return null;
+			}
+
+			const serviceAccount = {
+				type: "service_account",
+				project_id: this.env.FIREBASE_PROJECT_ID,
+				client_email: this.env.FIREBASE_CLIENT_EMAIL,
+				private_key: this.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+			};
+
+			// Create JWT for Firebase
+			const jwt = await this.createJWT(serviceAccount);
+
+			// Exchange JWT for access token
+			const response = await fetch('https://oauth2.googleapis.com/token', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/x-www-form-urlencoded',
+				},
+				body: new URLSearchParams({
+					grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+					assertion: jwt,
+				}),
+			});
+
+			if (!response.ok) {
+				const error = await response.text();
+				console.error('Failed to get Firebase access token:', error);
+				return null;
+			}
+
+			const data = await response.json();
+			console.log('getFirebaseAccessToken data:', data);
+			return data.access_token;
+		} catch (error) {
+			console.error('Error getting Firebase access token:', error);
+			return null;
+		}
+	}
+
+	private async createJWT(serviceAccount: any): Promise<string> {
+		const header = {
+			alg: 'RS256',
+			typ: 'JWT'
+		};
+
+		const now = Math.floor(Date.now() / 1000);
+		const payload = {
+			iss: serviceAccount.client_email,
+			scope: 'https://www.googleapis.com/auth/firebase.messaging',
+			aud: 'https://oauth2.googleapis.com/token',
+			exp: now + 3600,
+			iat: now
+		};
+
+		// Base64URL encode header and payload
+		const encodedHeader = this.base64URLEncode(JSON.stringify(header));
+		const encodedPayload = this.base64URLEncode(JSON.stringify(payload));
+
+		// Create signing input
+		const signingInput = `${encodedHeader}.${encodedPayload}`;
+
+		// Import private key
+		const privateKey = await this.importPrivateKey(serviceAccount.private_key);
+
+		// Sign with WebCrypto
+		const signature = await crypto.subtle.sign(
+			'RSASSA-PKCS1-v1_5',
+			privateKey,
+			new TextEncoder().encode(signingInput)
+		);
+
+		// Base64URL encode signature
+		const encodedSignature = this.base64URLEncode(signature);
+
+		return `${signingInput}.${encodedSignature}`;
+	}
+
+	private async importPrivateKey(privateKeyPem: string): Promise<CryptoKey> {
+		// Remove PEM header/footer and newlines
+		const pemContents = privateKeyPem
+			.replace('-----BEGIN PRIVATE KEY-----', '')
+			.replace('-----END PRIVATE KEY-----', '')
+			.replace(/\s/g, '');
+
+		// Convert base64 to ArrayBuffer
+		const binaryString = atob(pemContents);
+		const bytes = new Uint8Array(binaryString.length);
+		for (let i = 0; i < binaryString.length; i++) {
+			bytes[i] = binaryString.charCodeAt(i);
+		}
+
+		// Import the key
+		return await crypto.subtle.importKey(
+			'pkcs8',
+			bytes.buffer,
+			{
+				name: 'RSASSA-PKCS1-v1_5',
+				hash: 'SHA-256',
+			},
+			false,
+			['sign']
+		);
+	}
+
+	private base64URLEncode(data: string | ArrayBuffer): string {
+		let base64: string;
+
+		if (typeof data === 'string') {
+			base64 = btoa(data);
+		} else {
+			const bytes = new Uint8Array(data);
+			const binaryString = Array.from(bytes, byte => String.fromCharCode(byte)).join('');
+			base64 = btoa(binaryString);
+		}
+
+		// Convert base64 to base64URL
+		return base64
+			.replace(/\+/g, '-')
+			.replace(/\//g, '_')
+			.replace(/=/g, '');
 	}
 
 	async registerPushToken(
@@ -265,17 +474,17 @@ export class PushNotificationService {
 
 	async sendTestAlert(token: string, alertType: 'critical' | 'high' | 'medium' | 'low' | 'default' = 'high'): Promise<boolean> {
 		const config = {
-			channelId: 'default-v3',
+			channelId: 'default-v4',
 			sound: 'default',
 		};
 		if (alertType === 'critical') {
-			config.channelId = 'critical-alerts-v3';
+			config.channelId = 'critical-alerts-v4';
 			config.sound = 'alarm_sound';
 		} else if (alertType === 'high') {
-			config.channelId = 'high-priority-v3';
+			config.channelId = 'high-priority-v4';
 			config.sound = 'alarm_sound';
 		} else if (alertType === 'medium') {
-			config.channelId = 'medium-priority-v3';
+			config.channelId = 'medium-priority-v4';
 			config.sound = 'alarm_sound';
 		}
 

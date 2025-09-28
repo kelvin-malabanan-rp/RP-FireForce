@@ -20,10 +20,12 @@ export const usePushNotifications = () => {
     useEffect(() => {
         const sub = Notifications.addNotificationResponseReceivedListener((response) => {
             const data = response.notification.request.content.data as any;
-
-            if (data?.incidentId) {
-                // 👇 This triggers app/incident/[id].tsx
-                router.push(`/incident/${data.incidentId}`);
+            console.log('usePushNotification data:', data);
+            if (data?.data?.incidentId) {
+                router.push({
+                    pathname: "/inner-incident-page",
+                    params: { incidentId: data.data.incidentId }
+                });
             }
         });
 
@@ -51,7 +53,10 @@ export const usePushNotifications = () => {
             } else {
                 // Default tap → navigate inside app
                 if (data.incidentId) {
-                    router.push(`/incident/${incidentId}`);
+                    router.push({
+                        pathname: "/inner-incident-page",
+                        params: { incidentId: data.incidentId }
+                    });
                 }
             }
         });
@@ -134,7 +139,7 @@ export const usePushNotifications = () => {
         await Notifications.setNotificationChannelAsync(CHANNELS.critical, {
             name: 'Critical Alerts',
             importance: Notifications.AndroidImportance.MAX,
-            sound: 'alarm_sound',
+            sound: 'alarm_sound.mp3',
             enableVibrate: true,
             enableLights: true,
             vibrationPattern: [0,500,200,500,200,500],
@@ -142,20 +147,20 @@ export const usePushNotifications = () => {
         await Notifications.setNotificationChannelAsync(CHANNELS.high, {
             name: 'High Priority',
             importance: Notifications.AndroidImportance.HIGH,
-            sound: 'alarm_sound',
+            sound: 'alarm_sound.mp3',
             enableVibrate: true,
             vibrationPattern: [0,250,250,250],
         });
         await Notifications.setNotificationChannelAsync(CHANNELS.medium, {
             name: 'Medium Priority',
             importance: Notifications.AndroidImportance.DEFAULT,
-            sound: 'alarm_sound',
+            sound: 'alarm_sound.mp3',
             enableVibrate: true,
         });
         await Notifications.setNotificationChannelAsync(CHANNELS.default, {
             name: 'Default',
             importance: Notifications.AndroidImportance.DEFAULT,
-            sound: 'alarm_sound',
+            sound: 'alarm_sound.mp3',
             enableVibrate: true,
         });
     };
@@ -181,7 +186,10 @@ export const usePushNotifications = () => {
 
             const platformTok = await Notifications.getDevicePushTokenAsync();
             console.log('[push] platform token:', platformTok.type, (platformTok as any).data?.slice?.(0, 32) + '...');
-            if (Platform.OS === 'android' && platformTok.type === 'fcm') {
+            console.log('[push] Platform.OS:', Platform.OS);
+            console.log('[push] platformTok.type:', platformTok.type);
+            if (Platform.OS === 'android' && platformTok.type === 'android') {
+                console.log('[push] fcm token:', (platformTok as any).data);
                 setFcmToken((platformTok as any).data);
             }
 
