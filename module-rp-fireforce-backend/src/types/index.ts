@@ -135,3 +135,37 @@ export interface IncidentCommentResponse {
 	createdAt: Date;
 }
 
+export interface OnCallUser {
+	id: string;
+	email: string;
+	firstName: string;
+	lastName: string;
+	phoneNumber?: string;
+	role: 'primary' | 'backup' | 'escalation';
+}
+
+export interface OnCallTeam {
+	id: string;
+	name: string;
+	timezone: string;
+	members: OnCallUser[];
+}
+
+export interface OnCallSchedule {
+	id: string;
+	teamId: string;
+	name: string;
+	rotationType: 'daily' | 'weekly' | 'biweekly' | 'monthly';
+	rotationStart: Date;
+	rotationLengthHours: number;
+}
+
+export interface CurrentOnCall {
+	primary?: OnCallUser;
+	backup?: OnCallUser;
+	escalation?: OnCallUser[];
+	scheduleId: string;
+	teamId: string;
+	startTime: Date;
+	endTime: Date;
+}

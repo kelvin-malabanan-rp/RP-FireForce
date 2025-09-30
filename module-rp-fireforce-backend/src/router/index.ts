@@ -14,6 +14,12 @@ import { handleWebhook } from "../handlers/webook.handlers";
 import {handleLogin, handleLogout} from "../handlers/auth.handlers";
 import {handleRegisterPushToken, handleSendTestAlert} from "../handlers/push-notification.handlers";
 import {handleFetchIncidentComment} from "../handlers/incident-comment.handlers";
+import {
+	handleCreateOverride, handleEscalateIncident,
+	handleGetCurrentOnCall,
+	handleGetOnCallSchedule,
+	handleGetOnCallTeams
+} from "../handlers/oncall.handler";
 
 export class Router {
 	private env: Env;
@@ -99,6 +105,27 @@ export class Router {
 			// Get specific incident by ID
 			if (path === '/api/incidents-comment' && method === 'GET') {
 				return handleFetchIncidentComment(request, this.env, CORS_HEADERS);
+			}
+
+			// OnCall Routes
+			if (path === '/api/oncall/current' && method === 'GET') {
+				return handleGetCurrentOnCall(url, this.env, CORS_HEADERS);
+			}
+
+			if (path === '/api/oncall/schedule' && method === 'GET') {
+				return handleGetOnCallSchedule(url, this.env, CORS_HEADERS);
+			}
+
+			if (path === '/api/oncall/teams' && method === 'GET') {
+				return handleGetOnCallTeams(this.env, CORS_HEADERS);
+			}
+
+			if (path === '/api/oncall/override' && method === 'POST') {
+				return handleCreateOverride(request, this.env, CORS_HEADERS);
+			}
+
+			if (path === '/api/oncall/escalate' && method === 'POST') {
+				return handleEscalateIncident(request, this.env, CORS_HEADERS);
 			}
 
 			// 404 Not Found

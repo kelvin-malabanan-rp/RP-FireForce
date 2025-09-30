@@ -45,6 +45,28 @@ export default function TabLayout() {
                     }}
                 />
                 <Tabs.Screen
+                    name="oncall"
+                    options={{
+                        title: "On-Call",
+                        headerTitle: "On-Call Schedule",
+                        tabBarIcon: ({ color }) => (
+                            Platform.OS === 'ios' ? (
+                                <IconSymbol
+                                    size={28}
+                                    name="phone.circle.fill"
+                                    color={color}
+                                />
+                            ) : (
+                                <Ionicons
+                                    size={24}
+                                    name="call"
+                                    color={color}
+                                />
+                            )
+                        ),
+                    }}
+                />
+                <Tabs.Screen
                     name="incidents"
                     options={{
                         title: "Incidents",
