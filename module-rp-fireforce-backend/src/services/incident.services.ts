@@ -1,7 +1,7 @@
 // services/incident.services.ts
 import {
 	CreateIncidentTypes, Env, Incident, IncidentCommentPayload,
-	IncidentCommentResponse, IncidentFilters, IncidentStats
+	IncidentCommentResponse, IncidentFilters, IncidentStats, IncidentStatus,
 } from '../types';
 import {DatabaseService} from './database.service';
 import {PushNotificationService} from './push-notification.service';
@@ -271,5 +271,9 @@ export class IncidentService {
 
 	async fetchIncidentComments(incidentId: string): Promise<IncidentCommentResponse[]> {
 		return await this.dbService.getIncidentComments(incidentId);
+	}
+
+	async changeIncidentStatus(id: string, status: string): Promise<IncidentStatus> {
+		return await this.dbService.updateSpecificIncidentStatus(id, status);
 	}
 }

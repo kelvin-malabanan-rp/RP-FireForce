@@ -12,7 +12,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { getIncidentById, postIncidentComment, getAllIncidentComments } from '@/api/incident-controller';
+import {
+    getIncidentById,
+    postIncidentComment,
+    getAllIncidentComments,
+    updateIncidentStatus
+} from '@/api/incident-controller';
 import { getSeverityColor, getStatusColor } from '@/constants/colors';
 import {
     IncidentUI,
@@ -121,27 +126,41 @@ export default function InnerIncidentPage() {
     const handleAccept = async () => {
         if (!incident) return;
 
+        // Different alert based on incident status
+        const isInvestigating = incident.status === "investigating";
+
         Alert.alert(
-            "Accept Incident",
-            "Are you sure you want to accept this incident?",
+            isInvestigating ? "Resolve Incident" : "Accept Incident",
+            isInvestigating
+                ? "Are you sure this incident is already resolved?"
+                : "Are you sure you want to accept this incident?",
             [
                 { text: "Cancel", style: "cancel" },
                 {
-                    text: "Accept",
+                    text: isInvestigating ? "Resolve" : "Accept",
                     style: "default",
                     onPress: async () => {
                         setProcessingAction(true);
                         try {
-                            // TODO: Call your accept incident API here
-                            // await acceptIncident(incident.id);
+                            const payload = {
+                                incidentId: incidentId,
+                                newStatus: isInvestigating ? "resolved" : "investigating"
+                            };
 
-                            // For now, just show success message
-                            Alert.alert("Success", "Incident accepted successfully");
+                            // Call your update incident status API
+                            await updateIncidentStatus(payload);
 
-                            // Update local state
-                            setIncident(prev => prev ? { ...prev, status: 'investigating' } : null);
+                            if (isInvestigating) {
+                                Alert.alert("Success", "Incident resolved successfully");
+                                // Update status to resolved
+                                setIncident(prev => prev ? { ...prev, status: 'resolved' } : null);
+                            } else {
+                                Alert.alert("Success", "Incident accepted successfully. Now Investigating");
+                                // Update status to investigating
+                                setIncident(prev => prev ? { ...prev, status: 'investigating' } : null);
+                            }
                         } catch (error) {
-                            Alert.alert("Error", "Failed to accept incident");
+                            Alert.alert("Error", `Failed to ${isInvestigating ? 'resolve' : 'accept'} incident`);
                         } finally {
                             setProcessingAction(false);
                         }
@@ -150,7 +169,6 @@ export default function InnerIncidentPage() {
             ]
         );
     };
-
     // Handle ignore action
     const handleIgnore = async () => {
         if (!incident) return;
@@ -394,6 +412,25 @@ export default function InnerIncidentPage() {
                         </TouchableOpacity>
                     </View>
                 )}
+                {/* Action Buttons */}
+                {incident.status === 'investigating' && (
+                    <View style={styles.actionButtonsContainer}>
+                        <TouchableOpacity
+                            style={[styles.actionButton, styles.acceptButton]}
+                            onPress={handleAccept}
+                            disabled={processingAction}
+                        >
+                            {processingAction ? (
+                                <ActivityIndicator color="#FFFFFF" size="small" />
+                            ) : (
+                                <>
+                                    <IconSymbol name="checkmark" size={20} color="#FFFFFF" />
+                                    <Text style={styles.actionButtonText}>Mark as Resolved</Text>
+                                </>
+                            )}
+                        </TouchableOpacity>
+                    </View>
+                )}
 
                 {/* Comments Display Section */}
                 {comments.length > 0 && (
@@ -405,15 +442,18 @@ export default function InnerIncidentPage() {
                             comments.map((commentItem) => (
                                 <View key={commentItem.id} style={styles.commentItem}>
                                     <View style={styles.commentHeader}>
-                                        <Text style={styles.commentAuthor}>{commentItem.userId}</Text>
-                                        <Text style={styles.commentTime}>
-                                            {new Date(commentItem.createdAt).toLocaleString([], {
-                                                month: 'short',
-                                                day: 'numeric',
-                                                hour: '2-digit',
-                                                minute: '2-digit',
-                                            })}
-                                        </Text>
+                                        <View>
+                                            <Text style={styles.commentAuthor}>{commentItem.userFullname}</Text>
+                                            <Text style={styles.commentAuthorEmail}>{commentItem.userEmail}</Text>
+                                        </View>
+                                            <Text style={styles.commentTime}>
+                                                {new Date(commentItem.createdAt).toLocaleString([], {
+                                                    month: 'short',
+                                                    day: 'numeric',
+                                                    hour: '2-digit',
+                                                    minute: '2-digit',
+                                                })}
+                                            </Text>
                                     </View>
                                     <Text style={styles.commentText}>{commentItem.comment}</Text>
                                 </View>
@@ -664,7 +704,14 @@ const styles = StyleSheet.create({
         color: '#3B82F6',
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
+    commentAuthorEmail: {
+        fontSize: 10,
+        fontWeight: '600',
+        color: '#525050',
+        fontFamily: FONT_FAMILY.POPPINS_REGULAR,
+    },
     commentTime: {
+        marginTop: -15,
         fontSize: 11,
         color: '#6B7280',
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,

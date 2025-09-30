@@ -6,7 +6,7 @@ import {
 	Incident,
 	IncidentCommentPayload, IncidentCommentResponse,
 	IncidentFilters,
-	IncidentStats
+	IncidentStats, IncidentStatus
 } from '../types';
 import {IncidentService} from "../services/incident.services";
 
@@ -476,6 +476,100 @@ export async function handlePostIncidentComment(
 		const errorResponse: ApiResponse<null> = {
 			httpStatus: "ERROR",
 			message: "Failed to post comment",
+			data: null
+		};
+
+		return new Response(JSON.stringify(errorResponse), {
+			status: 500,
+			headers: {
+				...corsHeaders,
+				'Content-Type': 'application/json'
+			}
+		});
+	}
+}
+
+// UPDATE Incident Status
+export async function handleUpdateIncidentStatus(
+	request: Request,
+	env: Env,
+	corsHeaders: Record<string, string>
+): Promise<Response> {
+	try {
+		const {incidentId, newStatus} = (await request.json()) as {
+			incidentId: string;
+			newStatus: string;
+		};
+
+		if (!incidentId || !newStatus) {
+			const errorResponse: ApiResponse<null> = {
+				httpStatus: "ERROR",
+				message: "incidentId and newStatus are required",
+				data: null
+			};
+			return new Response(JSON.stringify(errorResponse), {
+				status: 400,
+				headers: {
+					...corsHeaders,
+					'Content-Type': 'application/json'
+				}
+			});
+		}
+
+		const incidentService = new IncidentService(env);
+
+		const result = await incidentService.changeIncidentStatus(incidentId, newStatus);
+
+		const successResponse: ApiResponse<IncidentStatus> = {
+			httpStatus: "OK",
+			message: "Incident status updated successfully",
+			data: result
+		};
+
+		return new Response(JSON.stringify(successResponse), {
+			status: 200, // Changed from 201 to 200 for updates
+			headers: {
+				...corsHeaders,
+				'Content-Type': 'application/json'
+			}
+		});
+
+	} catch (err) {
+		console.error("Error updating incident status:", err);
+
+		if (err instanceof Error && err.message.includes('not found')) {
+			const notFoundResponse: ApiResponse<null> = {
+				httpStatus: "ERROR",
+				message: "Incident not found",
+				data: null
+			};
+			return new Response(JSON.stringify(notFoundResponse), {
+				status: 404,
+				headers: {
+					...corsHeaders,
+					'Content-Type': 'application/json'
+				}
+			});
+		}
+
+		if (err instanceof Error && err.message.includes('Database connection')) {
+			const errorResponse: ApiResponse<null> = {
+				httpStatus: "ERROR",
+				message: 'Database service unavailable',
+				data: null
+			};
+			return new Response(JSON.stringify(errorResponse), {
+				status: 503,
+				headers: {
+					...corsHeaders,
+					'Content-Type': 'application/json'
+				}
+			});
+		}
+
+		const errorResponse: ApiResponse<null> = {
+			httpStatus: "ERROR",
+			message: "Failed to update incident status",
 			data: null
 		};
 

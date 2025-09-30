@@ -1,11 +1,12 @@
 import { BASE_URL_DEV } from "@/utils/backend-url";
 import apiManager from "./api-manager";
 import {
-    CreateIncidentData, GetAllIncidentCommentsResponse,
+    CreateIncidentData,
+    GetAllIncidentCommentsResponse,
     IncidentResponseApi,
     IncidentStatsResponse,
     PostIncidentComments,
-    PostIncidentCommentsResponse
+    PostIncidentCommentsResponse, UpdateIncidentStatusResponse
 } from "@/types/incident-types";
 import {GetIncidentsByIdResponse, ResponseCreatedIncident} from "@/types";
 
@@ -99,5 +100,23 @@ export const getAllIncidentComments = async (
         throw error;
     }
 }
+
+export const updateIncidentStatus = async (
+    data: {
+        incidentId: string
+        newStatus: string
+    }
+): Promise<UpdateIncidentStatusResponse> => {
+    try {
+        const response = await apiManager.put<UpdateIncidentStatusResponse>(
+            `${BASE_URL_DEV}/api/incidents-status`, data
+        );
+        return response.data;
+    } catch (error) {
+        console.error("Error fetching comments:", error);
+        throw error;
+    }
+}
+
 
 

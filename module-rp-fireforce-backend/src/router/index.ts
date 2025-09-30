@@ -8,7 +8,7 @@ import {
 	handleGetStats,
 	handleIncidentResponse, handlePostIncidentComment,
 	handleSelectIncident,
-	handleTestIncident
+	handleTestIncident, handleUpdateIncidentStatus
 } from "../handlers/incident.handlers";
 import { handleWebhook } from "../handlers/webook.handlers";
 import {handleLogin, handleLogout} from "../handlers/auth.handlers";
@@ -105,6 +105,11 @@ export class Router {
 			// Get specific incident by ID
 			if (path === '/api/incidents-comment' && method === 'GET') {
 				return handleFetchIncidentComment(request, this.env, CORS_HEADERS);
+			}
+
+			// Update incident status
+			if (path === '/api/incidents-status' && method === 'PUT') {
+				return handleUpdateIncidentStatus(request, this.env, CORS_HEADERS);
 			}
 
 			// OnCall Routes

@@ -130,9 +130,16 @@ export interface IncidentCommentPayload {
 export interface IncidentCommentResponse {
 	id: string;
 	incidentId: string;
-	userId: string;
+	userEmail: string;
+	userFullname: string | "Full Name Not Found" | null;
 	comment: string;
 	createdAt: Date;
+}
+
+export interface IncidentStatus {
+	id: string;
+	status: string;
+	updatedAt: string | null;
 }
 
 export interface OnCallUser {

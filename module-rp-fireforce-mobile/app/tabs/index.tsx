@@ -115,21 +115,21 @@ export default function HomeScreen() {
             <View style={styles.incidentCard}>
                 <View style={styles.incidentHeader}>
                     <Text style={styles.incidentTitle} numberOfLines={1}>
-                        {incident.title || incident.aws_alarm_name || 'Untitled Incident'}
+                        {incident.title || incident.awsAlarmName || 'Untitled Incident'}
                     </Text>
                     <View style={[styles.severityBadge, { backgroundColor: severityColors[incident.severity] }]}>
                         <Text style={styles.severityText}>{incident.severity.toUpperCase()}</Text>
                     </View>
                 </View>
                 <Text style={styles.incidentDescription} numberOfLines={2}>
-                    {incident.description || incident.state_reason || 'No description available'}
+                    {incident.description || incident.stateReason || 'No description available'}
                 </Text>
                 <View style={styles.incidentFooter}>
                     <Text style={styles.incidentLocation}>
                         {incident.location || 'Unknown Location'}
                     </Text>
                     <Text style={styles.incidentTime}>
-                        {new Date(incident.timestamp || incident.created_at).toLocaleTimeString()}
+                        {new Date(incident.timestamp || incident.createdAt).toLocaleTimeString()}
                     </Text>
                 </View>
             </View>
@@ -138,11 +138,11 @@ export default function HomeScreen() {
 
     // Convert incident to alarm format for AlarmCard compatibility
     const incidentToAlarm = (incident: Incident) => ({
-        alarmName: incident.aws_alarm_name || incident.title || 'Untitled Incident',
+        alarmName: incident.awsAlarmName || incident.title || 'Untitled Incident',
         stateValue: incident.status?.toUpperCase() || 'OPEN',
-        stateReason: incident.state_reason || incident.description || 'No description available',
-        stateUpdatedTimestamp: incident.updated_at || incident.created_at || new Date().toISOString(),
-        metricName: incident.metric_name || 'Incident',
+        stateReason: incident.stateReason || incident.description || 'No description available',
+        stateUpdatedTimestamp: incident.updatedAt || incident.createdAt || new Date().toISOString(),
+        metricName: incident.metricName || 'Incident',
         namespace: incident.location || 'General',
         statistic: incident.severity || 'medium',
         threshold: incident.severity || 'medium',
@@ -153,12 +153,12 @@ export default function HomeScreen() {
         dimensions: [],
         // Additional incident-specific fields
         id: incident.id,
-        assigned_to: incident.assigned_to,
-        resolved_at: incident.resolved_at,
-        resolved_by: incident.resolved_by,
-        reported_by: incident.reported_by,
+        assigned_to: incident.assignedTo,
+        resolved_at: incident.resolvedAt,
+        resolved_by: incident.resolvedBy,
+        reported_by: incident.reportedBy,
         timestamp: incident.timestamp,
-        aws_account_id: incident.aws_account_id,
+        aws_account_id: incident.awsAccountId,
         aws_console_url: incident.aws_console_url,
         statusColor: getStatusColor(incident.status),
     });
@@ -262,132 +262,132 @@ export default function HomeScreen() {
                     onTimeframeChange={handleTimeframeChange}
                 />
 
-                {/* Incidents Section */}
-                <ThemedView style={styles.incidentsSection}>
-                    <ThemedText style={styles.sectionTitle}>
-                        Incidents & AWS Alarms
-                    </ThemedText>
+                {/*/!* Incidents Section *!/*/}
+                {/*<ThemedView style={styles.incidentsSection}>*/}
+                {/*    <ThemedText style={styles.sectionTitle}>*/}
+                {/*        Incidents & AWS Alarms*/}
+                {/*    </ThemedText>*/}
 
-                    {error && (
-                        <ThemedView style={styles.errorContainer}>
-                            <ThemedText style={styles.errorText}>
-                                {error}
-                            </ThemedText>
-                        </ThemedView>
-                    )}
+                {/*    {error && (*/}
+                {/*        <ThemedView style={styles.errorContainer}>*/}
+                {/*            <ThemedText style={styles.errorText}>*/}
+                {/*                {error}*/}
+                {/*            </ThemedText>*/}
+                {/*        </ThemedView>*/}
+                {/*    )}*/}
 
-                    {/* Status Tabs */}
-                    <View style={styles.tabContainer}>
-                        {statusTabs.map((tab) => (
-                            <TouchableOpacity
-                                key={tab.key}
-                                style={[
-                                    styles.tab,
-                                    selectedStatusTab === tab.key && styles.activeTab,
-                                    { borderBottomColor: selectedStatusTab === tab.key ? tab.color : 'transparent' }
-                                ]}
-                                onPress={() => handleTabChange(tab.key as any)}
-                            >
-                                <Text
-                                    style={[
-                                        styles.tabText,
-                                        selectedStatusTab === tab.key && styles.activeTabText,
-                                        { color: selectedStatusTab === tab.key ? tab.color : '#6B7280' }
-                                    ]}
-                                >
-                                    {tab.label}
-                                </Text>
-                                <View
-                                    style={[
-                                        styles.badge,
-                                        { backgroundColor: tab.bgColor }
-                                    ]}
-                                >
-                                    <Text style={[styles.badgeText, { color: tab.color }]}>
-                                        {tab.count}
-                                    </Text>
-                                </View>
-                            </TouchableOpacity>
-                        ))}
-                    </View>
+                {/*    /!* Status Tabs *!/*/}
+                {/*    <View style={styles.tabContainer}>*/}
+                {/*        {statusTabs.map((tab) => (*/}
+                {/*            <TouchableOpacity*/}
+                {/*                key={tab.key}*/}
+                {/*                style={[*/}
+                {/*                    styles.tab,*/}
+                {/*                    selectedStatusTab === tab.key && styles.activeTab,*/}
+                {/*                    { borderBottomColor: selectedStatusTab === tab.key ? tab.color : 'transparent' }*/}
+                {/*                ]}*/}
+                {/*                onPress={() => handleTabChange(tab.key as any)}*/}
+                {/*            >*/}
+                {/*                <Text*/}
+                {/*                    style={[*/}
+                {/*                        styles.tabText,*/}
+                {/*                        selectedStatusTab === tab.key && styles.activeTabText,*/}
+                {/*                        { color: selectedStatusTab === tab.key ? tab.color : '#6B7280' }*/}
+                {/*                    ]}*/}
+                {/*                >*/}
+                {/*                    {tab.label}*/}
+                {/*                </Text>*/}
+                {/*                <View*/}
+                {/*                    style={[*/}
+                {/*                        styles.badge,*/}
+                {/*                        { backgroundColor: tab.bgColor }*/}
+                {/*                    ]}*/}
+                {/*                >*/}
+                {/*                    <Text style={[styles.badgeText, { color: tab.color }]}>*/}
+                {/*                        {tab.count}*/}
+                {/*                    </Text>*/}
+                {/*                </View>*/}
+                {/*            </TouchableOpacity>*/}
+                {/*        ))}*/}
+                {/*    </View>*/}
 
-                    {/* Incident Cards */}
-                    <View style={styles.cardsContainer}>
-                        {currentStatusIncidents.map((incident) => {
-                            return (
-                                <View key={incident.id} style={styles.cardWrapper}>
-                                    {/* Temporary: Use custom renderer until AlarmCard is fixed */}
-                                    {renderIncidentCard(incident)}
-                                    {/* <AlarmCard alarm={incidentToAlarm(incident)} /> */}
-                                </View>
-                            );
-                        })}
+                {/*    /!* Incident Cards *!/*/}
+                {/*    <View style={styles.cardsContainer}>*/}
+                {/*        {currentStatusIncidents.map((incident) => {*/}
+                {/*            return (*/}
+                {/*                <View key={incident.id} style={styles.cardWrapper}>*/}
+                {/*                    /!* Temporary: Use custom renderer until AlarmCard is fixed *!/*/}
+                {/*                    {renderIncidentCard(incident)}*/}
+                {/*                    /!* <AlarmCard alarm={incidentToAlarm(incident)} /> *!/*/}
+                {/*                </View>*/}
+                {/*            );*/}
+                {/*        })}*/}
 
-                        {getAllStatusIncidents.length === 0 && (
-                            <ThemedView style={styles.emptyState}>
-                                <ThemedText style={styles.emptyText}>
-                                    No {statusTabs.find(tab => tab.key === selectedStatusTab)?.label.toLowerCase()} incidents
-                                </ThemedText>
-                                <ThemedText style={styles.emptySubtext}>
-                                    {selectedStatusTab === 'open' ? 'All systems operational' :
-                                        selectedStatusTab === 'investigating' ? 'No ongoing investigations' :
-                                            'No recently resolved incidents'}
-                                </ThemedText>
-                            </ThemedView>
-                        )}
+                {/*        {getAllStatusIncidents.length === 0 && (*/}
+                {/*            <ThemedView style={styles.emptyState}>*/}
+                {/*                <ThemedText style={styles.emptyText}>*/}
+                {/*                    No {statusTabs.find(tab => tab.key === selectedStatusTab)?.label.toLowerCase()} incidents*/}
+                {/*                </ThemedText>*/}
+                {/*                <ThemedText style={styles.emptySubtext}>*/}
+                {/*                    {selectedStatusTab === 'open' ? 'All systems operational' :*/}
+                {/*                        selectedStatusTab === 'investigating' ? 'No ongoing investigations' :*/}
+                {/*                            'No recently resolved incidents'}*/}
+                {/*                </ThemedText>*/}
+                {/*            </ThemedView>*/}
+                {/*        )}*/}
 
-                        {/* Pagination Controls */}
-                        {getAllStatusIncidents.length > ITEMS_PER_PAGE && (
-                            <View style={styles.paginationContainer}>
-                                <TouchableOpacity
-                                    style={[
-                                        styles.paginationButton,
-                                        currentPageNum === 0 && styles.paginationButtonDisabled
-                                    ]}
-                                    onPress={() => handlePageChange('prev')}
-                                    disabled={currentPageNum === 0}
-                                >
-                                    <Text style={[
-                                        styles.paginationButtonText,
-                                        currentPageNum === 0 && styles.paginationButtonTextDisabled
-                                    ]}>Previous</Text>
-                                </TouchableOpacity>
+                {/*        /!* Pagination Controls *!/*/}
+                {/*        {getAllStatusIncidents.length > ITEMS_PER_PAGE && (*/}
+                {/*            <View style={styles.paginationContainer}>*/}
+                {/*                <TouchableOpacity*/}
+                {/*                    style={[*/}
+                {/*                        styles.paginationButton,*/}
+                {/*                        currentPageNum === 0 && styles.paginationButtonDisabled*/}
+                {/*                    ]}*/}
+                {/*                    onPress={() => handlePageChange('prev')}*/}
+                {/*                    disabled={currentPageNum === 0}*/}
+                {/*                >*/}
+                {/*                    <Text style={[*/}
+                {/*                        styles.paginationButtonText,*/}
+                {/*                        currentPageNum === 0 && styles.paginationButtonTextDisabled*/}
+                {/*                    ]}>Previous</Text>*/}
+                {/*                </TouchableOpacity>*/}
 
-                                <View style={styles.paginationInfo}>
-                                    <Text style={styles.paginationText}>
-                                        Page {currentPageNum + 1} of {totalPages}
-                                    </Text>
-                                    <Text style={styles.paginationSubtext}>
-                                        {startIndex + 1}-{Math.min(endIndex, getAllStatusIncidents.length)} of {getAllStatusIncidents.length}
-                                    </Text>
-                                </View>
+                {/*                <View style={styles.paginationInfo}>*/}
+                {/*                    <Text style={styles.paginationText}>*/}
+                {/*                        Page {currentPageNum + 1} of {totalPages}*/}
+                {/*                    </Text>*/}
+                {/*                    <Text style={styles.paginationSubtext}>*/}
+                {/*                        {startIndex + 1}-{Math.min(endIndex, getAllStatusIncidents.length)} of {getAllStatusIncidents.length}*/}
+                {/*                    </Text>*/}
+                {/*                </View>*/}
 
-                                <TouchableOpacity
-                                    style={[
-                                        styles.paginationButton,
-                                        currentPageNum >= totalPages - 1 && styles.paginationButtonDisabled
-                                    ]}
-                                    onPress={() => handlePageChange('next')}
-                                    disabled={currentPageNum >= totalPages - 1}
-                                >
-                                    <Text style={[
-                                        styles.paginationButtonText,
-                                        currentPageNum >= totalPages - 1 && styles.paginationButtonTextDisabled
-                                    ]}>Next</Text>
-                                </TouchableOpacity>
-                            </View>
-                        )}
-                    </View>
+                {/*                <TouchableOpacity*/}
+                {/*                    style={[*/}
+                {/*                        styles.paginationButton,*/}
+                {/*                        currentPageNum >= totalPages - 1 && styles.paginationButtonDisabled*/}
+                {/*                    ]}*/}
+                {/*                    onPress={() => handlePageChange('next')}*/}
+                {/*                    disabled={currentPageNum >= totalPages - 1}*/}
+                {/*                >*/}
+                {/*                    <Text style={[*/}
+                {/*                        styles.paginationButtonText,*/}
+                {/*                        currentPageNum >= totalPages - 1 && styles.paginationButtonTextDisabled*/}
+                {/*                    ]}>Next</Text>*/}
+                {/*                </TouchableOpacity>*/}
+                {/*            </View>*/}
+                {/*        )}*/}
+                {/*    </View>*/}
 
-                    {/* Stats Summary */}
-                    {stats && incidents.length > 0 && (
-                        <ThemedView style={styles.statsFooter}>
-                            <ThemedText style={styles.statsText}>
-                                Total incidents in last {timeframe}: {incidents.length}
-                            </ThemedText>
-                        </ThemedView>
-                    )}
-                </ThemedView>
+                {/*    /!* Stats Summary *!/*/}
+                {/*    {stats && incidents.length > 0 && (*/}
+                {/*        <ThemedView style={styles.statsFooter}>*/}
+                {/*            <ThemedText style={styles.statsText}>*/}
+                {/*                Total incidents in last {timeframe}: {incidents.length}*/}
+                {/*            </ThemedText>*/}
+                {/*        </ThemedView>*/}
+                {/*    )}*/}
+                {/*</ThemedView>*/}
             </ScrollView>
         </ThemedView>
     );

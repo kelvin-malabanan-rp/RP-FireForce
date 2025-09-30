@@ -1,5 +1,8 @@
 // services/database.service.ts
-import {Env, Incident, IncidentCommentPayload, IncidentCommentResponse, IncidentFilters, User} from '../types';
+import {
+	Env, Incident, IncidentCommentPayload, IncidentCommentResponse, IncidentFilters,
+	IncidentStatus, User
+} from '../types';
 
 export class DatabaseService {
 	private env: Env;
@@ -284,7 +287,8 @@ export class DatabaseService {
 				return {
 					id: commentId,
 					incidentId: payload.incidentId,
-					userId: payload.userId,
+					userEmail: payload.userId,
+					userFullname: null,
 					comment: payload.comment,
 					createdAt: payload.createdAt
 				};
@@ -300,14 +304,16 @@ export class DatabaseService {
 	async getIncidentComments(incidentId: string): Promise<IncidentCommentResponse[]> {
 		const query = `
 			SELECT
-				id,
-				incident_id as incidentId,
-				user_id as userId,
-				comment,
-				created_at as createdAt
-			FROM incident_comments
-			WHERE incident_id = ?
-			ORDER BY created_at DESC`;
+				ic.id,
+				ic.incident_id as incidentId,
+				u.first_name || ' ' || u.last_name as fullName,
+				u.email as userEmail,
+				ic.comment,
+				ic.created_at as createdAt
+			FROM incident_comments ic
+			LEFT JOIN users u ON u.id = ic.user_id
+			WHERE ic.incident_id = ?
+			ORDER BY ic.created_at DESC`;
 
 		try {
 			if (!this.db) {
@@ -321,12 +327,44 @@ export class DatabaseService {
 			return results.results.map(result => ({
 				id: result.id as string,
 				incidentId: result.incidentId as string,
-				userId: result.userId as string,
+				userEmail: result.userEmail as string,
+				userFullname: result.fullName as string,
 				comment: result.comment as string,
-				createdAt: new Date(result.createdAt as string)
+				createdAt: result.createdAt as Date
 			}));
 		} catch (error) {
 			console.error('Error fetching incident comments:', error);
+			throw error;
+		}
+	}
+
+	async updateSpecificIncidentStatus(incidentId: string, newStatus: string): Promise<IncidentStatus> {
+		const query = `
+			UPDATE incidents
+			SET status = ?, updated_at = CURRENT_TIMESTAMP
+			WHERE id = ?
+				RETURNING id, status, updated_at as updatedAt`;
+
+		try {
+			if (!this.db) {
+				throw new Error('Database connection not available');
+			}
+
+			const result = await this.db.prepare(query)
+				.bind(newStatus, incidentId)
+				.first();
+
+			if (!result) {
+				throw new Error('Incident not found or update failed');
+			}
+
+			return {
+				id: result.id as string,
+				status: result.status as string,
+				updatedAt: result.updatedAt as string
+			};
+		} catch (error) {
+			console.error('Error updating incident status:', error);
 			throw error;
 		}
 	}

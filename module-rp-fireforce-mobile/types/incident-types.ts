@@ -155,14 +155,26 @@ export interface PostIncidentCommentsResponse {
         "createdAt":Date;
     }
 }
+
 export interface GetAllIncidentCommentsResponse {
     "httpStatus": string,
     "message": string,
     "data": {
         "id": string;
         "incidentId": string;
-        "userId": string;
+        "userFullname": string;
+        "userEmail": string;
         "comment": string;
         "createdAt": Date;
+    }[]
+}
+
+export interface UpdateIncidentStatusResponse {
+    "httpStatus": string,
+    "message": string,
+    "data": {
+        "id": string;
+        "status": string;
+        "updatedAt": string;
     }[]
 }
