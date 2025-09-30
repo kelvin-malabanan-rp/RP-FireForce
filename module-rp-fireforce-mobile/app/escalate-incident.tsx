@@ -146,8 +146,9 @@ export default function EscalateIncidentScreen() {
                             <Picker
                                 selectedValue={selectedIncident}
                                 onValueChange={(val) => setSelectedIncident(String(val))}
-                                dropdownIconColor="#111827"
                                 style={styles.picker}
+                                dropdownIconColor="#111827"
+                                mode="dropdown" // 👈 forces dropdown on iOS instead of wheel
                             >
                                 {incidents.map((inc) => (
                                     <Picker.Item
@@ -257,10 +258,19 @@ const styles = StyleSheet.create({
     centerRow: { flexDirection: 'row', alignItems: 'center' },
 
     pickerContainer: {
-        borderWidth: 1, borderColor: '#E5E7EB', backgroundColor: '#FFFFFF',
-        borderRadius: 8, overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+        backgroundColor: '#FFFFFF', // 👈 makes background white
+        borderRadius: 8,
+        overflow: 'hidden',
+        height: 50, // 👈 fixes the "middle of screen" wheel issue on iOS
+        justifyContent: 'center',
     },
-    picker: { height: 48, color: '#111827' },
+    picker: {
+        color: '#111827',
+        backgroundColor: '#FFFFFF', // 👈 force white background
+        width: '100%',
+        height: '100%', },
 
     priorityContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
     priorityButton: {
@@ -280,4 +290,6 @@ const styles = StyleSheet.create({
     },
     submitButtonDisabled: { opacity: 0.6 },
     submitButtonText: { fontSize: 16, fontWeight: '600', color: '#FFFFFF', marginLeft: 8 },
+
 });
+

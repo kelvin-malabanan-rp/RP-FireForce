@@ -97,7 +97,7 @@ export default function OnCallTab() {
     };
 
     const handleManageSchedule = () => {
-        Alert.alert('Schedule', 'Schedule management coming soon');
+        router.push('/manage-schedule?teamId=' + selectedTeamId);
     };
 
     if (loading) {

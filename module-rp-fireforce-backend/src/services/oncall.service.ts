@@ -374,4 +374,125 @@ export class OnCallService {
 			escalationPolicy: policy
 		};
 	}
+
+	// ---------------- NEW: Manage Schedule ----------------
+
+	/**
+	 * Return rotation config + team members for Manage Schedule screen
+	 */
+	async getScheduleConfig(teamId: string): Promise<{
+		teamId: string;
+		schedule: {
+			id: string;
+			rotationType: string;
+			rotationLengthHours: number;
+			rotationStartISO: string;
+		} | null;
+		members: Array<{ userId: string; role: string; orderIndex: number; isActive: boolean }>;
+	}> {
+		// 1) get active schedule
+		const scheduleRow = await this.dbService.db
+			.prepare(
+				`SELECT id, rotation_type, rotation_length_hours, rotation_start
+         FROM oncall_schedules
+         WHERE team_id = ? AND is_active = 1
+         ORDER BY created_at DESC
+         LIMIT 1`
+			)
+			.bind(teamId)
+			.first();
+
+		// 2) get team members
+		const { results: memberRows } = await this.dbService.db
+			.prepare(
+				`SELECT user_id, role, order_index, is_active
+         FROM oncall_team_members
+         WHERE team_id = ?
+         ORDER BY order_index`
+			)
+			.bind(teamId)
+			.all();
+
+		return {
+			teamId,
+			schedule: scheduleRow
+				? {
+					id: (scheduleRow as any).id,
+					rotationType: (scheduleRow as any).rotation_type,
+					rotationLengthHours: (scheduleRow as any).rotation_length_hours,
+					rotationStartISO: (scheduleRow as any).rotation_start,
+				}
+				: null,
+			members: (memberRows as any[]).map((r) => ({
+				userId: r.user_id,
+				role: r.role,
+				orderIndex: r.order_index,
+				isActive: !!r.is_active,
+			})),
+		};
+	}
+
+	/**
+	 * Update schedule rotation + member list
+	 */
+	async updateScheduleConfig(args: {
+		teamId: string;
+		rotationType: 'daily' | 'weekly' | 'biweekly' | 'monthly';
+		rotationLengthHours: number;
+		rotationStartISO: string;
+		members: Array<{ userId: string; role: string; orderIndex: number; isActive: boolean }>;
+	}): Promise<void> {
+		const { teamId, rotationType, rotationLengthHours, rotationStartISO, members } = args;
+
+		// 1) upsert schedule (replace active schedule)
+		const scheduleId = crypto.randomUUID();
+		await this.dbService.db
+			.prepare(
+				`INSERT INTO oncall_schedules
+         (id, team_id, name, rotation_type, rotation_start, rotation_length_hours, is_active, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+			)
+			.bind(
+				scheduleId,
+				teamId,
+				`${rotationType}-rotation-${Date.now()}`,
+				rotationType,
+				rotationStartISO,
+				rotationLengthHours
+			)
+			.run();
+
+		// Optionally deactivate older schedules
+		await this.dbService.db
+			.prepare(`UPDATE oncall_schedules SET is_active = 0 WHERE team_id = ? AND id != ?`)
+			.bind(teamId, scheduleId)
+			.run();
+
+		// 2) replace team members for this team
+		await this.dbService.db
+			.prepare(`DELETE FROM oncall_team_members WHERE team_id = ?`)
+			.bind(teamId)
+			.run();
+
+		for (const m of members) {
+			await this.dbService.db
+				.prepare(
+					`INSERT INTO oncall_team_members
+           (id, team_id, user_id, role, order_index, is_active, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`
+				)
+				.bind(crypto.randomUUID(), teamId, m.userId, m.role, m.orderIndex, m.isActive ? 1 : 0)
+				.run();
+		}
+	}
+
+	/**
+	 * After config updates, regenerate current assignment window
+	 */
+	async refreshCurrentAssignments(teamId: string): Promise<void> {
+		const current = await this.generateCurrentAssignment(teamId);
+		if (!current) {
+			console.warn('No current assignment generated for team', teamId);
+		}
+	}
 }

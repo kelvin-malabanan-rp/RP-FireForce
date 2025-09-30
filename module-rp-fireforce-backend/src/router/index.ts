@@ -18,7 +18,7 @@ import {
 	handleCreateOverride, handleEscalateIncident,
 	handleGetCurrentOnCall,
 	handleGetOnCallSchedule,
-	handleGetOnCallTeams
+	handleGetOnCallTeams, handleGetScheduleConfig, handleUpdateScheduleConfig
 } from "../handlers/oncall.handler";
 
 export class Router {
@@ -126,6 +126,14 @@ export class Router {
 
 			if (path === '/api/oncall/escalate' && method === 'POST') {
 				return handleEscalateIncident(request, this.env, CORS_HEADERS);
+			}
+
+			// router/index.ts (add alongside your other oncall routes)
+			if (path === '/api/oncall/schedule/config' && method === 'GET') {
+				return handleGetScheduleConfig(url, this.env, CORS_HEADERS);
+			}
+			if (path === '/api/oncall/schedule/config' && method === 'PUT') {
+				return handleUpdateScheduleConfig(request, this.env, CORS_HEADERS);
 			}
 
 			// 404 Not Found
