@@ -87,12 +87,13 @@ export class OnCallController {
         teams: OnCallTeam[];
     }> {
         try {
+            console.log('teamId:', teamId);
             const [currentOnCall, scheduleResponse, teams] = await Promise.all([
                 this.getCurrentOnCall(teamId),
                 this.getSchedule(teamId, days),
                 this.getTeams()
             ]);
-
+            console.log('Loaded on-call data:', currentOnCall, scheduleResponse, teams);
             return {
                 currentOnCall,
                 schedule: scheduleResponse.schedule,
@@ -119,6 +120,7 @@ export class OnCallController {
         try {
             const url = `${this.baseUrl}/api/oncall/override`;
             console.log('Creating override at:', url);
+            console.log('params:', params);
             const response = await fetch(url, {
                 method: 'POST',
                 headers: {

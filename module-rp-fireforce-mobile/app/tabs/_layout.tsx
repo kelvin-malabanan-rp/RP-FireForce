@@ -48,7 +48,6 @@ export default function TabLayout() {
                     name="oncall"
                     options={{
                         title: "On-Call",
-                        headerTitle: "On-Call Schedule",
                         tabBarIcon: ({ color }) => (
                             Platform.OS === 'ios' ? (
                                 <IconSymbol

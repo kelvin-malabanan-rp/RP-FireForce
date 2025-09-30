@@ -1,7 +1,7 @@
 // services/oncall.service.ts
-import {Env, OnCallTeam, OnCallUser} from '../types';
+import { Env, OnCallTeam, OnCallUser } from '../types';
 import { DatabaseService } from './database.service';
-import { CurrentOnCall} from '../types/index';
+import { CurrentOnCall } from '../types';
 
 export class OnCallService {
 	private dbService: DatabaseService;
@@ -10,357 +10,368 @@ export class OnCallService {
 		this.dbService = new DatabaseService(env);
 	}
 
+	// ---------- READS ----------
+
 	async getCurrentOnCall(teamId?: string): Promise<CurrentOnCall | null> {
 		try {
 			const now = new Date().toISOString();
+			let sql = `
+				SELECT
+					oa.id, oa.schedule_id, oa.team_id, oa.user_id, oa.role,
+					oa.start_time, oa.end_time,
+					u.email, u.first_name, u.last_name, u.phone_number,
+					t.name as team_name, t.timezone
+				FROM oncall_assignments oa
+						 JOIN users u ON oa.user_id = u.id
+						 JOIN oncall_teams t ON oa.team_id = t.id
+				WHERE oa.is_active = 1
+				  AND oa.start_time <= ?
+				  AND oa.end_time > ?
+			`;
+			const params: any[] = [now, now];
+			if (teamId) { sql += ' AND oa.team_id = ?'; params.push(teamId); }
+			sql += ' ORDER BY oa.team_id, oa.role';
 
-			let query = `
-                SELECT
-                    oa.id, oa.schedule_id, oa.team_id, oa.user_id, oa.role,
-                    oa.start_time, oa.end_time,
-                    u.email, u.first_name, u.last_name, u.phone_number,
-                    t.name as team_name, t.timezone
-                FROM oncall_assignments oa
-                JOIN users u ON oa.user_id = u.id
-                JOIN oncall_teams t ON oa.team_id = t.id
-                WHERE oa.is_active = 1
-                AND oa.start_time <= ?
-                AND oa.end_time > ?
-            `;
-
-			const params = [now, now];
-
-			if (teamId) {
-				query += ' AND oa.team_id = ?';
-				params.push(teamId);
-			}
-
-			query += ' ORDER BY oa.team_id, oa.role';
-			console.log('Query:', query);
-			console.log('params:', params);
-			const { results } = await this.dbService.db.prepare(query).bind(...params).all();
-
-			if (!results || results.length === 0) {
-				return await this.generateCurrentAssignment(teamId);
-			}
-
+			const { results } = await this.dbService.db.prepare(sql).bind(...params).all();
+			if (!results || results.length === 0) return await this.generateCurrentAssignment(teamId);
 			return this.parseOnCallResults(results as any[]);
-		} catch (error) {
-			console.error('Error getting current on-call:', error);
+		} catch (e) {
+			console.error('getCurrentOnCall error:', e);
 			return null;
 		}
 	}
 
-	private parseOnCallResults(results: any[]): CurrentOnCall {
+	private parseOnCallResults(rows: any[]): CurrentOnCall {
 		const assignment: CurrentOnCall = {
-			scheduleId: results[0].schedule_id,
-			teamId: results[0].team_id,
-			startTime: new Date(results[0].start_time),
-			endTime: new Date(results[0].end_time),
+			scheduleId: rows[0].schedule_id,
+			teamId: rows[0].team_id,
+			startTime: new Date(rows[0].start_time),
+			endTime: new Date(rows[0].end_time),
 			escalation: []
 		};
 
-		for (const row of results) {
+		for (const r of rows) {
 			const user: OnCallUser = {
-				id: row.user_id,
-				email: row.email,
-				firstName: row.first_name,
-				lastName: row.last_name,
-				phoneNumber: row.phone_number,
-				role: row.role
+				id: r.user_id,
+				email: r.email,
+				firstName: r.first_name,
+				lastName: r.last_name,
+				phoneNumber: r.phone_number,
+				role: r.role
 			};
-
-			switch (row.role) {
-				case 'primary':
-					assignment.primary = user;
-					break;
-				case 'backup':
-					assignment.backup = user;
-					break;
-				case 'escalation':
-					assignment.escalation?.push(user);
-					break;
-			}
+			if (r.role === 'primary') assignment.primary = user;
+			else if (r.role === 'backup') assignment.backup = user;
+			else if (r.role === 'escalation') assignment.escalation!.push(user);
 		}
-
 		return assignment;
 	}
 
 	async generateCurrentAssignment(teamId?: string): Promise<CurrentOnCall | null> {
-		try {
-			// Get active schedules
-			let query = `
-                SELECT s.*, t.timezone
-                FROM oncall_schedules s
-                JOIN oncall_teams t ON s.team_id = t.id
-                WHERE s.is_active = 1
-            `;
+		let sql = `
+      SELECT s.*, t.timezone
+      FROM oncall_schedules s
+      JOIN oncall_teams t ON s.team_id = t.id
+      WHERE s.is_active = 1
+    `;
+		const params: any[] = [];
+		if (teamId) { sql += ' AND s.team_id = ?'; params.push(teamId); }
 
-			if (teamId) {
-				query += ' AND s.team_id = ?';
-			}
+		const schedules = await this.dbService.db.prepare(sql).bind(...params).all();
+		if (!schedules.results || schedules.results.length === 0) return null;
 
-			const schedules = await this.dbService.db.prepare(query)
-				.bind(...(teamId ? [teamId] : []))
-				.all();
-
-			if (!schedules.results || schedules.results.length === 0) {
-				return null;
-			}
-
-			// Calculate current rotation for first active schedule
-			const schedule = schedules.results[0] as any;
-			return await this.calculateRotation(schedule);
-		} catch (error) {
-			console.error('Error generating assignment:', error);
-			return null;
-		}
+		return this.calculateRotation(schedules.results[0] as any);
 	}
 
 	private async calculateRotation(schedule: any): Promise<CurrentOnCall | null> {
-		try {
-			// Get team members in rotation order
-			const members = await this.getTeamMembers(schedule.team_id);
-			if (members.length === 0) return null;
+		const members = await this.getTeamMembers(schedule.team_id);
+		if (members.length === 0) return null;
 
-			const now = new Date();
-			const rotationStart = new Date(schedule.rotation_start);
-			const rotationHours = schedule.rotation_length_hours;
+		const now = new Date();
+		const rotationStart = new Date(schedule.rotation_start);
+		const hours = schedule.rotation_length_hours as number;
 
-			// Calculate which rotation period we're in
-			const timeSinceStart = now.getTime() - rotationStart.getTime();
-			const rotationNumber = Math.floor(timeSinceStart / (rotationHours * 60 * 60 * 1000));
+		const periods = Math.floor((now.getTime() - rotationStart.getTime()) / (hours * 3600_000));
+		const periodStart = new Date(rotationStart.getTime() + periods * hours * 3600_000);
+		const periodEnd = new Date(periodStart.getTime() + hours * 3600_000);
 
-			// Calculate current assignment period
-			const currentPeriodStart = new Date(rotationStart.getTime() + (rotationNumber * rotationHours * 60 * 60 * 1000));
-			const currentPeriodEnd = new Date(currentPeriodStart.getTime() + (rotationHours * 60 * 60 * 1000));
+		const primaryIndex = periods % members.length;
+		const backupIndex = (periods + 1) % members.length;
 
-			// Select primary on-call user (round-robin)
-			const primaryIndex = rotationNumber % members.length;
-			const backupIndex = (rotationNumber + 1) % members.length;
+		const assignment: CurrentOnCall = {
+			primary: members[primaryIndex],
+			backup: members[backupIndex],
+			escalation: members.filter((_, i) => i !== primaryIndex && i !== backupIndex),
+			scheduleId: schedule.id,
+			teamId: schedule.team_id,
+			startTime: periodStart,
+			endTime: periodEnd
+		};
 
-			const assignment: CurrentOnCall = {
-				primary: members[primaryIndex],
-				backup: members[backupIndex],
-				escalation: members.filter((_, i) => i !== primaryIndex && i !== backupIndex),
-				scheduleId: schedule.id,
-				teamId: schedule.team_id,
-				startTime: currentPeriodStart,
-				endTime: currentPeriodEnd
-			};
-
-			// Save this assignment to database
-			await this.saveAssignment(assignment);
-
-			return assignment;
-		} catch (error) {
-			console.error('Error calculating rotation:', error);
-			return null;
-		}
+		await this.saveAssignment(assignment);
+		return assignment;
 	}
 
 	private async getTeamMembers(teamId: string): Promise<OnCallUser[]> {
-		const query = `
-            SELECT
-                u.id, u.email, u.first_name, u.last_name, u.phone_number,
-                tm.role, tm.order_index
-            FROM oncall_team_members tm
-            JOIN users u ON tm.user_id = u.id
-            WHERE tm.team_id = ? AND tm.is_active = 1
-            ORDER BY tm.order_index, u.first_name
-        `;
-
-		const { results } = await this.dbService.db.prepare(query).bind(teamId).all();
-
-		return (results as any[]).map(row => ({
-			id: row.id,
-			email: row.email,
-			firstName: row.first_name,
-			lastName: row.last_name,
-			phoneNumber: row.phone_number,
-			role: row.role
+		const sql = `
+			SELECT u.id, u.email, u.first_name, u.last_name, u.phone_number,
+				   tm.role, tm.order_index
+			FROM oncall_team_members tm
+					 JOIN users u ON tm.user_id = u.id
+			WHERE tm.team_id = ? AND tm.is_active = 1
+			ORDER BY tm.order_index, u.first_name
+		`;
+		const { results } = await this.dbService.db.prepare(sql).bind(teamId).all();
+		return (results as any[]).map(r => ({
+			id: r.id,
+			email: r.email,
+			firstName: r.first_name,
+			lastName: r.last_name,
+			phoneNumber: r.phone_number,
+			role: r.role
 		}));
 	}
 
-	private async saveAssignment(assignment: CurrentOnCall): Promise<void> {
-		const query = `
-            INSERT OR REPLACE INTO oncall_assignments
-            (id, schedule_id, user_id, team_id, start_time, end_time, role, is_active)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `;
-
-		// Save primary assignment
-		if (assignment.primary) {
-			await this.dbService.db.prepare(query).bind(
-				`assignment-${assignment.scheduleId}-${assignment.primary.id}-${Date.now()}`,
-				assignment.scheduleId,
-				assignment.primary.id,
-				assignment.teamId,
-				assignment.startTime.toISOString(),
-				assignment.endTime.toISOString(),
-				'primary',
-				true
+	private async saveAssignment(a: CurrentOnCall): Promise<void> {
+		const sql = `
+			INSERT OR REPLACE INTO oncall_assignments
+			(id, schedule_id, user_id, team_id, start_time, end_time, role, is_active)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		`;
+		if (a.primary) {
+			await this.dbService.db.prepare(sql).bind(
+				`assignment-${a.scheduleId}-${a.primary.id}-${Date.now()}`,
+				a.scheduleId, a.primary.id, a.teamId,
+				a.startTime.toISOString(), a.endTime.toISOString(),
+				'primary', 1
 			).run();
 		}
-
-		// Save backup assignment
-		if (assignment.backup) {
-			await this.dbService.db.prepare(query).bind(
-				`assignment-${assignment.scheduleId}-${assignment.backup.id}-${Date.now()}`,
-				assignment.scheduleId,
-				assignment.backup.id,
-				assignment.teamId,
-				assignment.startTime.toISOString(),
-				assignment.endTime.toISOString(),
-				'backup',
-				true
+		if (a.backup) {
+			await this.dbService.db.prepare(sql).bind(
+				`assignment-${a.scheduleId}-${a.backup.id}-${Date.now()}`,
+				a.scheduleId, a.backup.id, a.teamId,
+				a.startTime.toISOString(), a.endTime.toISOString(),
+				'backup', 1
 			).run();
 		}
 	}
 
-	async getOnCallSchedule(teamId: string, days: number = 7): Promise<any[]> {
-		const schedule = [];
+	async getOnCallSchedule(teamId: string, days = 7): Promise<any[]> {
+		const out: any[] = [];
 		const now = new Date();
-
 		for (let i = 0; i < days; i++) {
-			const date = new Date(now);
-			date.setDate(date.getDate() + i);
-
-			const dayStart = new Date(date);
-			dayStart.setHours(0, 0, 0, 0);
-
-			const dayEnd = new Date(date);
-			dayEnd.setHours(23, 59, 59, 999);
-
-			const assignment = await this.getOnCallForTimeRange(teamId, dayStart, dayEnd);
-
-			schedule.push({
-				date: date.toISOString().split('T')[0],
-				dayOfWeek: date.toLocaleDateString('en-US', { weekday: 'long' }),
-				assignment
-			});
+			const d = new Date(now); d.setDate(d.getDate() + i);
+			const start = new Date(d); start.setHours(0,0,0,0);
+			const end = new Date(d);   end.setHours(23,59,59,999);
+			const assignment = await this.getOnCallForTimeRange(teamId, start, end);
+			out.push({ date: d.toISOString().slice(0,10), dayOfWeek: d.toLocaleDateString('en-US',{weekday:'long'}), assignment });
 		}
-
-		return schedule;
+		return out;
 	}
 
-	private async getOnCallForTimeRange(teamId: string, startTime: Date, endTime: Date): Promise<CurrentOnCall | null> {
-		const query = `
-            SELECT
-                oa.*, u.email, u.first_name, u.last_name, u.phone_number
-            FROM oncall_assignments oa
-            JOIN users u ON oa.user_id = u.id
-            WHERE oa.team_id = ?
-            AND oa.is_active = 1
-            AND oa.start_time <= ?
-            AND oa.end_time > ?
-            ORDER BY oa.role
-        `;
-
-		const { results } = await this.dbService.db.prepare(query).bind(
-			teamId,
-			endTime.toISOString(),
-			startTime.toISOString()
-		).all();
-
-		if (!results || results.length === 0) {
-			return null;
-		}
-
+	private async getOnCallForTimeRange(teamId: string, start: Date, end: Date): Promise<CurrentOnCall | null> {
+		const sql = `
+			SELECT oa.*, u.email, u.first_name, u.last_name, u.phone_number
+			FROM oncall_assignments oa
+					 JOIN users u ON oa.user_id = u.id
+			WHERE oa.team_id = ?
+			  AND oa.is_active = 1
+			  AND oa.start_time <= ?
+			  AND oa.end_time > ?
+			ORDER BY oa.role
+		`;
+		const { results } = await this.dbService.db.prepare(sql).bind(teamId, end.toISOString(), start.toISOString()).all();
+		if (!results || results.length === 0) return null;
 		return this.parseOnCallResults(results as any[]);
 	}
 
+	// ---------- HELPERS FOR HANDLERS ----------
+
+	/** Find the active assignment (schedule + user) for a window so handlers don't query directly. */
+	async findActiveAssignmentForWindow(
+		teamId: string,
+		role: 'primary' | 'backup',
+		start: Date,
+		end: Date
+	): Promise<{ scheduleId: string; userId: string } | null> {
+		const sql = `
+      SELECT id as schedule_id, user_id
+      FROM oncall_assignments
+      WHERE team_id = ?
+        AND role = ?
+        AND start_time <= ?
+        AND end_time >= ?
+        AND is_active = 1
+      ORDER BY start_time DESC
+      LIMIT 1
+    `;
+		const row = await this.dbService.db
+			.prepare(sql)
+			.bind(teamId, role, start.toISOString(), end.toISOString())
+			.first();
+
+		if (!row) return null;
+		return { scheduleId: (row as any).schedule_id, userId: (row as any).user_id };
+	}
+
 	async createOverride(
-		scheduleId: string,
-		originalUserId: string,
-		replacementUserId: string,
-		startTime: Date,
-		endTime: Date,
+		teamId: string,
+		role: 'primary' | 'backup',
+		scheduleId: string | null,
+		originalUserId: string | null,
+		overrideUserId: string,        // this will go into replacement_user_id
+		start: Date,
+		end: Date,
 		reason: string,
 		createdBy: string
 	): Promise<string> {
-		const overrideId = `override-${Date.now()}`;
+		const id = crypto.randomUUID();
 
-		const query = `
-            INSERT INTO oncall_overrides
-            (id, schedule_id, original_user_id, replacement_user_id, start_time, end_time, reason, created_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `;
-
-		await this.dbService.db.prepare(query).bind(
-			overrideId,
+		// status defaults to 'active' per your schema, but you can pass it explicitly
+		// services/oncall.service.ts (createOverride)
+		await this.dbService.db.prepare(`
+			INSERT INTO oncall_overrides
+			(id, team_id, schedule_id, original_user_id, replacement_user_id,
+			 start_time, end_time, role, reason, status, created_by, created_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, CURRENT_TIMESTAMP)
+		`).bind(
+			id,
+			teamId,
 			scheduleId,
-			originalUserId,
-			replacementUserId,
-			startTime.toISOString(),
-			endTime.toISOString(),
-			reason,
-			createdBy
+			originalUserId ?? null,
+			overrideUserId,               // ✅ replacement_user_id
+			start.toISOString(),
+			end.toISOString(),
+			role,
+			reason ?? '',
+			createdBy ?? 'system'
 		).run();
 
-		console.log('On-call override created:', overrideId);
-		return overrideId;
+
+		return id;
 	}
 
+
 	async getEscalationPolicy(teamId: string): Promise<any> {
-		const query = `
-            SELECT * FROM escalation_policies
-            WHERE team_id = ? AND is_active = 1
-            ORDER BY created_at DESC
-            LIMIT 1
-        `;
-
-		const result = await this.dbService.db.prepare(query).bind(teamId).first();
-
-		if (result) {
-			return {
-				...result,
-				steps: JSON.parse((result as any).steps)
-			};
-		}
-
-		return null;
+		const row = await this.dbService.db
+			.prepare(`SELECT * FROM escalation_policies WHERE team_id = ? AND is_active = 1 ORDER BY created_at DESC LIMIT 1`)
+			.bind(teamId)
+			.first();
+		return row ? { ...(row as any), steps: JSON.parse((row as any).steps) } : null;
 	}
 
 	async getOnCallTeams(): Promise<OnCallTeam[]> {
-		const query = `
-            SELECT
-                t.id, t.name, t.timezone,
-                u.id as user_id, u.email, u.first_name, u.last_name, u.phone_number,
-                tm.role, tm.order_index
-            FROM oncall_teams t
-            LEFT JOIN oncall_team_members tm ON t.id = tm.team_id AND tm.is_active = 1
-            LEFT JOIN users u ON tm.user_id = u.id
-            WHERE t.is_active = 1
-            ORDER BY t.name, tm.order_index
-        `;
+		const sql = `
+      SELECT t.id, t.name, t.timezone,
+             u.id as user_id, u.email, u.first_name, u.last_name, u.phone_number,
+             tm.role, tm.order_index
+      FROM oncall_teams t
+      LEFT JOIN oncall_team_members tm ON t.id = tm.team_id AND tm.is_active = 1
+      LEFT JOIN users u ON tm.user_id = u.id
+      WHERE t.is_active = 1
+      ORDER BY t.name, tm.order_index
+    `;
+		const { results } = await this.dbService.db.prepare(sql).all();
 
-		const { results } = await this.dbService.db.prepare(query).all();
-
-		const teamsMap = new Map<string, OnCallTeam>();
-
-		for (const row of (results as any[])) {
-			if (!teamsMap.has(row.id)) {
-				teamsMap.set(row.id, {
-					id: row.id,
-					name: row.name,
-					timezone: row.timezone,
-					members: []
-				});
-			}
-
-			if (row.user_id) {
-				teamsMap.get(row.id)?.members.push({
-					id: row.user_id,
-					email: row.email,
-					firstName: row.first_name,
-					lastName: row.last_name,
-					phoneNumber: row.phone_number,
-					role: row.role
+		const map = new Map<string, OnCallTeam>();
+		for (const r of (results as any[])) {
+			if (!map.has(r.id)) map.set(r.id, { id: r.id, name: r.name, timezone: r.timezone, members: [] });
+			if (r.user_id) {
+				map.get(r.id)!.members.push({
+					id: r.user_id,
+					email: r.email,
+					firstName: r.first_name,
+					lastName: r.last_name,
+					phoneNumber: r.phone_number,
+					role: r.role
 				});
 			}
 		}
+		return Array.from(map.values());
+	}
 
-		return Array.from(teamsMap.values());
+	// ---------- Escalation encapsulated ----------
+
+	async escalateIncident(args: {
+		teamId: string;
+		incidentId: string;
+		reason: string;
+		priority: 'low' | 'medium' | 'high' | 'critical';
+		currentLevel: number;
+	}) {
+		const now = new Date().toISOString();
+
+		// 1) next escalation target
+		let target = await this.dbService.db.prepare(`
+      SELECT ec.level, ec.user_id, u.email, u.first_name, u.last_name, u.phone_number
+      FROM escalation_chains ec
+      JOIN users u ON ec.user_id = u.id
+      WHERE ec.team_id = ? AND ec.level > ? AND ec.is_active = 1
+      ORDER BY ec.level
+      LIMIT 1
+    `).bind(args.teamId, args.currentLevel).first();
+
+		if (!target) {
+			// try team lead/manager
+			const lead = await this.dbService.db.prepare(`
+        SELECT u.id as user_id, u.email, u.first_name, u.last_name, u.phone_number
+        FROM team_members tm
+        JOIN users u ON tm.user_id = u.id
+        WHERE tm.team_id = ? AND tm.role IN ('lead','manager') AND tm.is_active = 1
+        LIMIT 1
+      `).bind(args.teamId).first();
+
+			if (!lead) {
+				const current = await this.getCurrentOnCall(args.teamId);
+				if (!current?.primary) throw new Error('No escalation path available');
+				target = { user_id: current.primary.id, email: current.primary.email, first_name: current.primary.firstName, last_name: current.primary.lastName, phone_number: current.primary.phoneNumber, level: 999 } as any;
+			} else {
+				target = { ...(lead as any), level: 999 };
+			}
+		}
+
+		// 2) write escalation record
+		const escId = crypto.randomUUID();
+		await this.dbService.db.prepare(`
+      INSERT INTO incident_escalations
+      (id, incident_id, team_id, escalated_to_user_id, escalation_level, reason, priority, created_at, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active')
+    `).bind(
+			escId, args.incidentId, args.teamId, (target as any).user_id,
+			(target as any).level, args.reason, args.priority, now
+		).run();
+
+		// 3) update incident
+		await this.dbService.db.prepare(`
+      UPDATE incidents
+      SET escalation_level = ?,
+          updated_at = ?,
+          priority = CASE
+            WHEN ? = 'critical' THEN 'critical'
+            WHEN priority = 'critical' THEN 'critical'
+            ELSE ?
+          END
+      WHERE id = ?
+    `).bind(
+			(target as any).level, now, args.priority, args.priority, args.incidentId
+		).run();
+
+		const policy = await this.getEscalationPolicy(args.teamId);
+
+		return {
+			id: escId,
+			incidentId: args.incidentId,
+			teamId: args.teamId,
+			escalatedTo: {
+				userId: (target as any).user_id,
+				email: (target as any).email,
+				name: `${(target as any).first_name} ${(target as any).last_name}`,
+				level: (target as any).level
+			},
+			reason: args.reason,
+			priority: args.priority,
+			timestamp: now,
+			status: 'active',
+			escalationPolicy: policy
+		};
 	}
 }

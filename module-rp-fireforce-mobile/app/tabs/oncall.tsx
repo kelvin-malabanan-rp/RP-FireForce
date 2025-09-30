@@ -1,3 +1,4 @@
+// app/(tabs)/oncall.tsx
 import React, { useState, useEffect } from 'react';
 import {
     View,
@@ -87,21 +88,15 @@ export default function OnCallTab() {
         }
     };
 
-    const handleCreateOverride = async () => {
-        // Navigate to override screen when ready
-        // router.push('/oncall/create-override');
-        Alert.alert('Override', 'Override functionality coming soon');
+    const handleCreateOverride = () => {
+        router.push('/create-override?teamId=' + selectedTeamId);
     };
 
-    const handleEscalate = async () => {
-        // Navigate to escalation screen when ready
-        // router.push('/oncall/escalate');
-        Alert.alert('Escalate', 'Escalation functionality coming soon');
+    const handleEscalate = () => {
+        router.push('/escalate-incident?teamId=' + selectedTeamId);
     };
 
     const handleManageSchedule = () => {
-        // Navigate to schedule management when ready
-        // router.push('/oncall/manage');
         Alert.alert('Schedule', 'Schedule management coming soon');
     };
 
