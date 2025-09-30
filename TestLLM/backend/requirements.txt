@@ -1,0 +1,14 @@
+# Core API framework
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+
+# AI/ML libraries
+transformers==4.47.1
+torch==2.5.1
+accelerate==1.2.1
+
+# Data validation
+pydantic==2.10.3
+
+# Optional: For file uploads (if needed later)
+python-multipart==0.0.18
