@@ -1,12 +1,8 @@
 import React from 'react'
-import AppLayout from './components/AppLayout'
+import AppWithAuth from './components/AppWithAuth'
 
 function App() {
-  return (
-    <div className="min-h-screen bg-gray-100">
-      <AppLayout />
-    </div>
-  )
+  return <AppWithAuth />
 }
 
 export default App
