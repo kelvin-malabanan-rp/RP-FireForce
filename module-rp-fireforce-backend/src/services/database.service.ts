@@ -1,11 +1,21 @@
 // services/database.service.ts
-import {Env, Incident, IncidentCommentPayload, IncidentCommentResponse, IncidentFilters, User} from '../types';
+import {
+	Env,
+	Incident,
+	IncidentCommentPayload,
+	IncidentCommentResponse,
+	IncidentFilters,
+	User
+} from '../types';
+import {PushNotificationService} from "./push-notification.service";
 
 export class DatabaseService {
 	private env: Env;
+	private pushService?: PushNotificationService;
 
-	constructor(env: Env) {
+	constructor(env: Env, pushService?: PushNotificationService) {
 		this.env = env;
+		this.pushService = pushService;
 	}
 
 	get db() {
@@ -284,7 +294,8 @@ export class DatabaseService {
 				return {
 					id: commentId,
 					incidentId: payload.incidentId,
-					userId: payload.userId,
+					userEmail: payload.userId,
+					userFullname: null,
 					comment: payload.comment,
 					createdAt: payload.createdAt
 				};
@@ -300,14 +311,16 @@ export class DatabaseService {
 	async getIncidentComments(incidentId: string): Promise<IncidentCommentResponse[]> {
 		const query = `
 			SELECT
-				id,
-				incident_id as incidentId,
-				user_id as userId,
-				comment,
-				created_at as createdAt
-			FROM incident_comments
-			WHERE incident_id = ?
-			ORDER BY created_at DESC`;
+				ic.id,
+				ic.incident_id as incidentId,
+				u.first_name || ' ' || u.last_name as fullName,
+				u.email as userEmail,
+				ic.comment,
+				ic.created_at as createdAt
+			FROM incident_comments ic
+			LEFT JOIN users u ON u.id = ic.user_id
+			WHERE ic.incident_id = ?
+			ORDER BY ic.created_at DESC`;
 
 		try {
 			if (!this.db) {
@@ -321,13 +334,101 @@ export class DatabaseService {
 			return results.results.map(result => ({
 				id: result.id as string,
 				incidentId: result.incidentId as string,
-				userId: result.userId as string,
+				userEmail: result.userEmail as string,
+				userFullname: result.fullName as string,
 				comment: result.comment as string,
-				createdAt: new Date(result.createdAt as string)
+				createdAt: result.createdAt as Date
 			}));
 		} catch (error) {
 			console.error('Error fetching incident comments:', error);
 			throw error;
 		}
+	}
+
+	async updateSpecificIncidentStatus(
+		incidentId: string,
+		newStatus: string,
+		resolvedBy?: string
+	): Promise<{
+		id: string;
+		status: string;
+		updatedAt: string;
+		notifiedCount?: number;
+		users?: Array<{ name: string; email: string }>;
+	}> {
+		if (!this.db) {
+			throw new Error('Database connection not available');
+		}
+
+		// 1) Verify incident exists
+		const incident = await this.db
+			.prepare("SELECT id, status FROM incidents WHERE id = ?")
+			.bind(incidentId)
+			.first<{ id: string; status: string }>();
+
+		if (!incident) {
+			throw new Error(`Incident not found: ${incidentId}`);
+		}
+
+		// 2) If resolvedBy is provided, look up the user ID from email
+		let resolvedByUserId: string | null = null;
+		if (resolvedBy) {
+			const user = await this.db
+				.prepare("SELECT id FROM users WHERE email = ?")
+				.bind(resolvedBy)
+				.first<{ id: string }>();
+
+			if (user) {
+				resolvedByUserId = user.id;
+			} else {
+				console.warn(`User with email ${resolvedBy} not found, setting resolved_by to NULL`);
+			}
+		}
+
+		// 3) Update incident status
+		const updateQuery = `
+        UPDATE incidents
+        SET status = ?,
+            resolved_by = ?,
+            resolved_at = CASE WHEN ? = 'resolved' THEN CURRENT_TIMESTAMP ELSE resolved_at END,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+        RETURNING id, status, updated_at as updatedAt
+    `;
+
+		const result = await this.db.prepare(updateQuery)
+			.bind(newStatus, resolvedByUserId, newStatus, incidentId)
+			.first();
+
+		if (!result) {
+			throw new Error('Incident update failed');
+		}
+
+		const response: {
+			id: string;
+			status: string;
+			updatedAt: string;
+			notifiedCount?: number;
+			users?: Array<{ name: string; email: string }>;
+		} = {
+			id: result.id as string,
+			status: result.status as string,
+			updatedAt: result.updatedAt as string
+		};
+
+		// 4) If status is being set to 'resolved', send all-clear notifications
+		if (newStatus === 'resolved' && this.pushService) {
+			try {
+				const notificationResult = await this.pushService.sendAllClear(incidentId);
+				response.notifiedCount = notificationResult.notifiedCount;
+				response.users = notificationResult.users;
+			} catch (error) {
+				console.error('Failed to send all-clear notifications:', error);
+				response.notifiedCount = 0;
+				response.users = [];
+			}
+		}
+
+		return response;
 	}
 }

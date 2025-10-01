@@ -1,3 +1,4 @@
+// app/(tabs)/oncall.tsx
 import React, { useState, useEffect } from 'react';
 import {
     View,
@@ -8,14 +9,16 @@ import {
     RefreshControl,
     Alert,
     StatusBar,
+    ActivityIndicator
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { CurrentOnCall, OnCallUser, OnCallTeam, OnCallScheduleDay } from '@/types/oncall-types';
 import { oncallController } from '@/api/oncall-schedule-controller';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from 'react-native';
-import {SafeAreaView} from "react-native-safe-area-context";
+import { FONT_FAMILY } from '@/constants/fonts';
+import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function OnCallTab() {
     const router = useRouter();
@@ -87,207 +90,200 @@ export default function OnCallTab() {
         }
     };
 
-    const handleCreateOverride = async () => {
-        // Navigate to override screen when ready
-        // router.push('/oncall/create-override');
-        Alert.alert('Override', 'Override functionality coming soon');
+    const handleCreateOverride = () => {
+        router.push({
+            pathname: '/create-override',
+            params: { teamId: selectedTeamId }
+        });
     };
 
-    const handleEscalate = async () => {
-        // Navigate to escalation screen when ready
-        // router.push('/oncall/escalate');
-        Alert.alert('Escalate', 'Escalation functionality coming soon');
+    const handleEscalate = () => {
+        router.push({
+            pathname: '/escalate-incident',
+            params: { teamId: selectedTeamId }
+        });
     };
 
     const handleManageSchedule = () => {
-        // Navigate to schedule management when ready
-        // router.push('/oncall/manage');
-        Alert.alert('Schedule', 'Schedule management coming soon');
+        router.push({
+            pathname: '/manage-schedule',
+            params: { teamId: selectedTeamId }
+        });
     };
 
     if (loading) {
         return (
-            <SafeAreaView style={[styles.container, { backgroundColor: Colors[colorScheme ?? 'light'].background }]}>
-                <View style={styles.loadingContainer}>
-                    <Text style={[styles.loadingText, { color: Colors[colorScheme ?? 'light'].text }]}>
-                        Loading on-call schedule...
-                    </Text>
-                </View>
-            </SafeAreaView>
+            <View style={[styles.container, styles.loadingContainer]}>
+                <ActivityIndicator size="large" color="#3B82F6" />
+                <Text style={styles.loadingText}>Loading on-call schedule...</Text>
+            </View>
         );
     }
 
     return (
-        <>
-            <Stack.Screen
-                options={{
-                    headerShown: false, // We're using the tab header
-                }}
-            />
-            <SafeAreaView style={[styles.container, { backgroundColor: '#F3F4F6' }]}>
-                <StatusBar barStyle={colorScheme === 'dark' ? "light-content" : "dark-content"} />
+        <View style={styles.container}>
+            <StatusBar barStyle={colorScheme === 'dark' ? "light-content" : "dark-content"} />
 
-                <ScrollView
-                    refreshControl={
-                        <RefreshControl
-                            refreshing={refreshing}
-                            onRefresh={onRefresh}
-                            tintColor="#3B82F6"
-                        />
-                    }
-                    showsVerticalScrollIndicator={false}
-                    contentContainerStyle={styles.scrollContent}
-                >
-                    {/* Team Selector */}
-                    <View style={styles.teamSelector}>
-                        <Text style={styles.sectionTitle}>Team</Text>
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                            {teams.map(team => (
-                                <TouchableOpacity
-                                    key={team.id}
-                                    style={[
-                                        styles.teamButton,
-                                        selectedTeamId === team.id && styles.teamButtonActive
-                                    ]}
-                                    onPress={() => setSelectedTeamId(team.id)}
-                                >
-                                    <Text style={[
-                                        styles.teamButtonText,
-                                        selectedTeamId === team.id && styles.teamButtonTextActive
-                                    ]}>
-                                        {team.name}
-                                    </Text>
-                                </TouchableOpacity>
-                            ))}
-                        </ScrollView>
-                    </View>
+            <ScrollView
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={onRefresh}
+                        tintColor="#3B82F6"
+                    />
+                }
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.scrollContent}
+            >
+                {/* Team Selector */}
+                <View style={styles.teamSelector}>
+                    <Text style={styles.sectionTitle}>Team</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                        {teams.map(team => (
+                            <TouchableOpacity
+                                key={team.id}
+                                style={[
+                                    styles.teamButton,
+                                    selectedTeamId === team.id && styles.teamButtonActive
+                                ]}
+                                onPress={() => setSelectedTeamId(team.id)}
+                            >
+                                <Text style={[
+                                    styles.teamButtonText,
+                                    selectedTeamId === team.id && styles.teamButtonTextActive
+                                ]}>
+                                    {team.name}
+                                </Text>
+                            </TouchableOpacity>
+                        ))}
+                    </ScrollView>
+                </View>
 
-                    {/* Current On-Call */}
-                    {currentOnCall && (
-                        <View style={styles.currentOnCallCard}>
-                            <View style={styles.cardHeader}>
-                                <Text style={styles.sectionTitle}>Currently On-Call</Text>
-                                <TouchableOpacity onPress={onRefresh}>
-                                    <Ionicons name="refresh" size={20} color="#3B82F6" />
-                                </TouchableOpacity>
-                            </View>
+                {/* Current On-Call */}
+                {currentOnCall && (
+                    <View style={styles.currentOnCallCard}>
+                        <View style={styles.cardHeader}>
+                            <Text style={styles.sectionTitle}>Currently On-Call</Text>
+                            <TouchableOpacity onPress={onRefresh}>
+                                <Ionicons name="refresh" size={20} color="#3B82F6" />
+                            </TouchableOpacity>
+                        </View>
 
-                            {currentOnCall.primary && (
-                                <View style={styles.onCallPerson}>
-                                    <View style={styles.roleIndicator}>
-                                        <Ionicons
-                                            name={getRoleIcon('primary')}
-                                            size={20}
-                                            color={getRoleColor('primary')}
-                                        />
-                                        <Text style={[styles.roleText, { color: getRoleColor('primary') }]}>
-                                            Primary
-                                        </Text>
-                                    </View>
-                                    <Text style={styles.personName}>
-                                        {formatUserName(currentOnCall.primary)}
-                                    </Text>
-                                    <Text style={styles.personEmail}>
-                                        {currentOnCall.primary.email}
+                        {currentOnCall.primary && (
+                            <View style={styles.onCallPerson}>
+                                <View style={styles.roleIndicator}>
+                                    <Ionicons
+                                        name={getRoleIcon('primary')}
+                                        size={20}
+                                        color={getRoleColor('primary')}
+                                    />
+                                    <Text style={[styles.roleText, { color: getRoleColor('primary') }]}>
+                                        Primary
                                     </Text>
                                 </View>
-                            )}
-
-                            {currentOnCall.backup && (
-                                <View style={styles.onCallPerson}>
-                                    <View style={styles.roleIndicator}>
-                                        <Ionicons
-                                            name={getRoleIcon('backup')}
-                                            size={20}
-                                            color={getRoleColor('backup')}
-                                        />
-                                        <Text style={[styles.roleText, { color: getRoleColor('backup') }]}>
-                                            Backup
-                                        </Text>
-                                    </View>
-                                    <Text style={styles.personName}>
-                                        {formatUserName(currentOnCall.backup)}
-                                    </Text>
-                                    <Text style={styles.personEmail}>
-                                        {currentOnCall.backup.email}
-                                    </Text>
-                                </View>
-                            )}
-
-                            <View style={styles.timeInfo}>
-                                <Text style={styles.timeLabel}>On-call until:</Text>
-                                <Text style={styles.timeValue}>
-                                    {formatTime(currentOnCall.endTime)}
+                                <Text style={styles.personName}>
+                                    {formatUserName(currentOnCall.primary)}
+                                </Text>
+                                <Text style={styles.personEmail}>
+                                    {currentOnCall.primary.email}
                                 </Text>
                             </View>
-                        </View>
-                    )}
+                        )}
 
-                    {/* Upcoming Schedule */}
-                    <View style={styles.scheduleCard}>
-                        <Text style={styles.sectionTitle}>7-Day Schedule</Text>
-
-                        {schedule.map((day, index) => (
-                            <View key={index} style={[
-                                styles.scheduleDay,
-                                index === schedule.length - 1 && { borderBottomWidth: 0 }
-                            ]}>
-                                <View style={styles.dayHeader}>
-                                    <Text style={styles.dayDate}>{day.date}</Text>
-                                    <Text style={styles.dayOfWeek}>{day.dayOfWeek}</Text>
+                        {currentOnCall.backup && (
+                            <View style={styles.onCallPerson}>
+                                <View style={styles.roleIndicator}>
+                                    <Ionicons
+                                        name={getRoleIcon('backup')}
+                                        size={20}
+                                        color={getRoleColor('backup')}
+                                    />
+                                    <Text style={[styles.roleText, { color: getRoleColor('backup') }]}>
+                                        Backup
+                                    </Text>
                                 </View>
-
-                                {day.assignment ? (
-                                    <View style={styles.dayAssignment}>
-                                        {day.assignment.primary && (
-                                            <Text style={styles.assignmentText}>
-                                                Primary: {formatUserName(day.assignment.primary)}
-                                            </Text>
-                                        )}
-                                        {day.assignment.backup && (
-                                            <Text style={styles.assignmentText}>
-                                                Backup: {formatUserName(day.assignment.backup)}
-                                            </Text>
-                                        )}
-                                    </View>
-                                ) : (
-                                    <Text style={styles.noAssignment}>No assignment</Text>
-                                )}
+                                <Text style={styles.personName}>
+                                    {formatUserName(currentOnCall.backup)}
+                                </Text>
+                                <Text style={styles.personEmail}>
+                                    {currentOnCall.backup.email}
+                                </Text>
                             </View>
-                        ))}
+                        )}
+
+                        <View style={styles.timeInfo}>
+                            <Text style={styles.timeLabel}>On-call until:</Text>
+                            <Text style={styles.timeValue}>
+                                {formatTime(currentOnCall.endTime)}
+                            </Text>
+                        </View>
                     </View>
+                )}
 
-                    {/* Quick Actions */}
-                    <View style={styles.actionsCard}>
-                        <Text style={styles.sectionTitle}>Quick Actions</Text>
+                {/* Upcoming Schedule */}
+                <View style={styles.scheduleCard}>
+                    <Text style={styles.sectionTitle}>7-Day Schedule</Text>
 
-                        <TouchableOpacity
-                            style={styles.actionButton}
-                            onPress={handleCreateOverride}
-                        >
-                            <Ionicons name="swap-horizontal" size={20} color="#3B82F6" />
-                            <Text style={styles.actionButtonText}>Create Override</Text>
-                        </TouchableOpacity>
+                    {schedule.map((day, index) => (
+                        <View key={index} style={[
+                            styles.scheduleDay,
+                            index === schedule.length - 1 && { borderBottomWidth: 0 }
+                        ]}>
+                            <View style={styles.dayHeader}>
+                                <Text style={styles.dayDate}>{day.date}</Text>
+                                <Text style={styles.dayOfWeek}>{day.dayOfWeek}</Text>
+                            </View>
 
-                        <TouchableOpacity
-                            style={styles.actionButton}
-                            onPress={handleEscalate}
-                        >
-                            <Ionicons name="arrow-up-circle" size={20} color="#EA580C" />
-                            <Text style={styles.actionButtonText}>Escalate Incident</Text>
-                        </TouchableOpacity>
+                            {day.assignment ? (
+                                <View style={styles.dayAssignment}>
+                                    {day.assignment.primary && (
+                                        <Text style={styles.assignmentText}>
+                                            Primary: {formatUserName(day.assignment.primary)}
+                                        </Text>
+                                    )}
+                                    {day.assignment.backup && (
+                                        <Text style={styles.assignmentText}>
+                                            Backup: {formatUserName(day.assignment.backup)}
+                                        </Text>
+                                    )}
+                                </View>
+                            ) : (
+                                <Text style={styles.noAssignment}>No assignment</Text>
+                            )}
+                        </View>
+                    ))}
+                </View>
 
-                        <TouchableOpacity
-                            style={styles.actionButton}
-                            onPress={handleManageSchedule}
-                        >
-                            <Ionicons name="calendar" size={20} color="#8B5CF6" />
-                            <Text style={styles.actionButtonText}>Manage Schedule</Text>
-                        </TouchableOpacity>
-                    </View>
-                </ScrollView>
-            </SafeAreaView>
-        </>
+                {/* Quick Actions */}
+                <View style={styles.actionsCard}>
+                    <Text style={styles.sectionTitle}>Quick Actions</Text>
+
+                    <TouchableOpacity
+                        style={styles.actionButton}
+                        onPress={handleCreateOverride}
+                    >
+                        <Ionicons name="swap-horizontal" size={20} color="#3B82F6" />
+                        <Text style={styles.actionButtonText}>Create Override</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        style={styles.actionButton}
+                        onPress={handleEscalate}
+                    >
+                        <Ionicons name="arrow-up-circle" size={20} color="#EA580C" />
+                        <Text style={styles.actionButtonText}>Escalate Incident</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        style={styles.actionButton}
+                        onPress={handleManageSchedule}
+                    >
+                        <Ionicons name="calendar" size={20} color="#8B5CF6" />
+                        <Text style={styles.actionButtonText}>Manage Schedule</Text>
+                    </TouchableOpacity>
+                </View>
+            </ScrollView>
+        </View>
     );
 }
 
@@ -308,6 +304,8 @@ const styles = StyleSheet.create({
     loadingText: {
         fontSize: 16,
         color: '#6B7280',
+        marginTop: 12,
+        fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     teamSelector: {
         backgroundColor: '#FFFFFF',
@@ -319,6 +317,7 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: '#111827',
         marginBottom: 12,
+        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
     teamButton: {
         paddingHorizontal: 16,
@@ -334,9 +333,11 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: '#6B7280',
         fontWeight: '500',
+        fontFamily: FONT_FAMILY.POPPINS_MEDIUM,
     },
     teamButtonTextActive: {
         color: '#FFFFFF',
+        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
     currentOnCallCard: {
         backgroundColor: '#FFFFFF',
@@ -371,16 +372,19 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: '600',
         marginLeft: 8,
+        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
     personName: {
         fontSize: 18,
         fontWeight: '600',
         color: '#111827',
         marginBottom: 4,
+        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
     personEmail: {
         fontSize: 14,
         color: '#6B7280',
+        fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     timeInfo: {
         flexDirection: 'row',
@@ -391,11 +395,13 @@ const styles = StyleSheet.create({
     timeLabel: {
         fontSize: 14,
         color: '#6B7280',
+        fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     timeValue: {
         fontSize: 14,
         fontWeight: '600',
         color: '#111827',
+        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
     scheduleCard: {
         backgroundColor: '#FFFFFF',
@@ -424,10 +430,12 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
         color: '#111827',
+        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
     dayOfWeek: {
         fontSize: 12,
         color: '#6B7280',
+        fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     dayAssignment: {
         flex: 2,
@@ -437,11 +445,13 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: '#374151',
         marginBottom: 2,
+        fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     noAssignment: {
         fontSize: 14,
         color: '#9CA3AF',
         fontStyle: 'italic',
+        fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     actionsCard: {
         backgroundColor: '#FFFFFF',
@@ -468,5 +478,6 @@ const styles = StyleSheet.create({
         color: '#374151',
         fontWeight: '500',
         marginLeft: 12,
+        fontFamily: FONT_FAMILY.POPPINS_MEDIUM,
     },
 });

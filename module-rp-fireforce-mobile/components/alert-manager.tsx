@@ -8,7 +8,7 @@ import {
     Alert,
     Platform,
     Modal,
-    ScrollView, Button,
+    ScrollView,
 } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -16,7 +16,15 @@ import {checkAlertSystemHealth, registerPushToken} from '@/api/alert-controller'
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 import { AlertSettings } from '@/types';
-import {router} from "expo-router";
+import {
+    retrieveAlertSettings,
+    retrievePushToken,
+    retrieveRegistrationStatus,
+    storeAlertSettings,
+    storePushToken,
+    storeRegistrationStatus
+} from "@/constants/local-storage";
+import { FONT_FAMILY } from '@/constants/fonts';
 
 interface AlertManagerProps {
     style?: any;
@@ -36,9 +44,37 @@ const AlertManager: React.FC<AlertManagerProps> = ({ style }) => {
     const [registrationStatus, setRegistrationStatus] = useState<string>('pending');
 
     useEffect(() => {
-        setupNotifications();
+        loadPersistedData();
         checkBackendHealth();
     }, []);
+
+    const loadPersistedData = async () => {
+        try {
+            // Load saved settings
+            const savedSettings = await retrieveAlertSettings();
+            if (savedSettings) {
+                setSettings(savedSettings);
+            }
+
+            // Load saved registration status
+            const savedRegStatus = await retrieveRegistrationStatus();
+            if (savedRegStatus) {
+                setRegistrationStatus(savedRegStatus);
+            }
+
+            // Load saved push token
+            const savedToken = await retrievePushToken();
+            if (savedToken) {
+                setPushToken(savedToken);
+            }
+
+            // Setup notifications after loading persisted data
+            await setupNotifications();
+        } catch (error) {
+            console.error('Error loading persisted data:', error);
+            await setupNotifications();
+        }
+    };
 
     const checkBackendHealth = async () => {
         try {
@@ -70,10 +106,16 @@ const AlertManager: React.FC<AlertManagerProps> = ({ style }) => {
             console.log('Status:', status);
 
             if (status === 'granted') {
-                // Get push token
+                // Check if already registered
+                if (registrationStatus === 'registered' && pushToken) {
+                    console.log('Device already registered, skipping registration');
+                    return;
+                }
+
                 console.log('Granting!');
                 const token = await Notifications.getExpoPushTokenAsync();
                 setPushToken(token.data);
+                await storePushToken(token.data);
 
                 console.log('Token:', token);
                 // Register token with backend using alert-controller
@@ -85,10 +127,12 @@ const AlertManager: React.FC<AlertManagerProps> = ({ style }) => {
                     });
 
                     setRegistrationStatus('registered');
+                    await storeRegistrationStatus('registered');
                     console.log('Device registered successfully:', response);
                 } catch (error) {
                     console.error('Registration failed:', error);
                     setRegistrationStatus('failed');
+                    await storeRegistrationStatus('failed');
                 }
             }
 
@@ -106,6 +150,7 @@ const AlertManager: React.FC<AlertManagerProps> = ({ style }) => {
         } catch (error) {
             console.error('Error setting up notifications:', error);
             setRegistrationStatus('error');
+            await storeRegistrationStatus('error');
         }
     };
 
@@ -115,11 +160,13 @@ const AlertManager: React.FC<AlertManagerProps> = ({ style }) => {
         if (!Device.isDevice) {
             console.warn('Must use physical device for push notifications');
             setRegistrationStatus('failed');
+            await storeRegistrationStatus('failed');
             return;
         }
 
         try {
             setRegistrationStatus('pending');
+            await storeRegistrationStatus('pending');
 
             const tokenData = await Notifications.getExpoPushTokenAsync({
                 projectId: Constants.expoConfig?.extra?.eas?.projectId,
@@ -127,6 +174,7 @@ const AlertManager: React.FC<AlertManagerProps> = ({ style }) => {
 
             const token = tokenData.data;
             setPushToken(token);
+            await storePushToken(token);
             console.log('Got new token:', token.substring(0, 30) + '...');
 
             const response = await registerPushToken({
@@ -137,20 +185,24 @@ const AlertManager: React.FC<AlertManagerProps> = ({ style }) => {
 
             if (response.httpStatus === 200) {
                 setRegistrationStatus('registered');
+                await storeRegistrationStatus('registered');
                 console.log('Retry registration successful');
             } else {
                 setRegistrationStatus('failed');
+                await storeRegistrationStatus('failed');
                 console.error('Retry registration failed:', response.data);
             }
         } catch (error) {
             console.error('Error in retry registration:', error);
             setRegistrationStatus('failed');
+            await storeRegistrationStatus('failed');
         }
     };
 
-    const updateSettings = (newSettings: Partial<AlertSettings>) => {
+    const updateSettings = async (newSettings: Partial<AlertSettings>) => {
         const updatedSettings = { ...settings, ...newSettings };
         setSettings(updatedSettings);
+        await storeAlertSettings(updatedSettings);
 
         // Update notification handler
         Notifications.setNotificationHandler({
@@ -193,29 +245,13 @@ const AlertManager: React.FC<AlertManagerProps> = ({ style }) => {
                         type: 'test'
                     }
                 },
-                trigger: null, // Show immediately
+                trigger: null,
             });
         } catch (error) {
             console.error('Error sending test notification:', error);
             Alert.alert('Error', 'Failed to send test notification');
         }
     };
-
-    const testCriticalSound = async () => {
-        const content: Notifications.NotificationContentInput = {
-            title: 'Critical sound test',
-            body: 'Critical sound test',
-            sound: Platform.select({ ios: 'alarm_sound_ios.wav', android: 'alarm_sound' }),
-            badge: 1,
-        };
-
-        await Notifications.scheduleNotificationAsync({
-            content,
-            trigger: null,
-            // Android-only; TS doesn’t know this field—cast to any
-            ...(Platform.OS === 'android' ? ({ channelId: 'critical-alerts-v4' } as any) : {}),
-        });
-    }
 
     const requestPermissions = async () => {
         const { status } = await Notifications.requestPermissionsAsync();
@@ -315,7 +351,7 @@ const AlertManager: React.FC<AlertManagerProps> = ({ style }) => {
                     <Switch
                         value={settings.enableAlerts}
                         onValueChange={(value) => updateSettings({ enableAlerts: value })}
-                        trackColor={{ false: '#D1D5DB', true: '#10B981' }}
+                        trackColor={{ false: '#D1D5DB', true: '#3B82F6' }}
                         thumbColor="#FFFFFF"
                     />
                 </View>
@@ -327,7 +363,7 @@ const AlertManager: React.FC<AlertManagerProps> = ({ style }) => {
                             <Switch
                                 value={settings.criticalOnly}
                                 onValueChange={(value) => updateSettings({ criticalOnly: value })}
-                                trackColor={{ false: '#D1D5DB', true: '#EA580C' }}
+                                trackColor={{ false: '#D1D5DB', true: '#3B82F6' }}
                                 thumbColor="#FFFFFF"
                             />
                         </View>
@@ -347,7 +383,7 @@ const AlertManager: React.FC<AlertManagerProps> = ({ style }) => {
                             <Switch
                                 value={settings.vibrationEnabled}
                                 onValueChange={(value) => updateSettings({ vibrationEnabled: value })}
-                                trackColor={{ false: '#D1D5DB', true: '#8B5CF6' }}
+                                trackColor={{ false: '#D1D5DB', true: '#3B82F6' }}
                                 thumbColor="#FFFFFF"
                             />
                         </View>
@@ -355,25 +391,6 @@ const AlertManager: React.FC<AlertManagerProps> = ({ style }) => {
                 )}
             </View>
 
-            <TouchableOpacity
-                style={styles.testButton}
-                onPress={testAlert}
-            >
-                <IconSymbol name="play.circle" size={18} color="#3B82F6" />
-                <Text style={styles.testButtonText}>Test Alert</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-                style={styles.testButton}
-                onPress={testCriticalSound}
-            >
-                <IconSymbol name="play.circle" size={18} color="#3B82F6" />
-                <Text style={styles.testButtonText}>Test Critical Sound</Text>
-            </TouchableOpacity>
-            <Button
-                title="Open Incident 555dfffb-2fa2-44c0-9cda-4f0af5ead470"
-                onPress={() => router.push("/incident/555dfffb-2fa2-44c0-9cda-4f0af5ead470.tsx")}
-            />
             {/* Settings Modal */}
             <Modal
                 animationType="slide"
@@ -381,13 +398,18 @@ const AlertManager: React.FC<AlertManagerProps> = ({ style }) => {
                 visible={showSettings}
                 onRequestClose={() => setShowSettings(false)}
             >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
+                <TouchableOpacity
+                    style={styles.modalOverlay}
+                    activeOpacity={1}
+                    onPress={() => setShowSettings(false)}
+                >
+                    <TouchableOpacity
+                        style={styles.modalContent}
+                        activeOpacity={1}
+                        onPress={(e) => e.stopPropagation()}
+                    >
                         <View style={styles.modalHeader}>
                             <Text style={styles.modalTitle}>Alert Settings</Text>
-                            <TouchableOpacity onPress={() => setShowSettings(false)}>
-                                <IconSymbol name="xmark" size={24} color="#6B7280" />
-                            </TouchableOpacity>
                         </View>
 
                         <ScrollView>
@@ -438,8 +460,8 @@ const AlertManager: React.FC<AlertManagerProps> = ({ style }) => {
                                 </Text>
                             </View>
                         </ScrollView>
-                    </View>
-                </View>
+                    </TouchableOpacity>
+                </TouchableOpacity>
             </Modal>
         </View>
     );
@@ -471,6 +493,7 @@ const styles = StyleSheet.create({
         color: '#111827',
         marginLeft: 8,
         flex: 1,
+        fontFamily: FONT_FAMILY.POPPINS_BOLD,
     },
     settingsButton: {
         padding: 4,
@@ -479,6 +502,7 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: '#6B7280',
         marginLeft: 28,
+        fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     statusSection: {
         marginBottom: 16,
@@ -503,6 +527,7 @@ const styles = StyleSheet.create({
         color: '#6B7280',
         fontWeight: '500',
         flex: 1,
+        fontFamily: FONT_FAMILY.POPPINS_MEDIUM,
     },
     enableButton: {
         backgroundColor: '#3B82F6',
@@ -514,6 +539,7 @@ const styles = StyleSheet.create({
         color: '#FFFFFF',
         fontSize: 12,
         fontWeight: '600',
+        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
     refreshButton: {
         padding: 4,
@@ -529,6 +555,7 @@ const styles = StyleSheet.create({
         color: '#FFFFFF',
         fontSize: 11,
         fontWeight: '600',
+        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
     controls: {
         marginBottom: 16,
@@ -545,23 +572,7 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: '#374151',
         fontWeight: '500',
-    },
-    testButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: '#EFF6FF',
-        paddingVertical: 12,
-        paddingHorizontal: 16,
-        borderRadius: 8,
-        borderWidth: 1,
-        borderColor: '#DBEAFE',
-    },
-    testButtonText: {
-        fontSize: 14,
-        color: '#3B82F6',
-        fontWeight: '600',
-        marginLeft: 8,
+        fontFamily: FONT_FAMILY.POPPINS_MEDIUM,
     },
     modalOverlay: {
         flex: 1,
@@ -578,15 +589,13 @@ const styles = StyleSheet.create({
         maxHeight: '80%',
     },
     modalHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
         marginBottom: 24,
     },
     modalTitle: {
         fontSize: 20,
         fontWeight: '700',
         color: '#111827',
+        fontFamily: FONT_FAMILY.POPPINS_BOLD,
     },
     settingSection: {
         marginBottom: 24,
@@ -596,6 +605,7 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: '#111827',
         marginBottom: 8,
+        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
     infoRow: {
         flexDirection: 'row',
@@ -609,17 +619,20 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: '#6B7280',
         fontWeight: '500',
+        fontFamily: FONT_FAMILY.POPPINS_MEDIUM,
     },
     infoValue: {
         fontSize: 14,
         color: '#111827',
         fontWeight: '600',
+        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
     helpText: {
         fontSize: 14,
         color: '#6B7280',
         lineHeight: 20,
         marginBottom: 8,
+        fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
 });
 

@@ -78,6 +78,8 @@ export default function RootLayout() {
             <Stack>
                 <Stack.Screen name="index" options={{ headerShown: false }} />
                 <Stack.Screen name="inner-incident-page" options={{ headerShown: false, title: "", headerTitle: ""  }} />
+                <Stack.Screen name="create-override" options={{ headerShown: false, title: "", headerTitle: "", presentation: 'modal' }} />
+                <Stack.Screen name="escalate-incident" options={{ headerShown: false, title: "", headerTitle: "", presentation: 'modal'}} />
                 <Stack.Screen name="tabs" options={{ headerShown: false, title: "", headerTitle: "" }} />
                 <Stack.Screen name="modal" options={{ presentation: "modal", title: "Modal" }} />
             </Stack>

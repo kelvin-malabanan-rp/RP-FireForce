@@ -1,6 +1,4 @@
-import { IconSymbol } from "@/components/ui/icon-symbol";
 import React, { useState, useEffect, useCallback } from "react";
-import { useRouter } from "expo-router";
 import {
     Alert,
     Modal,
@@ -16,19 +14,19 @@ import {
 import {
     createIncident, getAllIncidents
 } from "@/api/incident-controller";
-import {getSeverityColor, getStatusColor} from "@/constants/colors";
-import {CreateIncidentData, Incident, IncidentUI, Stats} from "@/types/incident-types";
+import {getSeverityColor} from "@/constants/colors";
+import {CreateIncidentData, Incident, IncidentUI} from "@/types/incident-types";
 import { FONT_FAMILY } from '@/constants/fonts';
 import {Ionicons} from "@expo/vector-icons";
+import IncidentList from "@/components/incident-list";
 
 export default function IncidentsScreen() {
-    const router = useRouter();
     const [incidents, setIncidents] = useState<IncidentUI[]>([]);
     const [refreshing, setRefreshing] = useState(false);
     const [loading, setLoading] = useState(true);
-    const [filterStatus, setFilterStatus] = useState<string>("all");
     const [modalVisible, setModalVisible] = useState(false);
     const [creating, setCreating] = useState(false);
+    const [error, setError] = useState<string | null>(null);
     const [newIncident, setNewIncident] = useState({
         title: "",
         description: "",
@@ -36,7 +34,7 @@ export default function IncidentsScreen() {
         location: "",
     });
 
-    // Helper function to parse API datetime - now handles ISO format
+    // Helper function to parse API datetime
     const parseApiDateTime = (dateTimeString: string): Date => {
         return new Date(dateTimeString);
     };
@@ -60,6 +58,7 @@ export default function IncidentsScreen() {
     // Fetch incidents from API
     const fetchAllIncidents = async () => {
         try {
+            setError(null);
             const response = await getAllIncidents();
 
             if (response.httpStatus === "OK" && response.data) {
@@ -68,10 +67,7 @@ export default function IncidentsScreen() {
             }
         } catch (error) {
             console.error('Failed to fetch incidents:', error);
-            Alert.alert(
-                "Error",
-                "Failed to load incidents. Please check your connection and try again."
-            );
+            setError("Failed to load incidents. Please check your connection and try again.");
         } finally {
             setLoading(false);
             setRefreshing(false);
@@ -84,20 +80,8 @@ export default function IncidentsScreen() {
 
     const onRefresh = useCallback(() => {
         setRefreshing(true);
-        Promise.all([fetchAllIncidents()]);
-    }, [fetchAllIncidents]);
-
-    const filteredIncidents = incidents.filter(
-        (incident) => filterStatus === "all" || incident.status === filterStatus
-    );
-
-    // Navigate to incident detail page
-    const handleIncidentPress = (incident: IncidentUI) => {
-        router.push({
-            pathname: "/inner-incident-page",
-            params: { incidentId: incident.id }
-        });
-    };
+        fetchAllIncidents();
+    }, []);
 
     const createNewIncident = async () => {
         if (!newIncident.title || !newIncident.description) {
@@ -119,9 +103,7 @@ export default function IncidentsScreen() {
 
             if (response.httpStatus === "OK" && response.data) {
                 const transformedIncident = transformApiIncident(response.data);
-
                 setIncidents((prev) => [transformedIncident, ...prev]);
-
                 setNewIncident({
                     title: "",
                     description: "",
@@ -135,13 +117,10 @@ export default function IncidentsScreen() {
             }
         } catch (error) {
             console.error('Failed to create incident:', error);
+            Alert.alert("Error", "Failed to create incident");
         } finally {
             setCreating(false);
         }
-    };
-
-    const formatTimestamp = (timestamp: Date) => {
-        return timestamp.toLocaleString();
     };
 
     if (loading) {
@@ -166,125 +145,16 @@ export default function IncidentsScreen() {
                 </TouchableOpacity>
             </View>
 
-            {/* Filter Buttons */}
-            <View style={styles.filterContainer}>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                    {["all", "open", "investigating", "resolved"].map((status) => (
-                        <TouchableOpacity
-                            key={status}
-                            style={[
-                                styles.filterButton,
-                                filterStatus === status && styles.filterButtonActive,
-                            ]}
-                            onPress={() => setFilterStatus(status)}
-                        >
-                            <Text
-                                style={[
-                                    styles.filterText,
-                                    filterStatus === status && styles.filterTextActive,
-                                ]}
-                            >
-                                {status.charAt(0).toUpperCase() + status.slice(1)}
-                            </Text>
-                        </TouchableOpacity>
-                    ))}
-                </ScrollView>
-            </View>
-
-            {/* Incidents List */}
+            {/* Incident List Component */}
             <ScrollView
-                style={styles.incidentsList}
+                style={styles.scrollView}
                 refreshControl={
                     <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
                 }
             >
-                {filteredIncidents.map((incident) => (
-                    <TouchableOpacity
-                        key={incident.id}
-                        style={styles.incidentCard}
-                        onPress={() => handleIncidentPress(incident)}
-                        activeOpacity={0.7}
-                    >
-                        <View style={styles.incidentHeader}>
-                            <View style={styles.incidentTitleRow}>
-                                <Text style={styles.incidentTitle}>{incident.title}</Text>
-                                <View
-                                    style={[
-                                        styles.severityBadge,
-                                        { backgroundColor: getSeverityColor(incident.severity) },
-                                    ]}
-                                >
-                                    <Text style={styles.severityText}>
-                                        {incident.severity.toUpperCase()}
-                                    </Text>
-                                </View>
-                            </View>
-                            <View style={styles.incidentMeta}>
-                                <Text style={styles.incidentTime}>
-                                    {formatTimestamp(incident.timestamp)}
-                                </Text>
-                                <View
-                                    style={[
-                                        styles.statusBadge,
-                                        { backgroundColor: getStatusColor(incident.status) },
-                                    ]}
-                                >
-                                    <Text style={styles.statusText}>
-                                        {incident.status.toUpperCase()}
-                                    </Text>
-                                </View>
-                            </View>
-                        </View>
-
-                        <Text style={styles.incidentDescription}>
-                            {incident.description}
-                        </Text>
-
-                        <View style={styles.incidentFooter}>
-                            <Text style={styles.reportedBy}>
-                                Reported by: {incident.reportedBy}
-                            </Text>
-                            {incident.location && (
-                                <Text style={styles.location}>📍 {incident.location}</Text>
-                            )}
-                        </View>
-
-                        {incident.assignedTo && (
-                            <Text style={styles.assignedTo}>
-                                Assigned to: {incident.assignedTo}
-                            </Text>
-                        )}
-                        {incident.awsAlarmName && (
-                            <Text style={styles.awsInfo}>
-                                AWS Alarm: {incident.awsAlarmName}
-                            </Text>
-                        )}
-
-                        {/* Tap indicator */}
-                        <View style={styles.tapIndicator}>
-                            <IconSymbol name="chevron.right" size={16} color="#9CA3AF" />
-                        </View>
-                    </TouchableOpacity>
-                ))}
-
-                {filteredIncidents.length === 0 && !loading && (
-                    <View style={styles.emptyState}>
-                        <IconSymbol
-                            name="exclamationmark.triangle"
-                            size={48}
-                            color="#9CA3AF"
-                        />
-                        <Text style={styles.emptyText}>No incidents found</Text>
-                        <Text style={styles.emptySubtext}>
-                            {filterStatus === "all"
-                                ? "All systems are operational"
-                                : `No incidents with status: ${filterStatus}`}
-                        </Text>
-                    </View>
-                )}
+                <IncidentList incidents={incidents} error={error} />
             </ScrollView>
 
-            {/* Create Incident Modal */}
             {/* Create Incident Modal */}
             <Modal
                 animationType="slide"
@@ -415,7 +285,7 @@ const styles = StyleSheet.create({
         fontSize: 22,
         fontWeight: "700",
         color: "#111827",
-        fontFamily: FONT_FAMILY.POPPINS_BOLD,
+        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
     addButton: {
         backgroundColor: "#3B82F6",
@@ -425,159 +295,8 @@ const styles = StyleSheet.create({
         justifyContent: "center",
         alignItems: "center",
     },
-    filterContainer: {
-        backgroundColor: "#FFFFFF",
-        paddingVertical: 12,
-        paddingHorizontal: 20,
-        borderBottomWidth: 1,
-        borderBottomColor: "#E5E7EB",
-    },
-    filterButton: {
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderRadius: 20,
-        backgroundColor: "#F3F4F6",
-        marginRight: 8,
-    },
-    filterButtonActive: {
-        backgroundColor: "#3B82F6",
-    },
-    filterText: {
-        fontSize: 13,
-        color: "#6B7280",
-        fontWeight: "500",
-        fontFamily: FONT_FAMILY.POPPINS_MEDIUM,
-    },
-    filterTextActive: {
-        color: "#FFFFFF",
-        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
-    },
-    incidentsList: {
+    scrollView: {
         flex: 1,
-        padding: 20,
-    },
-    incidentCard: {
-        backgroundColor: "#FFFFFF",
-        borderRadius: 12,
-        padding: 16,
-        marginBottom: 12,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 2,
-        position: 'relative',
-    },
-    incidentHeader: {
-        marginBottom: 12,
-    },
-    incidentTitleRow: {
-        flexDirection: "row",
-        justifyContent: "space-between",
-        alignItems: "flex-start",
-        marginBottom: 8,
-    },
-    incidentTitle: {
-        fontSize: 15,
-        fontWeight: "600",
-        color: "#111827",
-        flex: 1,
-        marginRight: 12,
-        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
-    },
-    severityBadge: {
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 12,
-    },
-    severityText: {
-        fontSize: 10,
-        fontWeight: "600",
-        color: "#FFFFFF",
-        fontFamily: FONT_FAMILY.POPPINS_BOLD,
-    },
-    incidentMeta: {
-        flexDirection: "row",
-        justifyContent: "space-between",
-        alignItems: "center",
-    },
-    incidentTime: {
-        fontSize: 11,
-        color: "#6B7280",
-        fontFamily: FONT_FAMILY.POPPINS_REGULAR,
-    },
-    statusBadge: {
-        paddingHorizontal: 8,
-        paddingVertical: 2,
-        borderRadius: 8,
-    },
-    statusText: {
-        fontSize: 10,
-        fontWeight: "500",
-        color: "#FFFFFF",
-        fontFamily: FONT_FAMILY.POPPINS_MEDIUM,
-    },
-    incidentDescription: {
-        fontSize: 13,
-        color: "#374151",
-        lineHeight: 18,
-        marginBottom: 12,
-        fontFamily: FONT_FAMILY.POPPINS_REGULAR,
-    },
-    incidentFooter: {
-        flexDirection: "row",
-        justifyContent: "space-between",
-        alignItems: "center",
-        marginBottom: 8,
-    },
-    reportedBy: {
-        fontSize: 11,
-        color: "#6B7280",
-        fontStyle: "italic",
-        fontFamily: FONT_FAMILY.POPPINS_REGULAR,
-    },
-    assignedTo: {
-        fontSize: 11,
-        color: "#6B7280",
-        fontStyle: "italic",
-        marginTop: 4,
-        fontFamily: FONT_FAMILY.POPPINS_REGULAR,
-    },
-    awsInfo: {
-        fontSize: 11,
-        color: "#6B7280",
-        fontStyle: "italic",
-        marginTop: 2,
-        fontFamily: FONT_FAMILY.POPPINS_REGULAR,
-    },
-    location: {
-        fontSize: 11,
-        color: "#6B7280",
-        fontFamily: FONT_FAMILY.POPPINS_REGULAR,
-    },
-    tapIndicator: {
-        position: 'absolute',
-        right: 16,
-        top: 16,
-    },
-    emptyState: {
-        alignItems: "center",
-        justifyContent: "center",
-        paddingVertical: 60,
-    },
-    emptyText: {
-        fontSize: 16,
-        fontWeight: "600",
-        color: "#6B7280",
-        marginTop: 16,
-        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
-    },
-    emptySubtext: {
-        fontSize: 13,
-        color: "#9CA3AF",
-        marginTop: 8,
-        textAlign: "center",
-        fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     modalOverlay: {
         flex: 1,

@@ -14,7 +14,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import AlertManager from "./alert-manager";
-import {retrieveUserSession} from "@/constants/local-storage";
+import {clearUserSession, retrieveUserSession} from "@/constants/local-storage";
 import {UserSession} from "@/types";
 import {FONT_FAMILY} from "@/constants/fonts";
 
@@ -94,19 +94,19 @@ export function SlideMenu({ isOpen, onClose }: SlideMenuProps) {
                 {
                     text: "Logout",
                     style: "destructive",
-                    onPress: () => router.replace("/"),
+                    onPress: async () => {
+                        try {
+                            await clearUserSession();
+                            router.replace("/");
+                        } catch (error) {
+                            console.error("Logout failed:", error);
+                            Alert.alert("Error", "Failed to logout. Please try again.");
+                        }
+                    },
                 },
             ]
         );
     };
-
-    const handleNotifications = () => {
-        setShowAlertManager(true);
-    };
-
-    if (!isVisible) {
-        return null;
-    }
 
     return (
         <>
@@ -157,16 +157,16 @@ export function SlideMenu({ isOpen, onClose }: SlideMenuProps) {
                         <Text style={styles.menuText}>Profile</Text>
                     </TouchableOpacity>
 
-                    <TouchableOpacity style={styles.menuItem} onPress={onClose}>
+                    <TouchableOpacity style={styles.menuItem} onPress={() => {
+                        setShowAlertManager(true); // Open AlertManager modal
+                    }}>
                         <Ionicons name="settings-outline" size={24} color="#374151" />
                         <Text style={styles.menuText}>Settings</Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity
                         style={styles.menuItem}
-                        onPress={() => {
-                            setShowAlertManager(true); // Open AlertManager modal
-                        }}
+                        onPress={onClose}
                     >
                         <Ionicons name="notifications-outline" size={24} color="#374151" />
                         <Text style={styles.menuText}>Notifications</Text>
@@ -192,17 +192,18 @@ export function SlideMenu({ isOpen, onClose }: SlideMenuProps) {
                 visible={showAlertManager}
                 onRequestClose={() => setShowAlertManager(false)}
             >
-                <View style={styles.alertModalOverlay}>
-                    <View style={styles.alertModalContainer}>
-                        <TouchableOpacity
-                            style={styles.closeButton}
-                            onPress={() => setShowAlertManager(false)}
-                        >
-                            <Ionicons name="close" size={24} color="#6B7280" />
-                        </TouchableOpacity>
+                <TouchableOpacity
+                    style={styles.alertModalOverlay}
+                    activeOpacity={1}
+                    onPress={() => setShowAlertManager(false)}
+                >
+                    <TouchableOpacity
+                        activeOpacity={1}
+                        onPress={(e) => e.stopPropagation()}
+                    >
                         <AlertManager />
-                    </View>
-                </View>
+                    </TouchableOpacity>
+                </TouchableOpacity>
             </Modal>
         </>
     );
@@ -295,20 +296,11 @@ const styles = StyleSheet.create({
         textAlign: "center",
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
-    // AlertManager modal styles
     alertModalOverlay: {
         flex: 1,
         backgroundColor: "rgba(0, 0, 0, 0.5)",
         justifyContent: "center",
-        alignItems: "center",
-    },
-    alertModalContainer: {
-        backgroundColor: "transparent",
-        borderRadius: 16,
-        margin: 20,
-        position: "relative",
-        width: "90%",
-        maxHeight: "80%",
+        padding: 10,
     },
     closeButton: {
         position: "absolute",

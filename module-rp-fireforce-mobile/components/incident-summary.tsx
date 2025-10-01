@@ -119,7 +119,7 @@ const IncidentSummary: React.FC<IncidentSummaryProps> = ({
         }
 
         return incidents.filter(incident => {
-            const incidentDate = new Date(incident.timestamp || incident.created_at);
+            const incidentDate = new Date(incident.timestamp || incident.createdAt);
             return incidentDate >= cutoffDate;
         });
     };
@@ -246,7 +246,7 @@ const IncidentSummary: React.FC<IncidentSummaryProps> = ({
     };
 
     const formatIncidentTime = (incident: Incident) => {
-        const date = new Date(incident.timestamp || incident.created_at);
+        const date = new Date(incident.timestamp || incident.createdAt);
         return date.toLocaleString([], {
             month: 'short',
             day: 'numeric',
@@ -276,8 +276,8 @@ const IncidentSummary: React.FC<IncidentSummaryProps> = ({
     const currentStats = getIncidentStats();
     const recentIncidents = filterIncidentsByTimeframe(incidents, selectedTimeframe)
         .sort((a, b) => {
-            const dateA = new Date(a.timestamp || a.created_at).getTime();
-            const dateB = new Date(b.timestamp || b.created_at).getTime();
+            const dateA = new Date(a.timestamp || a.createdAt).getTime();
+            const dateB = new Date(b.timestamp || b.createdAt).getTime();
             return dateB - dateA;
         })
         .slice(0, 3);

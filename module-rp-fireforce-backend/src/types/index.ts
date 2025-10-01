@@ -8,24 +8,24 @@ export interface Env {
 	AWS_REGION: string;
 }
 
-export interface Incident {
-	id: string;
-	title: string;
-	description: string;
-	severity: 'low' | 'medium' | 'high' | 'critical' | null | undefined;
-	status: 'open' | 'investigating' | 'resolved';
-	timestamp: string;
-	reportedBy: string;
-	location: string | null;
-	awsAlarmName: string;
-	awsAccountId: string;
-	stateReason: string;
-	metricName: string | null;
-	aws_console_url?: string | null;
-	resolvedAt?: string;
-	createdAt?: string;
-	updatedAt?: string;
-}
+	export interface Incident {
+		id: string;
+		title: string;
+		description: string;
+		severity: 'low' | 'medium' | 'high' | 'critical' | null | undefined;
+		status: 'open' | 'investigating' | 'resolved';
+		timestamp: string;
+		reportedBy: string;
+		location: string | null;
+		awsAlarmName: string;
+		awsAccountId: string;
+		stateReason: string;
+		metricName: string | null;
+		aws_console_url?: string | null;
+		resolvedAt?: string;
+		createdAt?: string;
+		updatedAt?: string;
+	}
 
 export interface CreateIncidentTypes {
 	title: string;
@@ -130,9 +130,16 @@ export interface IncidentCommentPayload {
 export interface IncidentCommentResponse {
 	id: string;
 	incidentId: string;
-	userId: string;
+	userEmail: string;
+	userFullname: string | "Full Name Not Found" | null;
 	comment: string;
 	createdAt: Date;
+}
+
+export interface IncidentStatus {
+	id: string;
+	status: string;
+	updatedAt: string | null;
 }
 
 export interface OnCallUser {

@@ -6,7 +6,8 @@ import {
 	Incident,
 	IncidentCommentPayload, IncidentCommentResponse,
 	IncidentFilters,
-	IncidentStats
+	IncidentStats,
+	IncidentStatus
 } from '../types';
 import {IncidentService} from "../services/incident.services";
 
@@ -276,7 +277,7 @@ export async function handleIncidentResponse(
 		}
 
 		const incidentService = new IncidentService(env);
-		const result = await incidentService.respondToIncident(
+		const result = await incidentService.changeIncidentStatus(
 			incidentId,
 			action,
 			userId
@@ -476,6 +477,154 @@ export async function handlePostIncidentComment(
 		const errorResponse: ApiResponse<null> = {
 			httpStatus: "ERROR",
 			message: "Failed to post comment",
+			data: null
+		};
+
+		return new Response(JSON.stringify(errorResponse), {
+			status: 500,
+			headers: {
+				...corsHeaders,
+				'Content-Type': 'application/json'
+			}
+		});
+	}
+}
+
+// UPDATE Incident Status
+export async function handleUpdateIncidentStatus(
+	request: Request,
+	env: Env,
+	corsHeaders: Record<string, string>
+): Promise<Response> {
+	try {
+		const { incidentId, newStatus, resolvedBy } = (await request.json()) as {
+			incidentId: string;
+			newStatus: string;
+			resolvedBy?: string;
+		};
+
+		if (!incidentId || !newStatus) {
+			const errorResponse: ApiResponse<null> = {
+				httpStatus: "ERROR",
+				message: "incidentId and newStatus are required",
+				data: null
+			};
+			return new Response(JSON.stringify(errorResponse), {
+				status: 400,
+				headers: {
+					...corsHeaders,
+					'Content-Type': 'application/json'
+				}
+			});
+		}
+
+		const incidentService = new IncidentService(env);
+
+		const result = await incidentService.changeIncidentStatus(
+			incidentId,
+			newStatus,
+			resolvedBy
+		);
+
+		const message = result.notifiedCount
+			? `Incident ${newStatus}. All-clear sent to ${result.notifiedCount} people.`
+			: `Incident status updated to ${newStatus}`;
+
+		const successResponse: ApiResponse<typeof result> = {
+			httpStatus: "OK",
+			message,
+			data: result
+		};
+
+		return new Response(JSON.stringify(successResponse), {
+			status: 200,
+			headers: {
+				...corsHeaders,
+				'Content-Type': 'application/json'
+			}
+		});
+
+	} catch (err) {
+		console.error("Error updating incident status:", err);
+
+		if (err instanceof Error && err.message.includes('not found')) {
+			const notFoundResponse: ApiResponse<null> = {
+				httpStatus: "ERROR",
+				message: "Incident not found",
+				data: null
+			};
+			return new Response(JSON.stringify(notFoundResponse), {
+				status: 404,
+				headers: {
+					...corsHeaders,
+					'Content-Type': 'application/json'
+				}
+			});
+		}
+
+		if (err instanceof Error && err.message.includes('Database connection')) {
+			const errorResponse: ApiResponse<null> = {
+				httpStatus: "ERROR",
+				message: 'Database service unavailable',
+				data: null
+			};
+			return new Response(JSON.stringify(errorResponse), {
+				status: 503,
+				headers: {
+					...corsHeaders,
+					'Content-Type': 'application/json'
+				}
+			});
+		}
+
+		const errorResponse: ApiResponse<null> = {
+			httpStatus: "ERROR",
+			message: "Failed to update incident status",
+			data: null
+		};
+
+		return new Response(JSON.stringify(errorResponse), {
+			status: 500,
+			headers: {
+				...corsHeaders,
+				'Content-Type': 'application/json'
+			}
+		});
+	}
+}
+
+export async function handleResolveIncident(
+	request: Request,
+	env: Env,
+	corsHeaders: Record<string, string>
+): Promise<Response> {
+	try {
+
+		const {incidentId, resolvedBy} = (await request.json()) as {
+			incidentId: string;
+			resolvedBy: string;
+		};
+
+		const incidentService = new IncidentService(env);
+		const result = await incidentService.resolveIncident(incidentId, resolvedBy);
+
+		const response: ApiResponse<any> = {
+			httpStatus: "OK",
+			message: `Incident resolved. All-clear sent to ${result.notifiedCount} people.`,
+			data: result
+		};
+
+		return new Response(JSON.stringify(response), {
+			status: 200,
+			headers: {
+				...corsHeaders,
+				'Content-Type': 'application/json'
+			}
+		});
+	} catch (error: any) {
+		const errorResponse: ApiResponse<null> = {
+			httpStatus: "ERROR",
+			message: error.message || 'Failed to resolve incident',
 			data: null
 		};
 
