@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { oncallController } from '@/api/oncall-schedule-controller';
 import { OnCallUser } from '@/types/oncall-types';
+import { FONT_FAMILY } from '@/constants/fonts';
 
 export default function CreateOverrideScreen() {
     const router = useRouter();
@@ -40,11 +41,16 @@ export default function CreateOverrideScreen() {
         try {
             const teams = await oncallController.getTeams();
             const team = teams.find(t => t.id === teamId);
-            if (team && team.members) {
+
+            if (team && team.members && Array.isArray(team.members)) {
                 setAvailableUsers(team.members);
+            } else {
+                console.log('Team members not found or invalid format:', team);
+                setAvailableUsers([]);
             }
         } catch (error) {
             console.error('Error loading team members:', error);
+            setAvailableUsers([]);
         }
     };
 
@@ -240,6 +246,7 @@ const styles = StyleSheet.create({
         fontSize: 20,
         fontWeight: '700',
         color: '#111827',
+        fontFamily: FONT_FAMILY.POPPINS_BOLD,
     },
     content: {
         flex: 1,
@@ -253,6 +260,7 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: '#111827',
         marginBottom: 8,
+        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
     roleContainer: {
         flexDirection: 'row',
@@ -274,9 +282,11 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: '#6B7280',
         fontWeight: '500',
+        fontFamily: FONT_FAMILY.POPPINS_MEDIUM,
     },
     roleTextActive: {
         color: '#FFFFFF',
+        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
     userList: {
         maxHeight: 200,
@@ -303,10 +313,12 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
         color: '#111827',
+        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
     userEmail: {
         fontSize: 14,
         color: '#6B7280',
+        fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     dateButton: {
         flexDirection: 'row',
@@ -321,6 +333,7 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: '#374151',
         marginLeft: 8,
+        fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     input: {
         backgroundColor: '#FFFFFF',
@@ -332,6 +345,7 @@ const styles = StyleSheet.create({
         color: '#111827',
         minHeight: 80,
         textAlignVertical: 'top',
+        fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     submitButton: {
         backgroundColor: '#3B82F6',
@@ -348,5 +362,6 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
         color: '#FFFFFF',
+        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
 });

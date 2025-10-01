@@ -134,19 +134,11 @@ export default function IncidentList({ incidents, error }: IncidentListProps) {
                     AWS Alarm: {incident.awsAlarmName}
                 </Text>
             )}
-
-            <View style={styles.tapIndicator}>
-                <IconSymbol name="chevron.right" size={16} color="#9CA3AF" />
-            </View>
         </TouchableOpacity>
     );
 
     return (
         <View style={styles.incidentsSection}>
-            <Text style={styles.sectionTitle}>
-                Incidents & AWS Alarms
-            </Text>
-
             {error && (
                 <View style={styles.errorContainer}>
                     <Text style={styles.errorText}>
@@ -303,6 +295,7 @@ const styles = StyleSheet.create({
     },
     tabContainer: {
         flexDirection: "row",
+        marginTop: -10,
         marginBottom: 16,
         borderBottomWidth: 1,
         borderBottomColor: "#E5E7EB",

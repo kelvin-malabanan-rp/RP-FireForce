@@ -28,7 +28,7 @@ export interface OnCallTeam {
     id: string;
     name: string;
     description?: string;
-    memberCount?: number;
+    members?: number;
     createdAt?: string;
     updatedAt?: string;
 }

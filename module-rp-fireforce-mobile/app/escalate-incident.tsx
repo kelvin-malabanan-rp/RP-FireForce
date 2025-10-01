@@ -13,6 +13,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { oncallController } from '@/api/oncall-schedule-controller';
+import {FONT_FAMILY} from "@/constants/fonts";
 
 export default function EscalateIncidentScreen() {
     const router = useRouter();
@@ -168,6 +169,7 @@ const styles = StyleSheet.create({
         fontSize: 20,
         fontWeight: '700',
         color: '#111827',
+        fontFamily: FONT_FAMILY.POPPINS_BOLD,
     },
     content: {
         flex: 1,
@@ -181,6 +183,7 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: '#111827',
         marginBottom: 8,
+        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
     input: {
         backgroundColor: '#FFFFFF',
@@ -190,6 +193,7 @@ const styles = StyleSheet.create({
         padding: 12,
         fontSize: 16,
         color: '#111827',
+        fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     textArea: {
         minHeight: 120,
@@ -223,6 +227,7 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: '600',
         color: '#6B7280',
+        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
     infoCard: {
         flexDirection: 'row',
@@ -237,6 +242,7 @@ const styles = StyleSheet.create({
         color: '#1E40AF',
         marginLeft: 8,
         lineHeight: 20,
+        fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     submitButton: {
         flexDirection: 'row',
@@ -255,5 +261,6 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: '#FFFFFF',
         marginLeft: 8,
+        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
 });
