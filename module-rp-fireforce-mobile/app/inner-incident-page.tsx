@@ -16,6 +16,7 @@ import {
     getIncidentById,
     postIncidentComment,
     getAllIncidentComments,
+    resolveIncident,
     updateIncidentStatus
 } from '@/api/incident-controller';
 import { getSeverityColor, getStatusColor } from '@/constants/colors';
@@ -26,15 +27,15 @@ import {
     GetAllIncidentCommentsResponse
 } from '@/types/incident-types';
 import { FONT_FAMILY } from '@/constants/fonts';
-import {UserSession} from "@/types";
-import {retrieveUserSession} from "@/constants/local-storage";
+import { UserSession } from "@/types";
+import { retrieveUserSession } from "@/constants/local-storage";
 
 export default function InnerIncidentPage() {
     const router = useRouter();
     const { incidentId } = useLocalSearchParams<{ incidentId: string }>();
 
     const [incident, setIncident] = useState<IncidentUI | null>(null);
-    const [comments, setComments] = useState<GetAllIncidentCommentsResponse['data']>([]);
+    const [comments, setComments] = useState<Array<GetAllIncidentCommentsResponse['data']>>([]);
     const [userSession, setUserSession] = useState<UserSession | null>(null);
     const [loading, setLoading] = useState(true);
     const [loadingComments, setLoadingComments] = useState(false);
@@ -46,7 +47,6 @@ export default function InnerIncidentPage() {
         return new Date(dateTimeString);
     };
 
-    // Transform API incident to UI incident format
     const transformApiIncident = (apiIncident: Incident): IncidentUI => ({
         id: apiIncident.id,
         title: apiIncident.title,
@@ -62,7 +62,6 @@ export default function InnerIncidentPage() {
         awsAlarmName: apiIncident.awsAlarmName || undefined,
     });
 
-    // Load user session
     const loadUserSession = async () => {
         try {
             const session = await retrieveUserSession();
@@ -81,6 +80,7 @@ export default function InnerIncidentPage() {
         try {
             const commentsResponse = await getAllIncidentComments(incidentId);
             if (commentsResponse.httpStatus === "OK" && commentsResponse.data) {
+                // Backend already returns an array, don't wrap it again
                 setComments(commentsResponse.data);
             }
         } catch (error) {
@@ -90,7 +90,6 @@ export default function InnerIncidentPage() {
         }
     };
 
-    // Fetch specific incident details
     const fetchIncident = async () => {
         try {
             const response = await getIncidentById(incidentId);
@@ -98,7 +97,6 @@ export default function InnerIncidentPage() {
             if (response.httpStatus === "OK" && response.data) {
                 const transformedIncident = transformApiIncident(response.data);
                 setIncident(transformedIncident);
-                // Fetch comments after incident is loaded
                 await fetchComments();
             } else {
                 Alert.alert("Error", response.message || "Incident not found", [
@@ -122,17 +120,15 @@ export default function InnerIncidentPage() {
         }
     }, [incidentId]);
 
-    // Handle accept action
     const handleAccept = async () => {
-        if (!incident) return;
+        if (!incident || !userSession) return;
 
-        // Different alert based on incident status
         const isInvestigating = incident.status === "investigating";
 
         Alert.alert(
             isInvestigating ? "Resolve Incident" : "Accept Incident",
             isInvestigating
-                ? "Are you sure this incident is already resolved?"
+                ? "Mark this incident as resolved? All notified users will receive an all-clear notification."
                 : "Are you sure you want to accept this incident?",
             [
                 { text: "Cancel", style: "cancel" },
@@ -142,24 +138,31 @@ export default function InnerIncidentPage() {
                     onPress: async () => {
                         setProcessingAction(true);
                         try {
-                            const payload = {
-                                incidentId: incidentId,
-                                newStatus: isInvestigating ? "resolved" : "investigating"
-                            };
+                            const result = await updateIncidentStatus({
+                                incidentId: incident.id,
+                                newStatus: isInvestigating ? "resolved" : "investigating",
+                                resolvedBy: userSession.email
+                            });
 
-                            // Call your update incident status API
-                            await updateIncidentStatus(payload);
+                            if (result.data || result.object) {
+                                const resultData = result.data || result.object!;
+                                if (isInvestigating && resultData.notifiedCount) {
+                                    Alert.alert(
+                                        'Success',
+                                        `Incident resolved! All-clear notification sent to ${resultData.notifiedCount} people.`,
+                                        [{ text: 'OK', onPress: () => router.push('/tabs/incidents') }]
+                                    );
+                                } else {
+                                    Alert.alert("Success", "Incident accepted successfully. Now investigating.");
+                                }
 
-                            if (isInvestigating) {
-                                Alert.alert("Success", "Incident resolved successfully");
-                                // Update status to resolved
-                                setIncident(prev => prev ? { ...prev, status: 'resolved' } : null);
-                            } else {
-                                Alert.alert("Success", "Incident accepted successfully. Now Investigating");
-                                // Update status to investigating
-                                setIncident(prev => prev ? { ...prev, status: 'investigating' } : null);
+                                setIncident(prev => prev ? {
+                                    ...prev,
+                                    status: resultData.status
+                                } : null);
                             }
                         } catch (error) {
+                            console.error(`Error ${isInvestigating ? 'resolving' : 'accepting'} incident:`, error);
                             Alert.alert("Error", `Failed to ${isInvestigating ? 'resolve' : 'accept'} incident`);
                         } finally {
                             setProcessingAction(false);
@@ -169,6 +172,7 @@ export default function InnerIncidentPage() {
             ]
         );
     };
+
     // Handle ignore action
     const handleIgnore = async () => {
         if (!incident) return;
@@ -184,10 +188,6 @@ export default function InnerIncidentPage() {
                     onPress: async () => {
                         setProcessingAction(true);
                         try {
-                            // TODO: Call your ignore incident API here
-                            // await ignoreIncident(incident.id);
-
-                            // For now, just show success message
                             Alert.alert("Success", "Incident ignored");
                             router.back();
                         } catch (error) {
@@ -201,7 +201,6 @@ export default function InnerIncidentPage() {
         );
     };
 
-    // Handle comment submission
     const handleSubmitComment = async () => {
         if (!comment.trim() || !incident) {
             Alert.alert("Error", "Please enter a comment");
@@ -226,7 +225,6 @@ export default function InnerIncidentPage() {
             if (response.httpStatus === "OK") {
                 Alert.alert("Success", "Comment added successfully");
                 setComment('');
-                // Refresh comments
                 await fetchComments();
             } else {
                 Alert.alert("Error", response.message || "Failed to add comment");
@@ -282,7 +280,6 @@ export default function InnerIncidentPage() {
 
     return (
         <SafeAreaView style={styles.container}>
-            {/* Header */}
             <View style={styles.header}>
                 <TouchableOpacity
                     style={styles.backButton}
@@ -296,7 +293,6 @@ export default function InnerIncidentPage() {
             </View>
 
             <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-                {/* Status Banner */}
                 <View style={[styles.statusBanner, { backgroundColor: getStatusColor(incident.status) }]}>
                     <IconSymbol
                         name={getStatusIcon(incident.status)}
@@ -379,37 +375,41 @@ export default function InnerIncidentPage() {
                 </View>
 
                 {/* Action Buttons */}
-                {incident.status === 'open' && (
+                {incident.status !== 'resolved' && (
                     <View style={styles.actionButtonsContainer}>
-                        <TouchableOpacity
-                            style={[styles.actionButton, styles.acceptButton]}
-                            onPress={handleAccept}
-                            disabled={processingAction}
-                        >
-                            {processingAction ? (
-                                <ActivityIndicator color="#FFFFFF" size="small" />
-                            ) : (
-                                <>
-                                    <IconSymbol name="checkmark" size={20} color="#FFFFFF" />
-                                    <Text style={styles.actionButtonText}>Accept</Text>
-                                </>
-                            )}
-                        </TouchableOpacity>
+                        {incident.status === 'open' && (
+                            <>
+                                <TouchableOpacity
+                                    style={[styles.actionButton, styles.acceptButton]}
+                                    onPress={handleAccept}
+                                    disabled={processingAction}
+                                >
+                                    {processingAction ? (
+                                        <ActivityIndicator color="#FFFFFF" size="small" />
+                                    ) : (
+                                        <>
+                                            <IconSymbol name="checkmark" size={20} color="#FFFFFF" />
+                                            <Text style={styles.actionButtonText}>Accept</Text>
+                                        </>
+                                    )}
+                                </TouchableOpacity>
 
-                        <TouchableOpacity
-                            style={[styles.actionButton, styles.ignoreButton]}
-                            onPress={handleIgnore}
-                            disabled={processingAction}
-                        >
-                            {processingAction ? (
-                                <ActivityIndicator color="#FFFFFF" size="small" />
-                            ) : (
-                                <>
-                                    <IconSymbol name="xmark" size={20} color="#FFFFFF" />
-                                    <Text style={styles.actionButtonText}>Ignore</Text>
-                                </>
-                            )}
-                        </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={[styles.actionButton, styles.ignoreButton]}
+                                    onPress={handleIgnore}
+                                    disabled={processingAction}
+                                >
+                                    {processingAction ? (
+                                        <ActivityIndicator color="#FFFFFF" size="small" />
+                                    ) : (
+                                        <>
+                                            <IconSymbol name="xmark" size={20} color="#FFFFFF" />
+                                            <Text style={styles.actionButtonText}>Ignore</Text>
+                                        </>
+                                    )}
+                                </TouchableOpacity>
+                            </>
+                        )}
                     </View>
                 )}
                 {/* Action Buttons */}
@@ -639,6 +639,7 @@ const styles = StyleSheet.create({
     },
     actionButtonsContainer: {
         flexDirection: 'row',
+        flexWrap: 'wrap',
         paddingHorizontal: 16,
         gap: 12,
         marginBottom: 16,
@@ -651,12 +652,22 @@ const styles = StyleSheet.create({
         paddingVertical: 14,
         borderRadius: 8,
         gap: 8,
+        minWidth: '100%',
     },
     acceptButton: {
         backgroundColor: '#10B981',
+        flex: 1,
+        minWidth: 0,
     },
     ignoreButton: {
         backgroundColor: '#EF4444',
+        flex: 1,
+        minWidth: 0,
+    },
+    resolveButton: {
+        backgroundColor: '#8B5CF6',
+        flex: 1,
+        minWidth: 0,
     },
     actionButtonText: {
         fontSize: 15,

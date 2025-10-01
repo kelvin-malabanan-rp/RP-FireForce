@@ -8,24 +8,24 @@ export interface Env {
 	AWS_REGION: string;
 }
 
-export interface Incident {
-	id: string;
-	title: string;
-	description: string;
-	severity: 'low' | 'medium' | 'high' | 'critical' | null | undefined;
-	status: 'open' | 'investigating' | 'resolved';
-	timestamp: string;
-	reportedBy: string;
-	location: string | null;
-	awsAlarmName: string;
-	awsAccountId: string;
-	stateReason: string;
-	metricName: string | null;
-	aws_console_url?: string | null;
-	resolvedAt?: string;
-	createdAt?: string;
-	updatedAt?: string;
-}
+	export interface Incident {
+		id: string;
+		title: string;
+		description: string;
+		severity: 'low' | 'medium' | 'high' | 'critical' | null | undefined;
+		status: 'open' | 'investigating' | 'resolved';
+		timestamp: string;
+		reportedBy: string;
+		location: string | null;
+		awsAlarmName: string;
+		awsAccountId: string;
+		stateReason: string;
+		metricName: string | null;
+		aws_console_url?: string | null;
+		resolvedAt?: string;
+		createdAt?: string;
+		updatedAt?: string;
+	}
 
 export interface CreateIncidentTypes {
 	title: string;

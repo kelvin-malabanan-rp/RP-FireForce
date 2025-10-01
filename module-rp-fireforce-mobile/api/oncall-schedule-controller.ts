@@ -2,6 +2,24 @@
 import { CurrentOnCall, OnCallTeam, OnCallScheduleResponse } from '@/types/oncall-types';
 import { BASE_URL_DEV } from "@/utils/backend-url";
 
+type RotationType = 'daily' | 'weekly' | 'biweekly' | 'monthly';
+
+type ScheduleConfig = {
+    teamId: string;
+    rotationType: RotationType;
+    rotationLengthHours: number;
+    rotationStartISO: string;
+    members: Array<{
+        userId: string;
+        firstname?: string;     // optional from server
+        lastname?: string;     // optional from server
+        email?: string;    // optional from server
+        role: 'primary' | 'backup' | 'escalation';
+        orderIndex: number;
+        isActive: boolean;
+    }>;
+};
+
 export class OnCallController {
     private static instance: OnCallController;
     private baseUrl: string;
@@ -17,97 +35,65 @@ export class OnCallController {
         return OnCallController.instance;
     }
 
-    /**
-     * Get current on-call personnel for a specific team
-     */
+    // --- internal helpers ------------------------------------------------------
+
+    private async json<T = any>(res: Response): Promise<T> {
+        let data: any = null;
+        try { data = await res.json(); } catch {}
+        if (!res.ok || (data && data.success === false)) {
+            const msg = data?.error || data?.message || `HTTP ${res.status}`;
+            throw new Error(msg);
+        }
+        return data as T;
+    }
+
+    private withTimeout(ms = 15000): AbortSignal {
+        const ctrl = new AbortController();
+        setTimeout(() => ctrl.abort(), ms);
+        return ctrl.signal;
+    }
+
+    // --- existing methods ------------------------------------------------------
+
+    /** Get current on-call personnel for a specific team */
     async getCurrentOnCall(teamId: string): Promise<CurrentOnCall | null> {
-        try {
-            const url = `${this.baseUrl}/api/oncall/current?teamId=${teamId}`;
-            console.log('Fetching current on-call from:', url);
-            const response = await fetch(url);
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            const data = await response.json();
-            return data.object;
-        } catch (error) {
-            console.error('Error loading current on-call:', error);
-            throw error;
-        }
+        const url = `${this.baseUrl}/api/oncall/current?teamId=${encodeURIComponent(teamId)}`;
+        const res = await fetch(url, { signal: this.withTimeout() });
+        const data = await this.json<{ success: boolean; object: CurrentOnCall | null }>(res);
+        return data.object ?? null;
     }
 
-    /**
-     * Get on-call schedule for a specific team
-     */
+    /** Get on-call schedule (read-only, for 7-day list UI) */
     async getSchedule(teamId: string, days: number = 7): Promise<OnCallScheduleResponse> {
-        try {
-            const url = `${this.baseUrl}/api/oncall/schedule?teamId=${teamId}&days=${days}`;
-            console.log('Fetching schedule from:', url);
-            const response = await fetch(url);
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            const data = await response.json();
-            return {
-                schedule: data.object?.schedule || [],
-                teamId: teamId,
-                days: days
-            };
-        } catch (error) {
-            console.error('Error loading schedule:', error);
-            throw error;
-        }
+        const url = `${this.baseUrl}/api/oncall/schedule?teamId=${encodeURIComponent(teamId)}&days=${days}`;
+        const res = await fetch(url, { signal: this.withTimeout() });
+        const data = await this.json<{ success: boolean; object: { schedule: any[] } }>(res);
+        return { schedule: data.object?.schedule || [], teamId, days };
     }
 
-    /**
-     * Get all available teams
-     */
+    /** Get all available teams */
     async getTeams(): Promise<OnCallTeam[]> {
-        try {
-            const url = `${this.baseUrl}/api/oncall/teams`;
-            console.log('Fetching teams from:', url);
-            const response = await fetch(url);
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            const data = await response.json();
-            return data.object || [];
-        } catch (error) {
-            console.error('Error loading teams:', error);
-            throw error;
-        }
+        const url = `${this.baseUrl}/api/oncall/teams`;
+        const res = await fetch(url, { signal: this.withTimeout() });
+        const data = await this.json<{ success: boolean; object: OnCallTeam[] }>(res);
+        return data.object || [];
     }
 
-    /**
-     * Load all on-call data (current, schedule, and teams)
-     */
+    /** Load all on-call shards for the tab */
     async loadAllOnCallData(teamId: string, days: number = 7): Promise<{
         currentOnCall: CurrentOnCall | null;
         schedule: any[];
         teams: OnCallTeam[];
     }> {
-        try {
-            console.log('teamId:', teamId);
-            const [currentOnCall, scheduleResponse, teams] = await Promise.all([
-                this.getCurrentOnCall(teamId),
-                this.getSchedule(teamId, days),
-                this.getTeams()
-            ]);
-            console.log('Loaded on-call data:', currentOnCall, scheduleResponse, teams);
-            return {
-                currentOnCall,
-                schedule: scheduleResponse.schedule,
-                teams
-            };
-        } catch (error) {
-            console.error('Error loading on-call data:', error);
-            throw error;
-        }
+        const [currentOnCall, scheduleResponse, teams] = await Promise.all([
+            this.getCurrentOnCall(teamId),
+            this.getSchedule(teamId, days),
+            this.getTeams(),
+        ]);
+        return { currentOnCall, schedule: scheduleResponse.schedule, teams };
     }
 
-    /**
-     * Create an on-call override
-     */
+    /** Create an on-call override */
     async createOverride(params: {
         teamId: string;
         startTime: string;
@@ -117,32 +103,17 @@ export class OnCallController {
         reason?: string;
         originalUserId?: string;
     }): Promise<any> {
-        try {
-            const url = `${this.baseUrl}/api/oncall/override`;
-            console.log('Creating override at:', url);
-            console.log('params:', params);
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(params),
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-
-            return await response.json();
-        } catch (error) {
-            console.error('Error creating override:', error);
-            throw error;
-        }
+        const url = `${this.baseUrl}/api/oncall/override`;
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            signal: this.withTimeout(),
+            body: JSON.stringify(params),
+        });
+        return this.json(res);
     }
 
-    /**
-     * Escalate an incident
-     */
+    /** Escalate an incident */
     async escalateIncident(params: {
         teamId: string;
         incidentId: string;
@@ -150,26 +121,46 @@ export class OnCallController {
         priority?: 'low' | 'medium' | 'high' | 'critical';
         currentLevel?: number;
     }): Promise<any> {
-        try {
-            const url = `${this.baseUrl}/api/oncall/escalate`;
-            console.log('Escalating incident at:', url);
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(params),
-            });
+        const url = `${this.baseUrl}/api/oncall/escalate`;
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            signal: this.withTimeout(),
+            body: JSON.stringify(params),
+        });
+        return this.json(res);
+    }
 
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
+    // --- NEW: Manage Schedule endpoints ---------------------------------------
 
-            return await response.json();
-        } catch (error) {
-            console.error('Error escalating incident:', error);
-            throw error;
-        }
+    /** Read schedule configuration for a team (rotation + ordered members) */
+    async getScheduleConfig(teamId: string): Promise<ScheduleConfig> {
+        const url = `${this.baseUrl}/api/oncall/schedule/config?teamId=${encodeURIComponent(teamId)}`;
+        const res = await fetch(url, { signal: this.withTimeout() });
+        const data = await this.json<{ success: boolean; object: ScheduleConfig }>(res);
+        return data.object;
+    }
+
+    /**
+     * Update schedule configuration.
+     * Expect the backend to upsert oncall_schedules and oncall_team_members/order.
+     */
+    async updateScheduleConfig(payload: {
+        teamId: string;
+        rotationType: RotationType;
+        rotationLengthHours: number;
+        rotationStartISO: string;
+        members: Array<{ userId: string; role: 'primary'|'backup'|'escalation'; orderIndex: number; isActive: boolean }>;
+    }): Promise<{ success: true }> {
+        const url = `${this.baseUrl}/api/oncall/schedule/config`;
+        const res = await fetch(url, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            signal: this.withTimeout(),
+            body: JSON.stringify(payload),
+        });
+        const data = await this.json<{ success: boolean }>(res);
+        return { success: !!data.success };
     }
 }
 

@@ -9,6 +9,7 @@ import {
     PostIncidentCommentsResponse, UpdateIncidentStatusResponse
 } from "@/types/incident-types";
 import {GetIncidentsByIdResponse, ResponseCreatedIncident} from "@/types";
+import {ApiResponse} from "@/types/oncall-types";
 
 // Get all incidents
 export const getAllIncidents = async (): Promise<IncidentResponseApi> => {
@@ -105,15 +106,56 @@ export const updateIncidentStatus = async (
     data: {
         incidentId: string
         newStatus: string
+        resolvedBy?: string
     }
-): Promise<UpdateIncidentStatusResponse> => {
+): Promise<ApiResponse<{
+    id: string;
+    status: string;
+    updatedAt: string;
+    notifiedCount?: number;
+    users?: Array<{ name: string; email: string }>;
+}>> => {
     try {
-        const response = await apiManager.put<UpdateIncidentStatusResponse>(
-            `${BASE_URL_DEV}/api/incidents-status`, data
+        const response = await apiManager.put<ApiResponse<{
+            id: string;
+            status: string;
+            updatedAt: string;
+            notifiedCount?: number;
+            users?: Array<{ name: string; email: string }>;
+        }>>(
+            `${BASE_URL_DEV}/api/incidents-status`,
+            data
         );
+
+        // Backend returns 'data' field, not 'object'
+        if (!response.data.data && !response.data.object) {
+            throw new Error('Failed to update incident status');
+        }
+
         return response.data;
     } catch (error) {
-        console.error("Error fetching comments:", error);
+        console.error("Error updating incident status:", error);
+        throw error;
+    }
+}
+
+export const resolveIncident = async (
+    incidentId: string,
+    resolvedBy: string | undefined
+): Promise<{ notifiedCount: number; users: Array<{ name: string; email: string }> }> => {
+    try {
+        const response = await apiManager.post<ApiResponse<{ notifiedCount: number; users: Array<{ name: string; email: string }> }>>(
+            `${BASE_URL_DEV}/api/incidents/${incidentId}/resolve`,
+            { incidentId, resolvedBy }
+        );
+
+        if (!response.data.object) {
+            throw new Error(response.data.error || response.data.message || 'Failed to resolve incident');
+        }
+
+        return response.data.object;
+    } catch (error) {
+        console.error("Error resolving incident:", error);
         throw error;
     }
 }

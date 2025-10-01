@@ -8,30 +8,71 @@ import {
     TouchableOpacity,
     Alert,
     TextInput,
+    ActivityIndicator,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { Picker } from '@react-native-picker/picker';
 import { oncallController } from '@/api/oncall-schedule-controller';
-import {FONT_FAMILY} from "@/constants/fonts";
+import { FONT_FAMILY } from "@/constants/fonts";
+import { BASE_URL_DEV } from '@/utils/backend-url';
+
+type IncidentLite = { id: string; title: string };
 
 export default function EscalateIncidentScreen() {
     const router = useRouter();
     const params = useLocalSearchParams();
     const teamId = (params.teamId as string) || 'team-1';
-    const incidentId = (params.incidentId as string) || '';
+    const routedIncidentId = (params.incidentId as string) || '';
 
     const [priority, setPriority] = useState<'low' | 'medium' | 'high' | 'critical'>('high');
     const [reason, setReason] = useState('');
-    const [selectedIncident, setSelectedIncident] = useState(incidentId);
+    const [selectedIncident, setSelectedIncident] = useState(routedIncidentId);
+    const [incidents, setIncidents] = useState<IncidentLite[]>([]);
+    const [loadingIncidents, setLoadingIncidents] = useState(true);
     const [loading, setLoading] = useState(false);
+
+    // Fetch incidents for dropdown
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                setLoadingIncidents(true);
+                const res = await fetch(`${BASE_URL_DEV}/api/incidents`);
+                const json = await res.json();
+                // Expecting { success, data: Incident[] } or similar;
+                // pick id + title robustly:
+                const list: IncidentLite[] = (json?.data || json || []).map((x: any) => ({
+                    id: String(x.id),
+                    title: String(x.title ?? x.name ?? x.id),
+                }));
+                if (!cancelled) {
+                    setIncidents(list);
+                    // If no incidentId came from route, preselect first
+                    if (!routedIncidentId && list.length > 0) {
+                        setSelectedIncident(list[0].id);
+                    }
+                }
+            } catch (e) {
+                if (!cancelled) {
+                    console.warn('Failed to load incidents:', e);
+                    setIncidents([]);
+                }
+            } finally {
+                if (!cancelled) setLoadingIncidents(false);
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [routedIncidentId]);
 
     const handleEscalate = async () => {
         if (!selectedIncident) {
-            Alert.alert('Error', 'Please enter an incident ID');
+            Alert.alert('Error', 'Please choose an incident');
             return;
         }
-
         if (!reason.trim()) {
             Alert.alert('Error', 'Please provide a reason for escalation');
             return;
@@ -45,11 +86,11 @@ export default function EscalateIncidentScreen() {
                 reason,
                 priority,
             });
-
             Alert.alert('Success', 'Incident escalated successfully', [
-                { text: 'OK', onPress: () => router.back() }
+                { text: 'OK', onPress: () => router.back() },
             ]);
         } catch (error) {
+            console.error(error);
             Alert.alert('Error', 'Failed to escalate incident');
         } finally {
             setLoading(false);
@@ -66,6 +107,8 @@ export default function EscalateIncidentScreen() {
         }
     };
 
+    const priorities = ['low', 'medium', 'high', 'critical'] as const;
+
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
@@ -77,44 +120,91 @@ export default function EscalateIncidentScreen() {
             </View>
 
             <ScrollView style={styles.content}>
-                {/* Incident ID */}
+                {/* Incident selector */}
                 <View style={styles.section}>
-                    <Text style={styles.label}>Incident ID</Text>
-                    <TextInput
-                        style={styles.input}
-                        placeholder="Enter incident ID"
-                        value={selectedIncident}
-                        onChangeText={setSelectedIncident}
-                    />
+                    <Text style={styles.label}>Incident</Text>
+
+                    {loadingIncidents ? (
+                        <View style={[styles.input, styles.centerRow]}>
+                            <ActivityIndicator />
+                            <Text style={{ marginLeft: 8, color: '#6B7280' }}>Loading incidents…</Text>
+                        </View>
+                    ) : incidents.length === 0 ? (
+                        <>
+                            <Text style={{ marginBottom: 8, color: '#6B7280' }}>
+                                No incidents found. You can paste an Incident ID below:
+                            </Text>
+                            <TextInput
+                                style={styles.input}
+                                placeholder="Enter incident ID"
+                                value={selectedIncident}
+                                onChangeText={setSelectedIncident}
+                                autoCapitalize="none"
+                            />
+                        </>
+                    ) : (
+                        <View style={styles.pickerContainer}>
+                            <Picker
+                                selectedValue={selectedIncident}
+                                onValueChange={(val) => setSelectedIncident(String(val))}
+                                style={styles.picker}
+                                dropdownIconColor="#111827"
+                                mode="dropdown"
+                            >
+                                {incidents.map((inc) => (
+                                    <Picker.Item
+                                        key={inc.id}
+                                        label={inc.title}
+                                        value={inc.id}
+                                        color="#111827"
+                                    />
+                                ))}
+                            </Picker>
+                        </View>
+                    )}
                 </View>
 
-                {/* Priority Selection */}
+                {/* Priority */}
                 <View style={styles.section}>
                     <Text style={styles.label}>Priority Level</Text>
                     <View style={styles.priorityContainer}>
-                        {(['low', 'medium', 'high', 'critical'] as const).map((p) => (
-                            <TouchableOpacity
-                                key={p}
-                                style={[
-                                    styles.priorityButton,
-                                    priority === p && styles.priorityButtonActive,
-                                    { borderColor: getPriorityColor(p) }
-                                ]}
-                                onPress={() => setPriority(p)}
-                            >
-                                <View style={[styles.priorityDot, { backgroundColor: getPriorityColor(p) }]} />
-                                <Text style={[
-                                    styles.priorityText,
-                                    priority === p && { color: getPriorityColor(p) }
-                                ]}>
-                                    {p.charAt(0).toUpperCase() + p.slice(1)}
-                                </Text>
-                            </TouchableOpacity>
-                        ))}
+                        {priorities.map((p) => {
+                            const isActive = priority === p;
+                            const color = getPriorityColor(p);
+                            return (
+                                <TouchableOpacity
+                                    key={p}
+                                    style={[
+                                        styles.priorityButton,
+                                        { borderColor: color },
+                                        isActive && { backgroundColor: `${color}22`, borderColor: color },
+                                    ]}
+                                    onPress={() => setPriority(p)}
+                                >
+                                    <View style={[styles.priorityDot, { backgroundColor: color }]} />
+                                    <Text
+                                        style={[
+                                            styles.priorityText,
+                                            isActive && { color, fontWeight: '700' },
+                                        ]}
+                                    >
+                                        {p.charAt(0).toUpperCase() + p.slice(1)}
+                                    </Text>
+                                    {isActive && (
+                                        <Ionicons
+                                            name="checkmark-circle"
+                                            size={18}
+                                            color={color}
+                                            style={{ marginLeft: 6 }}
+                                        />
+                                    )}
+                                </TouchableOpacity>
+                            );
+                        })}
                     </View>
                 </View>
 
-                {/* Escalation Reason */}
+                {/* Reason */}
                 <View style={styles.section}>
                     <Text style={styles.label}>Escalation Reason</Text>
                     <TextInput
@@ -127,7 +217,7 @@ export default function EscalateIncidentScreen() {
                     />
                 </View>
 
-                {/* Info Card */}
+                {/* Info */}
                 <View style={styles.infoCard}>
                     <Ionicons name="information-circle" size={20} color="#3B82F6" />
                     <Text style={styles.infoText}>
@@ -135,7 +225,7 @@ export default function EscalateIncidentScreen() {
                     </Text>
                 </View>
 
-                {/* Submit Button */}
+                {/* Submit */}
                 <TouchableOpacity
                     style={[styles.submitButton, loading && styles.submitButtonDisabled]}
                     onPress={handleEscalate}
@@ -193,11 +283,27 @@ const styles = StyleSheet.create({
         padding: 12,
         fontSize: 16,
         color: '#111827',
-        fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     textArea: {
         minHeight: 120,
         textAlignVertical: 'top',
+    },
+    centerRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    pickerContainer: {
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+        backgroundColor: '#FFFFFF',
+        borderRadius: 8,
+        overflow: 'hidden',
+        height: 50,
+        justifyContent: 'center',
+    },
+    picker: {
+        color: '#111827',
+        fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     priorityContainer: {
         flexDirection: 'row',
@@ -207,15 +313,11 @@ const styles = StyleSheet.create({
     priorityButton: {
         flexDirection: 'row',
         alignItems: 'center',
-        padding: 12,
+        paddingVertical: 10,
+        paddingHorizontal: 12,
         borderRadius: 8,
         borderWidth: 2,
-        borderColor: '#E5E7EB',
         backgroundColor: '#FFFFFF',
-        marginBottom: 4,
-    },
-    priorityButtonActive: {
-        backgroundColor: '#F3F4F6',
     },
     priorityDot: {
         width: 12,

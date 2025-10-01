@@ -82,10 +82,11 @@ export interface OnCallEscalation {
 
 // API Response wrapper types
 export interface ApiResponse<T> {
-    success: boolean;
-    object?: T;
+    httpStatus: string;
+    message: string;
+    data?: T;      // Change from object to data
+    object?: T;    // Keep for backward compatibility
     error?: string;
-    message?: string;
 }
 
 // Request parameter types

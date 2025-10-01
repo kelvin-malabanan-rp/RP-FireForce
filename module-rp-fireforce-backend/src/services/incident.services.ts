@@ -1,7 +1,12 @@
 // services/incident.services.ts
 import {
-	CreateIncidentTypes, Env, Incident, IncidentCommentPayload,
-	IncidentCommentResponse, IncidentFilters, IncidentStats, IncidentStatus,
+	CreateIncidentTypes,
+	Env,
+	Incident,
+	IncidentCommentPayload,
+	IncidentCommentResponse,
+	IncidentFilters,
+	IncidentStats,
 } from '../types';
 import {DatabaseService} from './database.service';
 import {PushNotificationService} from './push-notification.service';
@@ -120,19 +125,24 @@ export class IncidentService {
 		if (!this.dbService.db) throw new Error('DB not available');
 
 		const sql = `
-    UPDATE incidents
-    SET status = 'resolved',
-        resolved_by = ?,
-        resolved_at = CURRENT_TIMESTAMP,
-        updated_at = CURRENT_TIMESTAMP
-    WHERE id = ?
-  `;
+			UPDATE incidents
+			SET status = 'resolved',
+				resolved_by = ?,
+				resolved_at = CURRENT_TIMESTAMP,
+				updated_at = CURRENT_TIMESTAMP
+			WHERE id = ?
+		`;
 		await this.dbService.db.prepare(sql).bind(resolvedBy ?? null, incidentId).run();
 
-		// Fire all clear after successful resolve
-		await this.pushService.sendAllClear(incidentId);
+		// Fire all clear after successful resolve and capture the result
+		const notificationResult = await this.pushService.sendAllClear(incidentId);
 
-		return { incidentId, status: 'resolved' };
+		return {
+			incidentId,
+			status: 'resolved',
+			notifiedCount: notificationResult?.notifiedCount || 0,
+			users: notificationResult?.users || []
+		};
 	}
 
 
@@ -191,64 +201,6 @@ export class IncidentService {
 		}
 	}
 
-	// services/incident.services.ts (or wherever this lives)
-	async respondToIncident(
-		incidentId: string,
-		action: "acknowledge" | "decline",
-		userId?: string
-	): Promise<{ incidentId: string; action: string; escalated?: boolean }> {
-		if (!this.dbService?.db) throw new Error("Database not available");
-
-		// 1) Verify the incident exists (optional but helpful)
-		const inc = await this.dbService.db
-			.prepare("SELECT id FROM incidents WHERE id = ?")
-			.bind(incidentId)
-			.first<{ id: string }>();
-		if (!inc) throw new Error(`Incident not found: ${incidentId}`);
-
-		// 2) If acknowledging, ensure user exists; otherwise set to NULL to avoid FK violation
-		let assignee: string | null = null;
-		if (action === "acknowledge" && userId) {
-			const user = await this.dbService.db
-				.prepare("SELECT id FROM users WHERE id = ?")
-				.bind(userId)
-				.first<{ id: string }>();
-			if (user?.id) {
-				assignee = user.id;
-			} else {
-				// User not found → don’t assign to avoid FOREIGN KEY constraint fail
-				console.warn(`[incident] User ${userId} not found; leaving assigned_to NULL`);
-				assignee = null;
-			}
-		}
-
-		// 3) Decide new status
-		const newStatus = action === "acknowledge" ? "investigating" : "open";
-
-		// 4) Update (assigned_to can be NULL; FK is only enforced when non-NULL)
-		const res = await this.dbService.db
-			.prepare(
-				`UPDATE incidents
-         SET status = ?, assigned_to = ?, updated_at = CURRENT_TIMESTAMP
-       WHERE id = ?`
-			)
-			.bind(newStatus, assignee, incidentId)
-			.run();
-
-		if ((res as any)?.meta?.changes === 0) {
-			throw new Error(`Update failed for incident ${incidentId}`);
-		}
-
-		// 5) Optional: trigger escalation if declined
-		const escalated = action === "decline";
-		if (escalated) {
-			console.log(`[incident] Incident ${incidentId} declined — escalating`);
-			// TODO: kick off real escalation here
-		}
-
-		return { incidentId, action, ...(escalated ? { escalated } : {}) };
-	}
-
 	public async selectIncidentById(incidentId: string): Promise<Incident> {
 		const incident = await this.dbService.getIncidentBy(incidentId);
 
@@ -273,7 +225,17 @@ export class IncidentService {
 		return await this.dbService.getIncidentComments(incidentId);
 	}
 
-	async changeIncidentStatus(id: string, status: string): Promise<IncidentStatus> {
-		return await this.dbService.updateSpecificIncidentStatus(id, status);
+	async changeIncidentStatus(
+		id: string,
+		status: string,
+		resolvedBy?: string
+	): Promise<{
+		id: string;
+		status: string;
+		updatedAt: string;
+		notifiedCount?: number;
+		users?: Array<{ name: string; email: string }>;
+	}> {
+		return await this.dbService.updateSpecificIncidentStatus(id, status, resolvedBy);
 	}
 }

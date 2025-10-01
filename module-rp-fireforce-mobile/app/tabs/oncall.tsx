@@ -9,6 +9,7 @@ import {
     RefreshControl,
     Alert,
     StatusBar,
+    ActivityIndicator
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -17,6 +18,7 @@ import { oncallController } from '@/api/oncall-schedule-controller';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from 'react-native';
 import { FONT_FAMILY } from '@/constants/fonts';
+import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function OnCallTab() {
     const router = useRouter();
@@ -103,23 +105,23 @@ export default function OnCallTab() {
     };
 
     const handleManageSchedule = () => {
-        Alert.alert('Schedule', 'Schedule management coming soon');
+        router.push({
+            pathname: '/manage-schedule',
+            params: { teamId: selectedTeamId }
+        });
     };
 
     if (loading) {
         return (
-            <View style={[styles.container, { backgroundColor: Colors[colorScheme ?? 'light'].background }]}>
-                <View style={styles.loadingContainer}>
-                    <Text style={[styles.loadingText, { color: Colors[colorScheme ?? 'light'].text }]}>
-                        Loading on-call schedule...
-                    </Text>
-                </View>
+            <View style={[styles.container, styles.loadingContainer]}>
+                <ActivityIndicator size="large" color="#3B82F6" />
+                <Text style={styles.loadingText}>Loading on-call schedule...</Text>
             </View>
         );
     }
 
     return (
-        <View style={[styles.container, { backgroundColor: '#F3F4F6' }]}>
+        <View style={styles.container}>
             <StatusBar barStyle={colorScheme === 'dark' ? "light-content" : "dark-content"} />
 
             <ScrollView
@@ -302,6 +304,7 @@ const styles = StyleSheet.create({
     loadingText: {
         fontSize: 16,
         color: '#6B7280',
+        marginTop: 12,
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     teamSelector: {
@@ -448,7 +451,7 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: '#9CA3AF',
         fontStyle: 'italic',
-        fontFamily: FONT_FAMILY.POPPINS_REGULAR_ITALIC,
+        fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     actionsCard: {
         backgroundColor: '#FFFFFF',

@@ -256,10 +256,10 @@ CREATE INDEX idx_incident_escalations_status   ON incident_escalations(status);
 /* ======= SEED ======= */
 INSERT OR IGNORE INTO users (id,email,username,password_hash,first_name,last_name,role,is_active,is_verified)
 VALUES
-('user-1','admin@rocketpartners.io','admin','x','Admin','User','admin',1,1),
-('user-2','operator@rocketpartners.io','operator1','x','John','Doe','operator',1,1),
-('user-3','viewer@rocketpartners.io','viewer1','x','Jane','Smith','viewer',1,1),
-('user-4','kelvin.malabanan@rocketpartners.io','kmalabanan','x','Kelvin','Malabanan','admin',1,1);
+('user-1','admin@rocketpartners.io','admin','$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe','Admin','User','admin',1,1),
+('user-2','operator@rocketpartners.io','operator1','$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe','John','Doe','operator',1,1),
+('user-3','viewer@rocketpartners.io','viewer1','$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe','Jane','Smith','viewer',1,1),
+('user-4','kelvin.malabanan@rocketpartners.io','kmalabanan','$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe','Kelvin','Malabanan','admin',1,1);
 
 INSERT OR IGNORE INTO teams (id,name,description,is_active)
 VALUES

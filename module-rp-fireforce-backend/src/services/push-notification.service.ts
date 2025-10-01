@@ -70,8 +70,13 @@ export class PushNotificationService {
 		}
 	}
 
-	async sendAllClear(incidentId: string): Promise<void> {
-		if (!this.dbService.db) return;
+	async sendAllClear(incidentId: string): Promise<{
+		notifiedCount: number;
+		users: Array<{ name: string; email: string }>;
+	}> {
+		if (!this.dbService.db) {
+			return { notifiedCount: 0, users: [] };
+		}
 
 		// 1) Fetch the incident (title/body context)
 		const incidentRow = await this.dbService.db
@@ -80,20 +85,29 @@ export class PushNotificationService {
 			.first();
 		if (!incidentRow) {
 			console.warn('[all_clear] incident not found:', incidentId);
-			return;
+			return { notifiedCount: 0, users: [] };
 		}
 
 		// 2) Find everyone who previously received 'alert' for this incident
+		// Join with users table to get name and email
 		const { results } = await this.dbService.db
-			.prepare(`SELECT DISTINCT token, fcm_token FROM incident_notifications
-                WHERE incident_id = ? AND kind = 'alert'`)
+			.prepare(`
+				SELECT DISTINCT
+					n.token,
+					n.fcm_token,
+					u.name,
+					u.email
+				FROM incident_notifications n
+						 LEFT JOIN users u ON n.token = u.expo_token OR n.fcm_token = u.fcm_token
+				WHERE n.incident_id = ? AND n.kind = 'alert'
+			`)
 			.bind(incidentId)
 			.all();
 
 		const recipients = (results as any[]) || [];
 		if (recipients.length === 0) {
 			console.log('[all_clear] no prior recipients to notify for', incidentId);
-			return;
+			return { notifiedCount: 0, users: [] };
 		}
 
 		// 3) Build an all-clear message (gentle sound/channel)
@@ -107,13 +121,14 @@ export class PushNotificationService {
 			},
 			// Use default sound / a light channel
 			priority: 'normal',
-			sound: 'default',            // Expo: still default; FCM: default or your chime
-			channelId: 'default-v4',     // keep it non-intrusive
-			// no categoryId; no actions here
+			sound: 'default',
+			channelId: 'default-v4',
 		};
 
 		// 4) Send, then log as 'all_clear'
 		let sent = 0;
+		const notifiedUsers: Array<{ name: string; email: string }> = [];
+
 		for (const r of recipients) {
 			const tokenUsed = r.fcm_token || r.token;
 			if (!tokenUsed) continue;
@@ -121,7 +136,18 @@ export class PushNotificationService {
 			const ok = await this.sendPushNotification(tokenUsed, message);
 			if (ok) {
 				sent++;
-				await this.logDelivery(incidentId, 'all_clear',
+
+				// Track notified users
+				if (r.name && r.email) {
+					notifiedUsers.push({
+						name: r.name,
+						email: r.email
+					});
+				}
+
+				await this.logDelivery(
+					incidentId,
+					'all_clear',
 					tokenUsed.startsWith('ExponentPushToken') ? tokenUsed : undefined,
 					tokenUsed.startsWith('ExponentPushToken') ? undefined : tokenUsed
 				);
@@ -129,6 +155,11 @@ export class PushNotificationService {
 		}
 
 		console.log(`[all_clear] sent to ${sent}/${recipients.length} recipients`, { incidentId });
+
+		return {
+			notifiedCount: sent,
+			users: notifiedUsers
+		};
 	}
 
 	private createNotificationMessage(incident: Incident): Omit<PushMessage, 'to'> {
@@ -140,29 +171,31 @@ export class PushNotificationService {
 			},
 			high: {
 				channelId: 'high-priority-v4',
-				sound: 'alarm_sound.mp3', // Changed to use same sound
+				sound: 'alarm_sound.mp3',
 				priority: 'high' as const,
 			},
 			medium: {
 				channelId: 'medium-priority-v4',
-				sound: 'alarm_sound.mp3', // Changed to use same sound
+				sound: 'alarm_sound.mp3',
 				priority: 'normal' as const,
 			},
 			low: {
 				channelId: 'default-v4',
-				sound: 'alarm_sound.mp3', // Changed to use same sound
+				sound: 'alarm_sound.mp3',
 				priority: 'normal' as const,
 			},
 		};
 
-		const config = severityConfig[incident.severity] || severityConfig.low;
+		// Handle null/undefined severity
+		const severity = (incident.severity || 'low') as keyof typeof severityConfig;
+		const config = severityConfig[severity] || severityConfig.low;
 
 		return {
-			title: `${incident.severity.toUpperCase()}: ${incident.title}`,
+			title: `${(incident.severity || 'low').toUpperCase()}: ${incident.title}`,
 			body: incident.description,
 			data: {
 				incidentId: incident.id,
-				severity: incident.severity,
+				severity: incident.severity || 'low',
 				status: incident.status,
 				type: 'incident_alert',
 				awsConsoleUrl: incident.aws_console_url,
@@ -320,9 +353,9 @@ export class PushNotificationService {
 				return null;
 			}
 
-			const data = await response.json();
+			const data = await response.json() as { access_token?: string };
 			console.log('getFirebaseAccessToken data:', data);
-			return data.access_token;
+			return data.access_token || null;
 		} catch (error) {
 			console.error('Error getting Firebase access token:', error);
 			return null;
