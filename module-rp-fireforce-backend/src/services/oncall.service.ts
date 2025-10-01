@@ -388,7 +388,7 @@ export class OnCallService {
 			rotationLengthHours: number;
 			rotationStartISO: string;
 		} | null;
-		members: Array<{ userId: string; role: string; orderIndex: number; isActive: boolean }>;
+		members: Array<{ userId: string; firstName: string; lastName: string; role: string; orderIndex: number; isActive: boolean }>;
 	}> {
 		// 1) get active schedule
 		const scheduleRow = await this.dbService.db
@@ -405,10 +405,21 @@ export class OnCallService {
 		// 2) get team members
 		const { results: memberRows } = await this.dbService.db
 			.prepare(
-				`SELECT user_id, role, order_index, is_active
-         FROM oncall_team_members
-         WHERE team_id = ?
-         ORDER BY order_index`
+				`SELECT
+					 otm.id,
+					 otm.team_id,
+					 otm.user_id,
+					 otm.role,
+					 otm.order_index,
+					 otm.is_active,
+					 u.username,
+					 u.email,
+					 u.first_name,
+					 u.last_name
+				 FROM oncall_team_members otm
+						  LEFT JOIN users u ON otm.user_id = u.id
+				 WHERE otm.team_id = ?
+				 ORDER BY otm.order_index ASC`
 			)
 			.bind(teamId)
 			.all();
@@ -426,6 +437,8 @@ export class OnCallService {
 			members: (memberRows as any[]).map((r) => ({
 				userId: r.user_id,
 				role: r.role,
+				firstName: r.first_name,
+				lastName: r.last_name,
 				orderIndex: r.order_index,
 				isActive: !!r.is_active,
 			})),
@@ -484,6 +497,64 @@ export class OnCallService {
 				.bind(crypto.randomUUID(), teamId, m.userId, m.role, m.orderIndex, m.isActive ? 1 : 0)
 				.run();
 		}
+	}
+
+	async trackIncidentNotification(incidentId: string, userId: string, notificationType: 'initial' | 'escalation'): Promise<void> {
+		const id = crypto.randomUUID();
+		await this.dbService.db.prepare(`
+        INSERT INTO incident_notifications
+        (id, incident_id, user_id, notification_type, sent_at)
+        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `).bind(id, incidentId, userId, notificationType).run();
+	}
+
+	async getNotifiedUsers(incidentId: string): Promise<Array<{ userId: string; email: string; firstName: string; lastName: string }>> {
+		const sql = `
+        SELECT DISTINCT u.id as userId, u.email, u.first_name as firstName, u.last_name as lastName
+        FROM incident_notifications n
+        JOIN users u ON n.user_id = u.id
+        WHERE n.incident_id = ?
+    `;
+		const { results } = await this.dbService.db.prepare(sql).bind(incidentId).all();
+		return results as any[];
+	}
+
+	async sendAllClearNotifications(incidentId: string, resolvedBy: string): Promise<{
+		notifiedCount: number;
+		users: Array<{ name: string; email: string }>;
+	}> {
+		// Get all users who were notified about this incident
+		const notifiedUsers = await this.getNotifiedUsers(incidentId);
+
+		// Get incident details
+		const incident = await this.dbService.db
+			.prepare('SELECT title, severity FROM incidents WHERE id = ?')
+			.bind(incidentId)
+			.first();
+
+		if (!incident) {
+			throw new Error('Incident not found');
+		}
+
+		// Send all-clear notifications (implement your actual notification service here)
+		const notifications = notifiedUsers.map(user => ({
+			name: `${user.firstName} ${user.lastName}`,
+			email: user.email
+		}));
+
+		// Log the all-clear notifications
+		for (const user of notifiedUsers) {
+			await this.dbService.db.prepare(`
+            INSERT INTO incident_notifications
+            (id, incident_id, user_id, notification_type, sent_at)
+            VALUES (?, ?, ?, 'all_clear', CURRENT_TIMESTAMP)
+        `).bind(crypto.randomUUID(), incidentId, user.userId).run();
+		}
+
+		return {
+			notifiedCount: notifiedUsers.length,
+			users: notifications
+		};
 	}
 
 	/**

@@ -285,7 +285,6 @@ export default function IncidentsScreen() {
             </ScrollView>
 
             {/* Create Incident Modal */}
-            {/* Create Incident Modal */}
             <Modal
                 animationType="slide"
                 transparent={true}

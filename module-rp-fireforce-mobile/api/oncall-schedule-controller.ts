@@ -11,7 +11,8 @@ type ScheduleConfig = {
     rotationStartISO: string;
     members: Array<{
         userId: string;
-        name?: string;     // optional from server
+        firstname?: string;     // optional from server
+        lastname?: string;     // optional from server
         email?: string;    // optional from server
         role: 'primary' | 'backup' | 'escalation';
         orderIndex: number;

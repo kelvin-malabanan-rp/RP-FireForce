@@ -8,6 +8,7 @@ import {
     PostIncidentCommentsResponse
 } from "@/types/incident-types";
 import {GetIncidentsByIdResponse, ResponseCreatedIncident} from "@/types";
+import {ApiResponse} from "@/types/oncall-types";
 
 // Get all incidents
 export const getAllIncidents = async (): Promise<IncidentResponseApi> => {
@@ -100,4 +101,25 @@ export const getAllIncidentComments = async (
     }
 }
 
+export async function resolveIncident(
+    incidentId: string,
+    resolvedBy: string,
+    resolution: string
+): Promise<ApiResponse<{ notifiedCount: number; users: Array<{ name: string; email: string }> }>> {
+    try {
+        const response = await fetch(`${BASE_URL_DEV}/api/incidents/${incidentId}/resolve`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ incidentId, resolvedBy, resolution })
+        });
+
+        return await response.json();
+    } catch (error: any) {
+        return {
+            httpStatus: 'INTERNAL_SERVER_ERROR',
+            message: error.message,
+            data: null
+        };
+    }
+}
 

@@ -9,13 +9,13 @@ import {
     RefreshControl,
     Alert,
     StatusBar,
+    useColorScheme, ActivityIndicator
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { CurrentOnCall, OnCallUser, OnCallTeam, OnCallScheduleDay } from '@/types/oncall-types';
 import { oncallController } from '@/api/oncall-schedule-controller';
 import { Colors } from '@/constants/theme';
-import { useColorScheme } from 'react-native';
 import {SafeAreaView} from "react-native-safe-area-context";
 
 export default function OnCallTab() {
@@ -102,26 +102,15 @@ export default function OnCallTab() {
 
     if (loading) {
         return (
-            <SafeAreaView style={[styles.container, { backgroundColor: Colors[colorScheme ?? 'light'].background }]}>
-                <View style={styles.loadingContainer}>
-                    <Text style={[styles.loadingText, { color: Colors[colorScheme ?? 'light'].text }]}>
-                        Loading on-call schedule...
-                    </Text>
-                </View>
-            </SafeAreaView>
+            <View style={[styles.container, styles.loadingContainer]}>
+                <ActivityIndicator size="large" color="#3B82F6" />
+                <Text style={styles.loadingText}>Loading incidents...</Text>
+            </View>
         );
     }
 
     return (
-        <>
-            <Stack.Screen
-                options={{
-                    headerShown: false, // We're using the tab header
-                }}
-            />
-            <SafeAreaView style={[styles.container, { backgroundColor: '#F3F4F6' }]}>
-                <StatusBar barStyle={colorScheme === 'dark' ? "light-content" : "dark-content"} />
-
+        <View style={styles.container}>
                 <ScrollView
                     refreshControl={
                         <RefreshControl
@@ -281,8 +270,7 @@ export default function OnCallTab() {
                         </TouchableOpacity>
                     </View>
                 </ScrollView>
-            </SafeAreaView>
-        </>
+        </View>
     );
 }
 
