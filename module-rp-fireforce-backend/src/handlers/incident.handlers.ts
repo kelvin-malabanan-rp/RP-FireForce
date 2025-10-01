@@ -488,3 +488,44 @@ export async function handlePostIncidentComment(
 		});
 	}
 }
+
+export async function handleResolveIncident(
+	request: Request,
+	env: Env,
+	corsHeaders: Record<string, string>
+): Promise<Response> {
+	try {
+		const { incidentId, resolvedBy, resolution } = await request.json();
+
+		const incidentService = new IncidentService(env);
+		const result = await incidentService.resolveIncident(incidentId, resolvedBy);
+
+		const response: ApiResponse<any> = {
+			httpStatus: "OK",
+			message: `Incident resolved. All-clear sent to ${result.notifiedCount} people.`,
+			data: result
+		};
+
+		return new Response(JSON.stringify(response), {
+			status: 200,
+			headers: {
+				...corsHeaders,
+				'Content-Type': 'application/json'
+			}
+		});
+	} catch (error: any) {
+		const errorResponse: ApiResponse<null> = {
+			httpStatus: "ERROR",
+			message: error.message || 'Failed to resolve incident',
+			data: null
+		};
+
+		return new Response(JSON.stringify(errorResponse), {
+			status: 500,
+			headers: {
+				...corsHeaders,
+				'Content-Type': 'application/json'
+			}
+		});
+	}
+}

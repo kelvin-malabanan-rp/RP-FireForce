@@ -107,6 +107,7 @@ export async function resolveIncident(
     resolution: string
 ): Promise<ApiResponse<{ notifiedCount: number; users: Array<{ name: string; email: string }> }>> {
     try {
+        console.log('Body:', JSON.stringify({ incidentId, resolvedBy, resolution }));
         const response = await fetch(`${BASE_URL_DEV}/api/incidents/${incidentId}/resolve`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

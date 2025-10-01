@@ -6,7 +6,7 @@ import {
 	handleCreateIncident,
 	handleGetIncidents,
 	handleGetStats,
-	handleIncidentResponse, handlePostIncidentComment,
+	handleIncidentResponse, handlePostIncidentComment, handleResolveIncident,
 	handleSelectIncident,
 	handleTestIncident
 } from "../handlers/incident.handlers";
@@ -134,6 +134,10 @@ export class Router {
 			}
 			if (path === '/api/oncall/schedule/config' && method === 'PUT') {
 				return handleUpdateScheduleConfig(request, this.env, CORS_HEADERS);
+			}
+
+			if (path.startsWith('/api/incidents/') && path.endsWith('/resolve') && method === 'POST') {
+				return handleResolveIncident(request, this.env, CORS_HEADERS);
 			}
 
 			// 404 Not Found

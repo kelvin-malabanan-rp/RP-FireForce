@@ -12,7 +12,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { getIncidentById, postIncidentComment, getAllIncidentComments } from '@/api/incident-controller';
+import {
+    getIncidentById,
+    postIncidentComment,
+    getAllIncidentComments,
+    resolveIncident
+} from '@/api/incident-controller';
 import { getSeverityColor, getStatusColor } from '@/constants/colors';
 import {
     IncidentUI,
@@ -21,8 +26,8 @@ import {
     GetAllIncidentCommentsResponse
 } from '@/types/incident-types';
 import { FONT_FAMILY } from '@/constants/fonts';
-import {UserSession} from "@/types";
-import {retrieveUserSession} from "@/constants/local-storage";
+import { UserSession } from "@/types";
+import { retrieveUserSession } from "@/constants/local-storage";
 
 export default function InnerIncidentPage() {
     const router = useRouter();
@@ -41,7 +46,6 @@ export default function InnerIncidentPage() {
         return new Date(dateTimeString);
     };
 
-    // Transform API incident to UI incident format
     const transformApiIncident = (apiIncident: Incident): IncidentUI => ({
         id: apiIncident.id,
         title: apiIncident.title,
@@ -57,7 +61,6 @@ export default function InnerIncidentPage() {
         awsAlarmName: apiIncident.awsAlarmName || undefined,
     });
 
-    // Load user session
     const loadUserSession = async () => {
         try {
             const session = await retrieveUserSession();
@@ -68,7 +71,6 @@ export default function InnerIncidentPage() {
         }
     };
 
-    // In fetchComments:
     const fetchComments = async () => {
         if (!incidentId) return;
 
@@ -85,7 +87,6 @@ export default function InnerIncidentPage() {
         }
     };
 
-    // Fetch specific incident details
     const fetchIncident = async () => {
         try {
             const response = await getIncidentById(incidentId);
@@ -93,7 +94,6 @@ export default function InnerIncidentPage() {
             if (response.httpStatus === "OK" && response.data) {
                 const transformedIncident = transformApiIncident(response.data);
                 setIncident(transformedIncident);
-                // Fetch comments after incident is loaded
                 await fetchComments();
             } else {
                 Alert.alert("Error", response.message || "Incident not found", [
@@ -117,7 +117,6 @@ export default function InnerIncidentPage() {
         }
     }, [incidentId]);
 
-    // Handle accept action
     const handleAccept = async () => {
         if (!incident) return;
 
@@ -132,13 +131,7 @@ export default function InnerIncidentPage() {
                     onPress: async () => {
                         setProcessingAction(true);
                         try {
-                            // TODO: Call your accept incident API here
-                            // await acceptIncident(incident.id);
-
-                            // For now, just show success message
                             Alert.alert("Success", "Incident accepted successfully");
-
-                            // Update local state
                             setIncident(prev => prev ? { ...prev, status: 'investigating' } : null);
                         } catch (error) {
                             Alert.alert("Error", "Failed to accept incident");
@@ -151,7 +144,6 @@ export default function InnerIncidentPage() {
         );
     };
 
-    // Handle ignore action
     const handleIgnore = async () => {
         if (!incident) return;
 
@@ -166,10 +158,6 @@ export default function InnerIncidentPage() {
                     onPress: async () => {
                         setProcessingAction(true);
                         try {
-                            // TODO: Call your ignore incident API here
-                            // await ignoreIncident(incident.id);
-
-                            // For now, just show success message
                             Alert.alert("Success", "Incident ignored");
                             router.back();
                         } catch (error) {
@@ -183,7 +171,52 @@ export default function InnerIncidentPage() {
         );
     };
 
-    // Handle comment submission
+    const handleResolve = async () => {
+        if (!incident || !userSession) return;
+
+        Alert.alert(
+            'Resolve Incident',
+            'Mark this incident as resolved? All notified users will receive an all-clear notification.',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Resolve',
+                    style: 'default',
+                    onPress: async () => {
+                        setProcessingAction(true);
+                        try {
+                            const result = await resolveIncident(
+                                incident.id,
+                                userSession.email || 'Unknown User',
+                                'Issue has been resolved'
+                            );
+
+                            if (result.httpStatus === 'OK' && result.data) {
+                                Alert.alert(
+                                    'Success',
+                                    `Incident resolved! All-clear notification sent to ${result.data.notifiedCount} people.`,
+                                    [
+                                        {
+                                            text: 'OK',
+                                            onPress: () => router.push('/tabs/incidents')
+                                        }
+                                    ]
+                                );
+                            } else {
+                                Alert.alert('Error', result.message || 'Failed to resolve incident');
+                            }
+                        } catch (error) {
+                            console.error('Error resolving incident:', error);
+                            Alert.alert('Error', 'Failed to resolve incident');
+                        } finally {
+                            setProcessingAction(false);
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
     const handleSubmitComment = async () => {
         if (!comment.trim() || !incident) {
             Alert.alert("Error", "Please enter a comment");
@@ -208,7 +241,6 @@ export default function InnerIncidentPage() {
             if (response.httpStatus === "OK") {
                 Alert.alert("Success", "Comment added successfully");
                 setComment('');
-                // Refresh comments
                 await fetchComments();
             } else {
                 Alert.alert("Error", response.message || "Failed to add comment");
@@ -264,7 +296,6 @@ export default function InnerIncidentPage() {
 
     return (
         <SafeAreaView style={styles.container}>
-            {/* Header */}
             <View style={styles.header}>
                 <TouchableOpacity
                     style={styles.backButton}
@@ -278,7 +309,6 @@ export default function InnerIncidentPage() {
             </View>
 
             <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-                {/* Status Banner */}
                 <View style={[styles.statusBanner, { backgroundColor: getStatusColor(incident.status) }]}>
                     <IconSymbol
                         name={getStatusIcon(incident.status)}
@@ -290,7 +320,6 @@ export default function InnerIncidentPage() {
                     </Text>
                 </View>
 
-                {/* Incident Details Card */}
                 <View style={styles.detailsCard}>
                     <View style={styles.titleSection}>
                         <Text style={styles.incidentTitle}>{incident.title}</Text>
@@ -308,7 +337,6 @@ export default function InnerIncidentPage() {
 
                     <Text style={styles.incidentDescription}>{incident.description}</Text>
 
-                    {/* Incident Metadata */}
                     <View style={styles.metadataSection}>
                         <View style={styles.metadataRow}>
                             <IconSymbol name="clock" size={16} color="#6B7280" />
@@ -361,37 +389,59 @@ export default function InnerIncidentPage() {
                 </View>
 
                 {/* Action Buttons */}
-                {incident.status === 'open' && (
+                {incident.status !== 'resolved' && (
                     <View style={styles.actionButtonsContainer}>
-                        <TouchableOpacity
-                            style={[styles.actionButton, styles.acceptButton]}
-                            onPress={handleAccept}
-                            disabled={processingAction}
-                        >
-                            {processingAction ? (
-                                <ActivityIndicator color="#FFFFFF" size="small" />
-                            ) : (
-                                <>
-                                    <IconSymbol name="checkmark" size={20} color="#FFFFFF" />
-                                    <Text style={styles.actionButtonText}>Accept</Text>
-                                </>
-                            )}
-                        </TouchableOpacity>
+                        {incident.status === 'open' && (
+                            <>
+                                <TouchableOpacity
+                                    style={[styles.actionButton, styles.acceptButton]}
+                                    onPress={handleAccept}
+                                    disabled={processingAction}
+                                >
+                                    {processingAction ? (
+                                        <ActivityIndicator color="#FFFFFF" size="small" />
+                                    ) : (
+                                        <>
+                                            <IconSymbol name="checkmark" size={20} color="#FFFFFF" />
+                                            <Text style={styles.actionButtonText}>Accept</Text>
+                                        </>
+                                    )}
+                                </TouchableOpacity>
 
-                        <TouchableOpacity
-                            style={[styles.actionButton, styles.ignoreButton]}
-                            onPress={handleIgnore}
-                            disabled={processingAction}
-                        >
-                            {processingAction ? (
-                                <ActivityIndicator color="#FFFFFF" size="small" />
-                            ) : (
-                                <>
-                                    <IconSymbol name="xmark" size={20} color="#FFFFFF" />
-                                    <Text style={styles.actionButtonText}>Ignore</Text>
-                                </>
-                            )}
-                        </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={[styles.actionButton, styles.ignoreButton]}
+                                    onPress={handleIgnore}
+                                    disabled={processingAction}
+                                >
+                                    {processingAction ? (
+                                        <ActivityIndicator color="#FFFFFF" size="small" />
+                                    ) : (
+                                        <>
+                                            <IconSymbol name="xmark" size={20} color="#FFFFFF" />
+                                            <Text style={styles.actionButtonText}>Ignore</Text>
+                                        </>
+                                    )}
+                                </TouchableOpacity>
+                            </>
+                        )}
+
+                        {/* Resolve Button - Only shows when investigating */}
+                        {incident.status === 'investigating' && (
+                            <TouchableOpacity
+                                style={[styles.actionButton, styles.resolveButton]}
+                                onPress={handleResolve}
+                                disabled={processingAction}
+                            >
+                                {processingAction ? (
+                                    <ActivityIndicator color="#FFFFFF" size="small" />
+                                ) : (
+                                    <>
+                                        <IconSymbol name="checkmark.circle" size={20} color="#FFFFFF" />
+                                        <Text style={styles.actionButtonText}>Resolve</Text>
+                                    </>
+                                )}
+                            </TouchableOpacity>
+                        )}
                     </View>
                 )}
 
@@ -599,6 +649,7 @@ const styles = StyleSheet.create({
     },
     actionButtonsContainer: {
         flexDirection: 'row',
+        flexWrap: 'wrap',
         paddingHorizontal: 16,
         gap: 12,
         marginBottom: 16,
@@ -611,12 +662,22 @@ const styles = StyleSheet.create({
         paddingVertical: 14,
         borderRadius: 8,
         gap: 8,
+        minWidth: '100%',
     },
     acceptButton: {
         backgroundColor: '#10B981',
+        flex: 1,
+        minWidth: 0,
     },
     ignoreButton: {
         backgroundColor: '#EF4444',
+        flex: 1,
+        minWidth: 0,
+    },
+    resolveButton: {
+        backgroundColor: '#8B5CF6',
+        flex: 1,
+        minWidth: 0,
     },
     actionButtonText: {
         fontSize: 15,
@@ -723,4 +784,4 @@ const styles = StyleSheet.create({
         color: '#FFFFFF',
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
-})
+});
