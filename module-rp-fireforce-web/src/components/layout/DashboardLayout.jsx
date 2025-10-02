@@ -37,7 +37,7 @@ const DashboardLayout = ({ user, onLogout }) => {
   const renderActivePage = () => {
     switch (activeTab) {
       case 'dashboard':
-        return <DashboardPage />;
+        return <DashboardPage onNavigate={setActiveTab} />;
       case 'analytics':
         return <AnalyticsPage />;
       case 'incidents':
@@ -49,7 +49,7 @@ const DashboardLayout = ({ user, onLogout }) => {
       case 'settings':
         return <SettingsPage />;
       default:
-        return <DashboardPage />;
+        return <DashboardPage onNavigate={setActiveTab} />;
     }
   };
 

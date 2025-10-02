@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import EnhancedLoginPage from './EnhancedLoginPage';
+import LoginPage from './LoginPage';
 import DashboardLayout from './layout/DashboardLayout';
 
 
@@ -27,7 +27,7 @@ const AppWithAuth = () => {
   };
 
   if (!isAuthenticated) {
-    return <EnhancedLoginPage />;
+    return <LoginPage />;
   }
 
   return (
