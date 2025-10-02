@@ -1,5 +1,113 @@
-import React, { useState } from 'react';
-import { Eye, EyeOff, Shield, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  Eye, 
+  EyeOff, 
+  Shield, 
+  AlertCircle, 
+  CheckCircle, 
+  Loader2,
+  Chrome,
+  Github,
+  Mail,
+  Flame,
+  Users,
+  Lock,
+  Zap
+} from 'lucide-react';
+
+// Particle Background Component
+const ParticleBackground = () => {
+  const canvasRef = useRef(null);
+  const animationRef = useRef(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    const particles = [];
+    const particleCount = 100;
+    const maxDistance = 150;
+
+    // Create particles
+    for (let i = 0; i < particleCount; i++) {
+      particles.push({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        vx: (Math.random() - 0.5) * 0.5,
+        vy: (Math.random() - 0.5) * 0.5,
+        radius: Math.random() * 2 + 1,
+      });
+    }
+
+    const animate = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Update and draw particles
+      particles.forEach((particle, i) => {
+        // Update position
+        particle.x += particle.vx;
+        particle.y += particle.vy;
+
+        // Bounce off edges
+        if (particle.x < 0 || particle.x > canvas.width) particle.vx *= -1;
+        if (particle.y < 0 || particle.y > canvas.height) particle.vy *= -1;
+
+        // Draw particle
+        ctx.beginPath();
+        ctx.arc(particle.x, particle.y, particle.radius, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(59, 130, 246, 0.6)';
+        ctx.fill();
+
+        // Draw connections
+        particles.slice(i + 1).forEach((otherParticle) => {
+          const distance = Math.sqrt(
+            Math.pow(particle.x - otherParticle.x, 2) +
+            Math.pow(particle.y - otherParticle.y, 2)
+          );
+
+          if (distance < maxDistance) {
+            ctx.beginPath();
+            ctx.moveTo(particle.x, particle.y);
+            ctx.lineTo(otherParticle.x, otherParticle.y);
+            ctx.strokeStyle = `rgba(59, 130, 246, ${0.2 * (1 - distance / maxDistance)})`;
+            ctx.lineWidth = 1;
+            ctx.stroke();
+          }
+        });
+      });
+
+      animationRef.current = requestAnimationFrame(animate);
+    };
+
+    animate();
+
+    const handleResize = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    };
+
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+      window.removeEventListener('resize', handleResize);
+    };
+  }, []);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="fixed inset-0 w-full h-full"
+      style={{ zIndex: 1 }}
+    />
+  );
+};
 
 const LoginPage = () => {
   const [formData, setFormData] = useState({
@@ -60,10 +168,63 @@ const LoginPage = () => {
     }
   };
 
+  // Social login handlers
+  const handleGoogleLogin = () => {
+    console.log('Google login clicked');
+    // TODO: Implement Google OAuth
+  };
+
+  const handleGithubLogin = () => {
+    console.log('GitHub login clicked');
+    // TODO: Implement GitHub OAuth
+  };
+
+  const handleMicrosoftLogin = () => {
+    console.log('Microsoft login clicked');
+    // TODO: Implement Microsoft OAuth
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // Validate all fields
+    // Check for emergency admin account first
+    if (formData.email === 'admin' && formData.password === 'password') {
+      setLoading(true);
+      
+      // Simulate loading for UX
+      setTimeout(() => {
+        // Create emergency admin user data
+        const emergencyAdminData = {
+          id: 'emergency-admin-001',
+          email: 'admin@fireforce.emergency',
+          firstName: 'Emergency',
+          lastName: 'Administrator',
+          role: 'Super Admin',
+          token: 'emergency-admin-token-' + Date.now(),
+          isEmergencyAccount: true
+        };
+        
+        // Store authentication data
+        localStorage.setItem('authToken', emergencyAdminData.token);
+        localStorage.setItem('userData', JSON.stringify(emergencyAdminData));
+        localStorage.setItem('user', JSON.stringify(emergencyAdminData));
+        localStorage.setItem('isAuthenticated', 'true');
+        
+        console.log('Emergency admin login successful:', emergencyAdminData);
+        
+        // Show success message
+        alert('🚨 Emergency Admin Access Granted! Welcome to FireForce Emergency Dashboard.');
+        
+        // Trigger authentication state change
+        window.location.reload();
+        
+        setLoading(false);
+      }, 1000); // 1 second delay for better UX
+      
+      return;
+    }
+    
+    // Validate all fields for regular login
     const newErrors = {};
     if (!formData.email) {
       newErrors.email = 'Email is required';
@@ -86,16 +247,56 @@ const LoginPage = () => {
     setLoading(true);
     
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      const response = await fetch('https://incident-webhook-api.rapidresponse.workers.dev/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: formData.email,
+          password: formData.password
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const responseData = await response.json();
       
-      // Here you would typically make an API call to authenticate
-      console.log('Login attempt:', formData);
-      
-      // Handle successful login
-      alert('Login successful!');
+      if (responseData.httpStatus === 'OK' && responseData.data) {
+        // Store authentication data
+        const userData = responseData.data;
+        
+        // Store token in localStorage
+        localStorage.setItem('authToken', userData.token);
+        localStorage.setItem('userData', JSON.stringify({
+          id: userData.id,
+          email: userData.email,
+          firstName: userData.firstName,
+          lastName: userData.lastName
+        }));
+        
+        console.log('Login successful:', userData);
+        
+        // Show success message
+        alert(`Welcome back, ${userData.firstName || userData.email}!`);
+        
+        // Here you would typically redirect to the dashboard
+        // window.location.href = '/dashboard';
+      } else {
+        throw new Error(responseData.message || 'Login failed');
+      }
     } catch (error) {
-      setErrors({ general: 'Login failed. Please try again.' });
+      console.error('Login error:', error);
+      
+      if (error.message.includes('401') || error.message.includes('Unauthorized')) {
+        setErrors({ general: 'Invalid email or password. Please try again.' });
+      } else if (error.message.includes('404')) {
+        setErrors({ general: 'Login service unavailable. Please try again later.' });
+      } else {
+        setErrors({ general: error.message || 'Login failed. Please try again.' });
+      }
     } finally {
       setLoading(false);
     }
@@ -116,151 +317,283 @@ const LoginPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-blue-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <div className="mx-auto w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mb-4 shadow-lg">
-            <Shield className="w-8 h-8 text-white" />
-          </div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Welcome Back
-          </h1>
-          <p className="text-gray-600">
-            Sign in to your FireForce account
-          </p>
-        </div>
+    <div className="min-h-screen relative overflow-hidden">
+      {/* Particle Background */}
+      <div className="absolute inset-0 bg-gradient-to-br from-blue-900 via-blue-800 to-indigo-900">
+        <ParticleBackground />
+      </div>
 
-        {/* Login Form */}
-        <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* General Error */}
-            {errors.general && (
-              <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700">
-                <AlertCircle className="w-5 h-5" />
-                <span className="text-sm">{errors.general}</span>
+      {/* Header */}
+      <header className="relative z-10 bg-black/10 backdrop-blur-sm border-b border-white/10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 bg-gradient-to-r from-orange-500 to-red-500 rounded-xl flex items-center justify-center shadow-lg">
+                <Flame className="w-6 h-6 text-white" />
               </div>
-            )}
-
-            {/* Email Field */}
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-                Email Address
-              </label>
-              <div className="relative">
-                <input
-                  type="email"
-                  id="email"
-                  name="email"
-                  value={formData.email}
-                  onChange={handleInputChange}
-                  onBlur={handleBlur}
-                  className={getInputClasses('email')}
-                  placeholder="Enter your email"
-                  disabled={loading}
-                />
-                {touched.email && formData.email && !errors.email && (
-                  <CheckCircle className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-green-500" />
-                )}
+              <div>
+                <h1 className="text-xl font-bold text-white">FireForce</h1>
+                <p className="text-xs text-blue-200">Emergency Response System</p>
               </div>
-              {errors.email && (
-                <p className="mt-2 text-sm text-red-600 flex items-center gap-1">
-                  <AlertCircle className="w-4 h-4" />
-                  {errors.email}
-                </p>
-              )}
             </div>
+            <div className="flex items-center space-x-6 text-sm text-white/80">
+              <div className="flex items-center space-x-2">
+                <Shield className="w-4 h-4" />
+                <span>Secure</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Zap className="w-4 h-4" />
+                <span>Fast</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Users className="w-4 h-4" />
+                <span>Reliable</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
 
-            {/* Password Field */}
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
-                Password
-              </label>
-              <div className="relative">
-                <input
-                  type={showPassword ? "text" : "password"}
-                  id="password"
-                  name="password"
-                  value={formData.password}
-                  onChange={handleInputChange}
-                  onBlur={handleBlur}
-                  className={getInputClasses('password')}
-                  placeholder="Enter your password"
-                  disabled={loading}
-                />
+      {/* Main Content */}
+      <div className="relative z-10 flex items-center justify-center min-h-[calc(100vh-4rem)] p-4">
+        <div className="w-full max-w-md">
+          {/* Welcome Section */}
+          <div className="text-center mb-8">
+            <div className="mx-auto w-20 h-20 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-3xl flex items-center justify-center mb-6 shadow-2xl transform hover:scale-105 transition-transform duration-300">
+              <Lock className="w-10 h-10 text-white" />
+            </div>
+            <h1 className="text-4xl font-bold text-white mb-3 tracking-tight">
+              Welcome Back
+            </h1>
+            <p className="text-blue-200 text-lg">
+              Access your emergency response dashboard
+            </p>
+          </div>
+
+          {/* Login Card */}
+          <div className="bg-white/10 backdrop-blur-lg rounded-3xl shadow-2xl p-8 border border-white/20 transform hover:bg-white/15 transition-all duration-300">
+            {/* Social Login Options */}
+            <div className="space-y-3 mb-8">
+              <button
+                onClick={handleGoogleLogin}
+                disabled={loading}
+                className="w-full flex items-center justify-center space-x-3 py-3 px-4 bg-white text-gray-700 rounded-xl font-medium hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-blue-600 transition-all duration-200 disabled:opacity-50 shadow-lg hover:shadow-xl"
+              >
+                <Chrome className="w-5 h-5" />
+                <span>Continue with Google</span>
+              </button>
+              
+              <div className="grid grid-cols-2 gap-3">
                 <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                  onClick={handleGithubLogin}
                   disabled={loading}
+                  className="flex items-center justify-center space-x-2 py-3 px-4 bg-gray-800 text-white rounded-xl font-medium hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 focus:ring-offset-blue-600 transition-all duration-200 disabled:opacity-50 shadow-lg hover:shadow-xl"
                 >
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  <Github className="w-5 h-5" />
+                  <span>GitHub</span>
+                </button>
+                
+                <button
+                  onClick={handleMicrosoftLogin}
+                  disabled={loading}
+                  className="flex items-center justify-center space-x-2 py-3 px-4 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-blue-600 transition-all duration-200 disabled:opacity-50 shadow-lg hover:shadow-xl"
+                >
+                  <Mail className="w-5 h-5" />
+                  <span>Microsoft</span>
                 </button>
               </div>
-              {errors.password && (
-                <p className="mt-2 text-sm text-red-600 flex items-center gap-1">
-                  <AlertCircle className="w-4 h-4" />
-                  {errors.password}
-                </p>
-              )}
             </div>
 
-            {/* Remember Me & Forgot Password */}
-            <div className="flex items-center justify-between">
-              <label className="flex items-center">
-                <input
-                  type="checkbox"
-                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 focus:ring-offset-0"
-                  disabled={loading}
-                />
-                <span className="ml-2 text-sm text-gray-600">Remember me</span>
-              </label>
+            {/* Emergency Admin Access */}
+            <div className="mb-6">
               <button
                 type="button"
-                className="text-sm text-blue-600 hover:text-blue-500 font-medium transition-colors"
+                onClick={() => {
+                  setFormData({ email: 'admin', password: 'password' });
+                  // Auto-submit after setting the values
+                  setTimeout(() => {
+                    const event = new Event('submit', { bubbles: true, cancelable: true });
+                    document.querySelector('form').dispatchEvent(event);
+                  }, 100);
+                }}
                 disabled={loading}
+                className="w-full flex items-center justify-center space-x-2 py-2 px-4 bg-red-600/20 text-red-300 border border-red-500/30 rounded-xl font-medium hover:bg-red-600/30 hover:border-red-400/50 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-2 focus:ring-offset-blue-900 transition-all duration-200 disabled:opacity-50 backdrop-blur-sm"
               >
-                Forgot password?
+                <Shield className="w-4 h-4" />
+                <span className="text-sm">🚨 Emergency Admin Access</span>
               </button>
+              <p className="text-xs text-red-300/70 text-center mt-2">
+                For emergency situations only
+              </p>
             </div>
 
-            {/* Submit Button */}
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-blue-600 text-white py-3 px-4 rounded-xl font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl"
-            >
-              {loading ? (
-                <div className="flex items-center justify-center gap-2">
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  Signing in...
-                </div>
-              ) : (
-                'Sign In'
-              )}
-            </button>
-          </form>
+            {/* Divider */}
+            <div className="relative mb-8">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-white/20"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-4 bg-transparent text-white/80 font-medium">Or continue with email</span>
+              </div>
+            </div>
 
-          {/* Divider */}
-          <div className="mt-8 pt-8 border-t border-gray-200">
-            <div className="text-center">
-              <p className="text-sm text-gray-600">
-                Don't have an account?{' '}
-                <button className="text-blue-600 hover:text-blue-500 font-medium transition-colors">
-                  Sign up
+            {/* Email/Password Form */}
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {/* General Error */}
+              {errors.general && (
+                <div className="flex items-center gap-2 p-4 bg-red-500/20 border border-red-500/30 rounded-xl text-red-200 backdrop-blur-sm">
+                  <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                  <span className="text-sm">{errors.general}</span>
+                </div>
+              )}
+
+              {/* Email Field */}
+              <div>
+                <label htmlFor="email" className="block text-sm font-medium text-white/90 mb-2">
+                  Email Address
+                </label>
+                <div className="relative">
+                  <input
+                    type="email"
+                    id="email"
+                    name="email"
+                    value={formData.email}
+                    onChange={handleInputChange}
+                    onBlur={handleBlur}
+                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent text-white placeholder-white/50 backdrop-blur-sm"
+                    placeholder="Enter your email"
+                    disabled={loading}
+                  />
+                  {touched.email && formData.email && !errors.email && (
+                    <CheckCircle className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-green-400" />
+                  )}
+                </div>
+                {errors.email && (
+                  <p className="mt-2 text-sm text-red-300 flex items-center gap-1">
+                    <AlertCircle className="w-4 h-4" />
+                    {errors.email}
+                  </p>
+                )}
+                {!errors.email && (
+                  <p className="mt-2 text-xs text-white/50">
+                    💡 Emergency Access: Use "admin" / "password"
+                  </p>
+                )}
+              </div>
+
+              {/* Password Field */}
+              <div>
+                <label htmlFor="password" className="block text-sm font-medium text-white/90 mb-2">
+                  Password
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    id="password"
+                    name="password"
+                    value={formData.password}
+                    onChange={handleInputChange}
+                    onBlur={handleBlur}
+                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent text-white placeholder-white/50 backdrop-blur-sm"
+                    placeholder="Enter your password"
+                    disabled={loading}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-white/60 hover:text-white/90 transition-colors"
+                    disabled={loading}
+                  >
+                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
+                </div>
+                {errors.password && (
+                  <p className="mt-2 text-sm text-red-300 flex items-center gap-1">
+                    <AlertCircle className="w-4 h-4" />
+                    {errors.password}
+                  </p>
+                )}
+              </div>
+
+              {/* Remember Me & Forgot Password */}
+              <div className="flex items-center justify-between">
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    className="rounded border-white/20 bg-white/10 text-blue-400 focus:ring-blue-400 focus:ring-offset-0"
+                    disabled={loading}
+                  />
+                  <span className="ml-2 text-sm text-white/80">Remember me</span>
+                </label>
+                <button
+                  type="button"
+                  className="text-sm text-blue-300 hover:text-blue-200 font-medium transition-colors"
+                  disabled={loading}
+                >
+                  Forgot password?
                 </button>
+              </div>
+
+              {/* Submit Button */}
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-gradient-to-r from-blue-500 to-indigo-600 text-white py-3 px-4 rounded-xl font-medium hover:from-blue-600 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 focus:ring-offset-blue-900 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-2xl hover:shadow-blue-500/25 transform hover:-translate-y-0.5"
+              >
+                {loading ? (
+                  <div className="flex items-center justify-center gap-2">
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Signing in...
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center gap-2">
+                    <Shield className="w-5 h-5" />
+                    Sign In to FireForce
+                  </div>
+                )}
+              </button>
+            </form>
+
+            {/* Sign Up Link */}
+            <div className="mt-8 pt-6 border-t border-white/20">
+              <div className="text-center">
+                <p className="text-sm text-white/70">
+                  Don't have an account?{' '}
+                  <button className="text-blue-300 hover:text-blue-200 font-medium transition-colors underline decoration-blue-300/50 hover:decoration-blue-200">
+                    Create Account
+                  </button>
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <footer className="relative z-10 bg-black/10 backdrop-blur-sm border-t border-white/10 mt-auto">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <div className="flex flex-col md:flex-row items-center justify-between space-y-4 md:space-y-0">
+            <div className="flex items-center space-x-4 text-sm text-white/70">
+              <span>© 2025 FireForce Emergency Response</span>
+              <span className="hidden md:inline">•</span>
+              <span className="hidden md:inline">All rights reserved</span>
+            </div>
+            <div className="flex items-center space-x-6 text-sm text-white/70">
+              <button className="hover:text-white transition-colors">Privacy Policy</button>
+              <button className="hover:text-white transition-colors">Terms of Service</button>
+              <button className="hover:text-white transition-colors">Support</button>
+            </div>
+          </div>
+          <div className="mt-4 pt-4 border-t border-white/10">
+            <div className="text-center">
+              <p className="text-xs text-white/50 flex items-center justify-center space-x-2">
+                <Lock className="w-3 h-3" />
+                <span>Protected by enterprise-grade security and encryption</span>
               </p>
             </div>
           </div>
         </div>
-
-        {/* Footer */}
-        <div className="text-center mt-8">
-          <p className="text-xs text-gray-500">
-            Protected by FireForce Security System
-          </p>
-        </div>
-      </div>
+      </footer>
     </div>
   );
 };

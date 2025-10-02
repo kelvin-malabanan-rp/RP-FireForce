@@ -19,13 +19,11 @@ import {
   Timer
 } from 'lucide-react';
 
-const DashboardPage = ({ onNavigate }) => {
+const DashboardPage = () => {
   const [timeRange, setTimeRange] = useState('24h');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [nextRefresh, setNextRefresh] = useState(30);
-  const [lastUpdated, setLastUpdated] = useState(null);
   
   // API Data States
   const [incidents, setIncidents] = useState([]);
@@ -53,10 +51,10 @@ const DashboardPage = ({ onNavigate }) => {
   // Fetch Incident Statistics
   const fetchIncidentStats = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/incidents/stats?timeframe=${timeRange}`);
+      const response = await fetch(`${API_BASE_URL}/api/incidents/stats`);
       if (!response.ok) throw new Error('Failed to fetch incident stats');
       const data = await response.json();
-      setIncidentStats(data.data || {});
+      setIncidentStats(data.response_data?.data || data.data || {});
     } catch (err) {
       console.error('Error fetching incident stats:', err);
       setIncidentStats({});
@@ -112,50 +110,30 @@ const DashboardPage = ({ onNavigate }) => {
     } finally {
       setIsLoading(false);
       setRefreshing(false);
-      setLastUpdated(new Date());
     }
   };
 
-  // Initial load and timeRange changes
+  // Initial load
   useEffect(() => {
     loadDashboardData();
-  }, [timeRange]);
-
-  // Auto-refresh every 30 seconds with countdown
-  useEffect(() => {
-    setNextRefresh(30); // Reset countdown when timeRange changes
-    
-    const refreshInterval = setInterval(() => {
-      loadDashboardData(true); // Use true to show refreshing indicator
-      setNextRefresh(30); // Reset countdown after refresh
-    }, 30000); // 30 seconds
-
-    const countdownInterval = setInterval(() => {
-      setNextRefresh(prev => prev > 0 ? prev - 1 : 30);
-    }, 1000); // Update countdown every second
-
-    return () => {
-      clearInterval(refreshInterval);
-      clearInterval(countdownInterval);
-    }; // Cleanup on unmount
-  }, [timeRange]); // Re-setup intervals when timeRange changes
+  }, []);
 
   // Calculate dashboard statistics from real data
   const calculateStats = () => {
-    // Use API stats data if available, fallback to calculated values
-    const activeIncidents = (incidentStats.open || 0) + (incidentStats.investigating || 0) || 
-      incidents.filter(incident => 
-        incident.status === 'Open' || incident.status === 'Investigating'
-      ).length;
+    const activeIncidents = incidents.filter(incident => 
+      incident.status === 'open' || incident.status === 'active' || incident.status === 'investigating'
+    ).length;
 
-    const resolvedIncidents = incidentStats.resolved || 
-      incidents.filter(incident => incident.status === 'Resolved').length;
+    const resolvedToday = incidents.filter(incident => {
+      const today = new Date().toDateString();
+      const incidentDate = new Date(incident.resolved_at || incident.updated_at).toDateString();
+      return incident.status === 'resolved' && incidentDate === today;
+    }).length;
 
     const totalOnCallMembers = onCallTeams.reduce((sum, team) => 
       sum + (team.members?.length || 0), 0
     );
 
-    const totalIncidents = incidentStats.total || incidents.length;
     const avgResponseTime = incidentStats.average_response_time || '4.2m';
 
     return [
@@ -166,28 +144,16 @@ const DashboardPage = ({ onNavigate }) => {
         changeType: activeIncidents > 0 ? 'increase' : 'neutral',
         icon: AlertTriangle,
         color: activeIncidents > 0 ? 'red' : 'green',
-        description: activeIncidents > 0 ? 'Requiring immediate attention' : 'All clear!',
-        gradient: activeIncidents > 0 ? 'from-red-500 to-red-600' : 'from-green-500 to-green-600'
+        description: activeIncidents > 0 ? 'Requiring immediate attention' : 'All clear!'
       },
       {
-        title: 'Resolved Incidents',
-        value: resolvedIncidents.toString(),
-        change: resolvedIncidents > 0 ? `+${resolvedIncidents}` : '0',
+        title: 'Resolved Today',
+        value: resolvedToday.toString(),
+        change: resolvedToday > 0 ? `+${resolvedToday}` : '0',
         changeType: 'increase',
         icon: CheckCircle,
         color: 'green',
-        description: `Successfully resolved in ${timeRange}`,
-        gradient: 'from-green-500 to-green-600'
-      },
-      {
-        title: 'Total Incidents',
-        value: totalIncidents.toString(),
-        change: totalIncidents > 0 ? `${totalIncidents}` : '0',
-        changeType: totalIncidents > 0 ? 'neutral' : 'neutral',
-        icon: BarChart3,
-        color: 'blue',
-        description: `All incidents in ${timeRange}`,
-        gradient: 'from-blue-500 to-blue-600'
+        description: 'Successfully resolved incidents'
       },
       {
         title: 'On-Call Members',
@@ -195,9 +161,17 @@ const DashboardPage = ({ onNavigate }) => {
         change: '0',
         changeType: 'neutral',
         icon: Users,
+        color: 'blue',
+        description: 'Currently available'
+      },
+      {
+        title: 'Avg Response Time',
+        value: avgResponseTime,
+        change: '-0.3m',
+        changeType: 'decrease',
+        icon: Clock,
         color: 'purple',
-        description: 'Currently available',
-        gradient: 'from-purple-500 to-purple-600'
+        description: 'System performance'
       }
     ];
   };
@@ -210,7 +184,7 @@ const DashboardPage = ({ onNavigate }) => {
       .map(incident => ({
         id: incident.id,
         title: incident.title || incident.description || 'Untitled Incident',
-        severity: incident.severity || 'Medium',
+        severity: incident.severity || 'medium',
         status: incident.status || 'open',
         time: getTimeAgo(incident.created_at),
         assignee: incident.assigned_to || 'Unassigned',
@@ -280,23 +254,26 @@ const DashboardPage = ({ onNavigate }) => {
   };
 
   const getSeverityColor = (severity) => {
-    const severityLower = severity?.toLowerCase();
-    switch (severityLower) {
-      case 'critical': return 'bg-red-500 text-white border-red-500';
-      case 'high': return 'bg-red-400 text-white border-red-400';
-      case 'medium': return 'bg-yellow-500 text-white border-yellow-500';
-      case 'low': return 'bg-green-500 text-white border-green-500';
-      default: return 'bg-gray-400 text-white border-gray-400';
+    switch (severity) {
+      case 'critical': return 'bg-red-100 text-red-800 border-red-200';
+      case 'high': return 'bg-orange-100 text-orange-800 border-orange-200';
+      case 'medium': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      case 'low': return 'bg-green-100 text-green-800 border-green-200';
+      default: return 'bg-gray-100 text-gray-800 border-gray-200';
     }
   };
 
   const getStatusIcon = (status) => {
     switch (status) {
-      case 'Open':
+      case 'open':
+      case 'active':
         return <AlertTriangle className="w-4 h-4 text-red-500" />;
-      case 'Investigating':
+      case 'investigating':
         return <Activity className="w-4 h-4 text-orange-500" />;
-      case 'Resolved':
+      case 'monitoring':
+        return <Eye className="w-4 h-4 text-blue-500" />;
+      case 'resolved':
+      case 'closed':
         return <CheckCircle className="w-4 h-4 text-green-500" />;
       default:
         return <AlertCircle className="w-4 h-4 text-gray-500" />;
@@ -357,40 +334,26 @@ const DashboardPage = ({ onNavigate }) => {
             FireForce Dashboard
           </h1>
           <p className="text-gray-600 mt-1">Real-time emergency response monitoring</p>
-          {lastUpdated && (
-            <p className="text-xs text-gray-500 mt-1">
-              Last updated: {lastUpdated.toLocaleTimeString()}
-            </p>
-          )}
         </div>
         
         <div className="flex items-center space-x-3 mt-4 sm:mt-0">
           <select
             value={timeRange}
             onChange={(e) => setTimeRange(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="1h">Last Hour</option>
             <option value="24h">Last 24 Hours</option>
             <option value="7d">Last 7 Days</option>
             <option value="30d">Last 30 Days</option>
           </select>
-          
-          {/* Auto-refresh indicator with countdown */}
-          <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg">
-            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-            <span className="text-sm text-green-700 font-medium">
-              Next refresh: {nextRefresh}s
-            </span>
-          </div>
-          
           <button 
             onClick={() => loadDashboardData(true)}
             disabled={refreshing}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-2"
           >
             <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-            {refreshing ? 'Refreshing...' : 'Manual Refresh'}
+            {refreshing ? 'Refreshing...' : 'Refresh'}
           </button>
         </div>
       </div>
@@ -421,53 +384,27 @@ const DashboardPage = ({ onNavigate }) => {
         })}
       </div>
 
-
-
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Recent Incidents */}
         <div className="lg:col-span-2 bg-white rounded-xl p-6 border border-gray-200">
           <div className="flex items-center justify-between mb-6">
-            <div>
-              <h2 className="text-xl font-bold text-gray-900">Recent Incidents</h2>
-              <p className="text-sm text-gray-500">Latest emergency response activities</p>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="flex items-center text-sm text-gray-500">
-                <Activity className="w-4 h-4 mr-1" />
-                {incidents.length} total
-              </div>
-              <button 
-                onClick={() => onNavigate && onNavigate('incidents')}
-                className="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg text-sm hover:bg-blue-100 transition-colors"
-              >
-                View All
-              </button>
+            <h2 className="text-xl font-bold text-gray-900">Recent Incidents</h2>
+            <div className="flex items-center text-sm text-gray-500">
+              <Activity className="w-4 h-4 mr-1" />
+              {incidents.length} total
             </div>
           </div>
           
           <div className="space-y-4">
-            {recentIncidents.length > 0 ? recentIncidents.map((incident) => {
-              const getIncidentBorderColor = (severity) => {
-                const severityLower = severity?.toLowerCase();
-                switch (severityLower) {
-                  case 'critical': return 'border-l-red-500 bg-red-50';
-                  case 'high': return 'border-l-red-400 bg-red-50';
-                  case 'medium': return 'border-l-yellow-500 bg-yellow-50';
-                  case 'low': return 'border-l-green-500 bg-green-50';
-                  default: return 'border-l-gray-400 bg-gray-50';
-                }
-              };
-              
-              return (
-              <div key={incident.id} className={`border border-gray-200 border-l-4 ${getIncidentBorderColor(incident.severity)} rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer`}>
+            {recentIncidents.length > 0 ? recentIncidents.map((incident) => (
+              <div key={incident.id} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-2">
                       {getStatusIcon(incident.status)}
                       <h3 className="font-semibold text-gray-900">{incident.title}</h3>
-                      <span className={`px-2 py-1 rounded text-xs font-medium border ${getSeverityColor(incident.severity)} flex items-center gap-1`}>
-                        {incident.severity?.toLowerCase() === 'critical' && <AlertTriangle className="w-3 h-3" />}
+                      <span className={`px-2 py-1 rounded text-xs font-medium border ${getSeverityColor(incident.severity)}`}>
                         {incident.severity}
                       </span>
                     </div>
@@ -485,61 +422,21 @@ const DashboardPage = ({ onNavigate }) => {
                   </div>
                 </div>
               </div>
-              );
-            }) : (
-              <div className="text-center py-8">
-                <AlertCircle className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-                <p className="text-gray-900 font-medium">No recent incidents</p>
-                <p className="text-gray-600 text-sm mt-1">All systems are currently stable</p>
+            )) : (
+              <div className="text-center py-8 text-gray-500">
+                <AlertCircle className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                <p>No recent incidents</p>
               </div>
             )}
           </div>
         </div>
 
-        {/* On-Call Schedule & System Status */}
-        <div className="space-y-6">
-          {/* System Status */}
-          <div className="bg-white rounded-xl p-6 border border-gray-200">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-bold text-gray-900">System Status</h3>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
-                <span className="text-sm text-green-600 font-medium">All Systems Operational</span>
-              </div>
-            </div>
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600">Response Time</span>
-                <span className="text-sm font-medium text-green-600">Normal</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600">Alert System</span>
-                <span className="text-sm font-medium text-green-600">Active</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600">Communication</span>
-                <span className="text-sm font-medium text-green-600">Online</span>
-              </div>
-            </div>
+        {/* On-Call Schedule */}
+        <div className="bg-white rounded-xl p-6 border border-gray-200">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-bold text-gray-900">On-Call Schedule</h2>
+            <Shield className="w-5 h-5 text-blue-600" />
           </div>
-
-          {/* On-Call Schedule */}
-          <div className="bg-white rounded-xl p-6 border border-gray-200">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h2 className="text-xl font-bold text-gray-900">On-Call Team</h2>
-                <p className="text-sm text-gray-500">Current emergency responders</p>
-              </div>
-              <div className="flex items-center gap-3">
-                <button 
-                  onClick={() => onNavigate && onNavigate('oncall-schedule')}
-                  className="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg text-sm hover:bg-blue-100 transition-colors"
-                >
-                  View All
-                </button>
-                <Shield className="w-5 h-5 text-blue-600" />
-              </div>
-            </div>
           
           <div className="space-y-4">
             {onCallSchedule.length > 0 ? onCallSchedule.map((member, index) => (
@@ -564,17 +461,14 @@ const DashboardPage = ({ onNavigate }) => {
                 }`}></div>
               </div>
             )) : (
-              <div className="text-center py-8">
-                <Users className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-                <p className="text-gray-900 font-medium">No on-call schedule available</p>
-                <p className="text-gray-600 text-sm mt-1">Team schedules will appear here</p>
+              <div className="text-center py-8 text-gray-500">
+                <Users className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                <p>No on-call schedule available</p>
               </div>
             )}
           </div>
-          </div>
         </div>
       </div>
-
     </div>
   );
 };

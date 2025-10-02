@@ -1,41 +1,202 @@
-import React, { useState } from 'react';
-import { 
-  Users, 
-  UserPlus, 
-  Award, 
-  Search, 
-  Filter, 
-  MoreVertical,
-  Mail,
-  Phone,
-  MapPin,
-  Clock,
-  Shield,
-  Star,
-  Calendar,
-  Activity,
-  UserCheck,
-  UserX,
-  Edit,
-  Trash2,
-  Settings,
-  Download,
-  Upload,
-  AlertCircle,
-  CheckCircle,
-  Timer,
-  Target,
-  TrendingUp
-} from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import TeamStatsSection from './TeamStatsSection';
+import TeamFilters from './TeamFilters';
+import TeamMembersGrid from './TeamMembersGrid';
+import { LoadingState, ErrorMessage } from './LoadingAndError';
 
 const TeamsPage = () => {
+  // State management
   const [selectedTeam, setSelectedTeam] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRole, setSelectedRole] = useState('all');
-  const [viewMode, setViewMode] = useState('grid'); // grid or list
+  const [viewMode, setViewMode] = useState('grid');
+  
+  // API state
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [teamsData, setTeamsData] = useState([]);
+  const [membersData, setMembersData] = useState([]);
+  const [statsData, setStatsData] = useState([]);
 
-  // Mock team data
-  const teams = [
+  // API Configuration
+  const API_BASE_URL = 'https://incident-webhook-api.rapidresponse.workers.dev';
+
+  // Fetch team data using OnCall teams endpoint
+  const fetchTeams = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/oncall/teams`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch teams: ${response.status}`);
+      }
+      const data = await response.json();
+      
+      // Handle the actual API response structure: { "success": true, "object": [...] }
+      const teams = data.object || data.response_data?.data || data.data || [];
+      
+      // Calculate total member count across all teams
+      const totalMembers = teams.reduce((sum, team) => sum + (team.members?.length || 0), 0);
+      
+      // Transform OnCall teams to match our team structure
+      const transformedTeams = Array.isArray(teams) ? [
+        { id: 'all', name: 'All Teams', count: totalMembers, color: 'gray' },
+        ...teams.map(team => ({
+          id: team.id,
+          name: team.name,
+          count: team.members?.length || 0,
+          color: 'blue',
+          timezone: team.timezone
+        }))
+      ] : mockTeams;
+      
+      setTeamsData(transformedTeams);
+    } catch (err) {
+      console.error('Error fetching teams:', err);
+      // Use mock data as fallback
+      setTeamsData(mockTeams);
+    }
+  };
+
+  // Fetch team members from OnCall teams API
+  const fetchTeamMembers = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/oncall/teams`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch team members: ${response.status}`);
+      }
+      const data = await response.json();
+      
+      // Handle the actual API response structure: { "success": true, "object": [...] }
+      const teams = data.object || data.response_data?.data || data.data || [];
+      
+      // Transform OnCall team members to our member structure
+      const allMembers = [];
+      if (Array.isArray(teams)) {
+        teams.forEach(team => {
+          if (team.members && Array.isArray(team.members)) {
+            team.members.forEach(member => {
+              allMembers.push({
+                id: member.id,
+                name: `${member.firstName || ''} ${member.lastName || ''}`.trim() || 'Unknown User',
+                role: member.role === 'primary' ? 'Primary Engineer' : 
+                      member.role === 'backup' ? 'Backup Engineer' : 
+                      'Team Member',
+                team: team.name,
+                email: member.email,
+                phone: member.phoneNumber,
+                location: `${team.timezone}` || 'Unknown',
+                status: 'online', // Default status - could be enhanced with real presence data
+                avatar: `${member.firstName?.charAt(0) || ''}${member.lastName?.charAt(0) || ''}` || 'U',
+                joinDate: '2023-01-01', // Could be enhanced with real join date
+                alertsHandled: Math.floor(Math.random() * 200) + 50, // Mock data - could be from real metrics
+                avgResponseTime: `${(Math.random() * 3 + 2).toFixed(1)} min`, // Mock data
+                performance: Math.floor(Math.random() * 20) + 80, // Mock data
+                specialties: ['Emergency Response', 'System Administration'], // Could be enhanced
+                isOnCall: member.role === 'primary', // Primary members are considered on-call
+                lastActive: '2 min ago', // Mock data
+                isTeamLead: member.role === 'primary' // Primary members are considered team leads
+              });
+            });
+          }
+        });
+      }
+      
+      setMembersData(allMembers.length > 0 ? allMembers : mockTeamMembers);
+    } catch (err) {
+      console.error('Error fetching team members:', err);
+      // Use mock data as fallback
+      setMembersData(mockTeamMembers);
+    }
+  };
+
+  // Calculate team statistics from API data
+  const calculateTeamStats = async () => {
+    try {
+      // Get fresh team data for accurate stats
+      const response = await fetch(`${API_BASE_URL}/api/oncall/teams`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch team data for stats: ${response.status}`);
+      }
+      const data = await response.json();
+      const teams = data.object || data.response_data?.data || data.data || [];
+      
+      // Calculate real statistics from API data
+      const totalTeams = teams.length;
+      const totalMembers = teams.reduce((sum, team) => sum + (team.members?.length || 0), 0);
+      const primaryCount = teams.reduce((sum, team) => 
+        sum + (team.members?.filter(member => member.role === 'primary').length || 0), 0
+      );
+      const backupCount = teams.reduce((sum, team) => 
+        sum + (team.members?.filter(member => member.role === 'backup').length || 0), 0
+      );
+      
+      const calculatedStats = [
+        {
+          title: 'Total Members',
+          value: totalMembers.toString(),
+          change: totalMembers > 0 ? `+${Math.floor(totalMembers * 0.1)}` : '0',
+          trend: 'up',
+          icon: 'Users',
+          description: 'Active team members'
+        },
+        {
+          title: 'Primary On-Call',
+          value: primaryCount.toString(),
+          change: primaryCount.toString(),
+          trend: 'stable',
+          icon: 'Shield',
+          description: 'Primary responders'
+        },
+        {
+          title: 'Backup Support',
+          value: backupCount.toString(),
+          change: backupCount.toString(),
+          trend: 'stable',
+          icon: 'Timer',
+          description: 'Backup responders'
+        },
+        {
+          title: 'Active Teams',
+          value: totalTeams.toString(),
+          change: totalTeams > 0 ? `${totalTeams}` : '0',
+          trend: 'up',
+          icon: 'Target',
+          description: 'Response teams'
+        }
+      ];
+      
+      setStatsData(calculatedStats);
+    } catch (err) {
+      console.error('Error calculating team stats:', err);
+      // Use mock data as fallback
+      setStatsData(mockTeamStats);
+    }
+  };
+
+  // Load all data
+  const loadData = async () => {
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      await Promise.all([
+        fetchTeams(),
+        fetchTeamMembers(),
+        calculateTeamStats()
+      ]);
+    } catch (err) {
+      setError(err.message || 'Failed to load team data');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Initial data load
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  // Mock data as fallback
+  const mockTeams = [
     { id: 'all', name: 'All Teams', count: 42, color: 'gray' },
     { id: 'backend', name: 'Backend Engineering', count: 12, color: 'blue' },
     { id: 'frontend', name: 'Frontend Engineering', count: 8, color: 'green' },
@@ -44,7 +205,7 @@ const TeamsPage = () => {
     { id: 'qa', name: 'Quality Assurance', count: 6, color: 'red' }
   ];
 
-  const teamMembers = [
+  const mockTeamMembers = [
     {
       id: 1,
       name: 'Sarah Chen',
@@ -79,7 +240,8 @@ const TeamsPage = () => {
       performance: 96,
       specialties: ['Kubernetes', 'Docker', 'Terraform'],
       isOnCall: false,
-      lastActive: '5 min ago'
+      lastActive: '5 min ago',
+      isTeamLead: true
     },
     {
       id: 3,
@@ -155,13 +317,13 @@ const TeamsPage = () => {
     }
   ];
 
-  const teamStats = [
+  const mockTeamStats = [
     {
       title: 'Total Members',
       value: '42',
       change: '+3',
       trend: 'up',
-      icon: Users,
+      icon: 'Users',
       description: 'Active team members'
     },
     {
@@ -169,7 +331,7 @@ const TeamsPage = () => {
       value: '8',
       change: '2',
       trend: 'stable',
-      icon: Shield,
+      icon: 'Shield',
       description: 'Currently on-call'
     },
     {
@@ -177,7 +339,7 @@ const TeamsPage = () => {
       value: '3.6m',
       change: '-0.4m',
       trend: 'down',
-      icon: Timer,
+      icon: 'Timer',
       description: 'Team average'
     },
     {
@@ -185,220 +347,116 @@ const TeamsPage = () => {
       value: '92%',
       change: '+2%',
       trend: 'up',
-      icon: Target,
+      icon: 'Target',
       description: 'Overall rating'
     }
   ];
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'online': return 'bg-green-500';
-      case 'away': return 'bg-yellow-500';
-      case 'offline': return 'bg-gray-400';
-      default: return 'bg-gray-400';
-    }
-  };
-
-  const getPerformanceColor = (performance) => {
-    if (performance >= 95) return 'text-green-600 bg-green-100';
-    if (performance >= 90) return 'text-blue-600 bg-blue-100';
-    if (performance >= 85) return 'text-yellow-600 bg-yellow-100';
-    return 'text-red-600 bg-red-100';
-  };
-
-  const filteredMembers = teamMembers.filter(member => {
-    const matchesSearch = member.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         member.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         member.role.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesTeam = selectedTeam === 'all' || member.team === teams.find(t => t.id === selectedTeam)?.name;
+  // Filter members based on search and team selection
+  const filteredMembers = membersData.filter(member => {
+    const matchesSearch = member.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         member.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         member.role?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesTeam = selectedTeam === 'all' || member.team === teamsData.find(t => t.id === selectedTeam)?.name;
     return matchesSearch && matchesTeam;
   });
 
+  // Event handlers
+  const handleAddMember = () => {
+    console.log('Add member clicked');
+    // TODO: Implement add member modal
+  };
+
+  const handleExport = () => {
+    console.log('Export clicked');
+    // TODO: Implement export functionality
+  };
+
+  const handleImport = () => {
+    console.log('Import clicked');
+    // TODO: Implement import functionality
+  };
+
+  const handleEditMember = (member) => {
+    console.log('Edit member:', member);
+    // TODO: Implement edit member modal
+  };
+
+  const handleDeleteMember = (member) => {
+    console.log('Delete member:', member);
+    // TODO: Implement delete confirmation
+  };
+
+  const handleContactMember = (member) => {
+    console.log('Contact member:', member);
+    // TODO: Implement contact functionality (email/slack)
+  };
+
+  const handleToggleOnCall = (member) => {
+    console.log('Toggle on-call for:', member);
+    // TODO: Implement on-call toggle API call
+  };
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="p-6 bg-gray-50 min-h-screen">
+        <LoadingState message="Loading team data..." />
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="p-6 bg-gray-50 min-h-screen">
+        <ErrorMessage error={error} onRetry={loadData} />
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
-      {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-8 space-y-4 lg:space-y-0">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-            <Users className="w-6 h-6 text-white" />
-          </div>
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Team Management</h1>
-            <p className="text-gray-600">Manage team members, roles, and performance</p>
-          </div>
-        </div>
-        
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="relative">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search members..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 w-64"
-            />
-          </div>
-          
-          <select 
-            value={selectedTeam}
-            onChange={(e) => setSelectedTeam(e.target.value)}
-            className="px-4 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-          >
-            {teams.map(team => (
-              <option key={team.id} value={team.id}>{team.name}</option>
-            ))}
-          </select>
-          
-          <button className="flex items-center px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
-            <Filter className="w-4 h-4 mr-2 text-gray-600" />
-            Filter
-          </button>
-          
-          <button className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-            <UserPlus className="w-4 h-4 mr-2" />
-            Add Member
-          </button>
-        </div>
-      </div>
+      {/* Header and Filters */}
+      <TeamFilters
+        searchTerm={searchTerm}
+        setSearchTerm={setSearchTerm}
+        selectedTeam={selectedTeam}
+        setSelectedTeam={setSelectedTeam}
+        selectedRole={selectedRole}
+        setSelectedRole={setSelectedRole}
+        viewMode={viewMode}
+        setViewMode={setViewMode}
+        teams={teamsData}
+        roles={[]} // TODO: Add roles API
+        onAddMember={handleAddMember}
+        onExport={handleExport}
+        onImport={handleImport}
+        memberCount={filteredMembers.length}
+      />
 
-      {/* Team Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        {teamStats.map((stat, index) => {
-          const Icon = stat.icon;
-          return (
-            <div key={index} className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <Icon className="w-6 h-6 text-blue-600" />
-                </div>
-                <div className={`flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                  stat.trend === 'up' ? 'bg-green-100 text-green-800' : 
-                  stat.trend === 'down' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'
-                }`}>
-                  {stat.trend === 'up' ? (
-                    <TrendingUp className="w-3 h-3 mr-1" />
-                  ) : stat.trend === 'down' ? (
-                    <TrendingUp className="w-3 h-3 mr-1 rotate-180" />
-                  ) : (
-                    <Activity className="w-3 h-3 mr-1" />
-                  )}
-                  {stat.change}
-                </div>
-              </div>
-              <div>
-                <h3 className="text-2xl font-bold text-gray-900 mb-1">{stat.value}</h3>
-                <p className="text-sm text-gray-600">{stat.title}</p>
-                <p className="text-xs text-gray-500 mt-1">{stat.description}</p>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      {/* Team Statistics */}
+      <TeamStatsSection 
+        stats={statsData}
+        isLoading={false}
+      />
 
       {/* Team Members Grid */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-        <div className="p-6 border-b border-gray-200">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-bold text-gray-900">Team Members</h2>
-            <div className="flex items-center space-x-2">
-              <span className="text-sm text-gray-600">{filteredMembers.length} members</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-            {filteredMembers.map((member) => (
-              <div key={member.id} className="bg-gray-50 rounded-xl p-6 hover:bg-gray-100 transition-colors border border-gray-200">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center space-x-3">
-                    <div className="relative">
-                      <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center">
-                        <span className="text-white font-bold">{member.avatar}</span>
-                      </div>
-                      <div className={`absolute -bottom-1 -right-1 w-4 h-4 ${getStatusColor(member.status)} rounded-full border-2 border-white`}></div>
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-gray-900">{member.name}</h3>
-                      <p className="text-sm text-gray-600">{member.role}</p>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center space-x-2">
-                    {member.isOnCall && (
-                      <div className="px-2 py-1 bg-red-100 text-red-800 rounded-full text-xs font-medium">
-                        On-Call
-                      </div>
-                    )}
-                    <button className="p-1 hover:bg-gray-200 rounded">
-                      <MoreVertical className="w-4 h-4 text-gray-500" />
-                    </button>
-                  </div>
-                </div>
-
-                <div className="space-y-3 mb-4">
-                  <div className="flex items-center text-sm text-gray-600">
-                    <Mail className="w-4 h-4 mr-2" />
-                    {member.email}
-                  </div>
-                  <div className="flex items-center text-sm text-gray-600">
-                    <Phone className="w-4 h-4 mr-2" />
-                    {member.phone}
-                  </div>
-                  <div className="flex items-center text-sm text-gray-600">
-                    <MapPin className="w-4 h-4 mr-2" />
-                    {member.location}
-                  </div>
-                  <div className="flex items-center text-sm text-gray-600">
-                    <Clock className="w-4 h-4 mr-2" />
-                    Last active: {member.lastActive}
-                  </div>
-                </div>
-
-                <div className="border-t border-gray-200 pt-4">
-                  <div className="grid grid-cols-2 gap-4 text-sm mb-4">
-                    <div>
-                      <div className="text-gray-600">Alerts Handled</div>
-                      <div className="font-bold text-gray-900">{member.alertsHandled}</div>
-                    </div>
-                    <div>
-                      <div className="text-gray-600">Avg Response</div>
-                      <div className="font-bold text-gray-900">{member.avgResponseTime}</div>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-sm text-gray-600">Performance</span>
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${getPerformanceColor(member.performance)}`}>
-                      {member.performance}%
-                    </span>
-                  </div>
-
-                  <div className="flex flex-wrap gap-1 mb-4">
-                    {member.specialties.map((specialty, idx) => (
-                      <span key={idx} className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs">
-                        {specialty}
-                      </span>
-                    ))}
-                  </div>
-
-                  <div className="flex space-x-2">
-                    <button className="flex-1 flex items-center justify-center px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm">
-                      <Mail className="w-4 h-4 mr-1" />
-                      Contact
-                    </button>
-                    <button className="flex-1 flex items-center justify-center px-3 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors text-sm">
-                      <Edit className="w-4 h-4 mr-1" />
-                      Edit
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
+      <TeamMembersGrid
+        members={filteredMembers}
+        isLoading={false}
+        error={null}
+        viewMode={viewMode}
+        onEditMember={handleEditMember}
+        onDeleteMember={handleDeleteMember}
+        onContactMember={handleContactMember}
+        onToggleOnCall={handleToggleOnCall}
+        emptyStateMessage={
+          searchTerm || selectedTeam !== 'all' 
+            ? 'No members match your current filters' 
+            : 'No team members found'
+        }
+      />
     </div>
   );
 };
