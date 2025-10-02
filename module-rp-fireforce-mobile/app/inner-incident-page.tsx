@@ -16,7 +16,6 @@ import {
     getIncidentById,
     postIncidentComment,
     getAllIncidentComments,
-    resolveIncident,
     updateIncidentStatus
 } from '@/api/incident-controller';
 import { getSeverityColor, getStatusColor } from '@/constants/colors';
@@ -24,7 +23,7 @@ import {
     IncidentUI,
     Incident,
     PostIncidentComments,
-    GetAllIncidentCommentsResponse
+    GetAllIncidentComments
 } from '@/types/incident-types';
 import { FONT_FAMILY } from '@/constants/fonts';
 import { UserSession } from "@/types";
@@ -36,7 +35,7 @@ export default function InnerIncidentPage() {
     const { incidentId } = useLocalSearchParams<{ incidentId: string }>();
 
     const [incident, setIncident] = useState<IncidentUI | null>(null);
-    const [comments, setComments] = useState<Array<GetAllIncidentCommentsResponse['data']>>([]);
+    const [comments, setComments] = useState<GetAllIncidentComments[]>([]);
     const [userSession, setUserSession] = useState<UserSession | null>(null);
     const [loading, setLoading] = useState(true);
     const [loadingComments, setLoadingComments] = useState(false);
@@ -73,7 +72,6 @@ export default function InnerIncidentPage() {
         }
     };
 
-    // In fetchComments:
     const fetchComments = async () => {
         if (!incidentId) return;
 
@@ -81,7 +79,7 @@ export default function InnerIncidentPage() {
         try {
             const commentsResponse = await getAllIncidentComments(incidentId);
             if (commentsResponse.httpStatus === "OK" && commentsResponse.data) {
-                // Backend already returns an array, don't wrap it again
+                // commentsResponse.data is already the array
                 setComments(commentsResponse.data);
             }
         } catch (error) {
@@ -159,7 +157,7 @@ export default function InnerIncidentPage() {
 
                                 setIncident(prev => prev ? {
                                     ...prev,
-                                    status: resultData.status
+                                    status: resultData.status as IncidentUI['status']
                                 } : null);
                             }
                         } catch (error) {

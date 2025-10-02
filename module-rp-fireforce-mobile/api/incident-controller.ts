@@ -1,8 +1,9 @@
 import { BASE_URL_DEV } from "@/utils/backend-url";
 import apiManager from "./api-manager";
 import {
+    API_RESPONSE,
     CreateIncidentData,
-    GetAllIncidentCommentsResponse,
+    GetAllIncidentComments,
     IncidentResponseApi,
     IncidentStatsResponse,
     PostIncidentComments,
@@ -90,9 +91,9 @@ export const postIncidentComment = async (
 
 export const getAllIncidentComments = async (
     incidentId: string
-): Promise<GetAllIncidentCommentsResponse> => {
+): Promise<API_RESPONSE<GetAllIncidentComments[]>> => {
     try {
-        const response = await apiManager.get<GetAllIncidentCommentsResponse>(
+        const response = await apiManager.get<API_RESPONSE<GetAllIncidentComments[]>>(
             `${BASE_URL_DEV}/api/incidents-comment?incidentId=${incidentId}`
         );
         return response.data;
@@ -101,7 +102,6 @@ export const getAllIncidentComments = async (
         throw error;
     }
 }
-
 export const updateIncidentStatus = async (
     data: {
         incidentId: string

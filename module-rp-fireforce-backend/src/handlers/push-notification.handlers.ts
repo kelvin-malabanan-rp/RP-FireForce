@@ -9,26 +9,47 @@ export async function handleRegisterPushToken(
 ): Promise<Response> {
 	try {
 		const body = await request.json() as {
+			userId: string;      // ← NEW: Required userId
 			token: string;
 			deviceType?: string;
-			fcmToken?: string;  // Added FCM token
+			fcmToken?: string;
 			settings?: any;
 		};
-		const { token, deviceType, fcmToken, settings } = body;
+		const { userId, token, deviceType, fcmToken, settings } = body;
 
-		if (!token) {
+		// Validate required fields
+		if (!userId) {
 			return new Response(JSON.stringify({
-				error: 'Push token is required'
+				httpStatus: 'BAD_REQUEST',
+				error: 'User ID is required',
+				success: false
 			}), {
 				status: 400,
 				headers: corsHeaders
 			});
 		}
 
-		console.log('Registering tokens - Expo:', token.slice(0, 20), 'FCM:', fcmToken);
+		if (!token) {
+			return new Response(JSON.stringify({
+				httpStatus: 'BAD_REQUEST',
+				error: 'Push token is required',
+				success: false
+			}), {
+				status: 400,
+				headers: corsHeaders
+			});
+		}
+
+		console.log('Registering tokens for user:', userId, '- Expo:', token.slice(0, 20), 'FCM:', fcmToken ? fcmToken.slice(0, 20) : 'none');
 
 		const pushService = new PushNotificationService(env);
-		const result = await pushService.registerPushToken(token, deviceType, fcmToken, settings);
+		const result = await pushService.registerPushToken(
+			userId,      // ← NEW: Pass userId as first parameter
+			token,
+			deviceType,
+			fcmToken,
+			settings
+		);
 
 		return new Response(JSON.stringify({
 			httpStatus: 'OK',
@@ -44,6 +65,7 @@ export async function handleRegisterPushToken(
 		return new Response(JSON.stringify({
 			httpStatus: 'INTERNAL_SERVER_ERROR',
 			error: 'Failed to register push token',
+			message: error instanceof Error ? error.message : 'Unknown error',
 			success: false
 		}), {
 			status: 500,

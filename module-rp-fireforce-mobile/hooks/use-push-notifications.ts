@@ -15,7 +15,7 @@ export const usePushNotifications = () => {
         useState<'pending' | 'registered' | 'failed'>('pending');
     // PLEASE IMPLEMENT AFTER LOGIN
     const userId = 'kelbs'
-    //const userId = currentUser.id;
+    //const userId = currentUser.i
 
     useEffect(() => {
         const sub = Notifications.addNotificationResponseReceivedListener((response) => {

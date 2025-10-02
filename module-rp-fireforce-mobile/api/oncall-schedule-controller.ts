@@ -151,7 +151,7 @@ export class OnCallController {
         rotationLengthHours: number;
         rotationStartISO: string;
         members: Array<{ userId: string; role: 'primary'|'backup'|'escalation'; orderIndex: number; isActive: boolean }>;
-    }): Promise<{ success: true }> {
+    }): Promise<{ success: boolean }> {  // Changed from true to boolean
         const url = `${this.baseUrl}/api/oncall/schedule/config`;
         const res = await fetch(url, {
             method: 'PUT',

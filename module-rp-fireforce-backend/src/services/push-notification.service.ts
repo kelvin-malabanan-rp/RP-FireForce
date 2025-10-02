@@ -445,38 +445,46 @@ export class PushNotificationService {
 			.replace(/=/g, '');
 	}
 
-	async registerPushToken(
-		token: string,
-		deviceType: string | undefined,
-		fcmToken: string | undefined,
-		settings: any
-	): Promise<{ success: boolean; deviceId: string }> {
-		const query = `
-            INSERT OR REPLACE INTO push_tokens
-            (id, token, fcm_token, device_type, settings, is_active, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-        `;
-
+	async registerPushToken(userId: string, token: string, deviceType?: string, fcmToken?: string, settings?: any) {
 		const deviceId = `device-${token.slice(-8)}-${Date.now()}`;
 
 		try {
 			if (!this.dbService.db) {
-				throw new Error('Database connection not available');
+				throw new Error("Database connection not available");
 			}
 
-			await this.dbService.db.prepare(query).bind(
+			// 1. Insert/Update push token
+			const tokenQuery = `
+			  INSERT OR REPLACE INTO push_tokens
+			  (id, token, fcm_token, device_type, settings, is_active, created_at, updated_at)
+			  VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+			`;
+
+			await this.dbService.db.prepare(tokenQuery).bind(
 				deviceId,
 				token,
 				fcmToken || null,
 				deviceType,
 				JSON.stringify(settings || {}),
-				1 // is_active = true
+				1  // is_active = true
 			).run();
 
-			console.log('Push token registered:', deviceId, 'FCM:', !!fcmToken);
-			return { success: true, deviceId };
+			// 2. Create association between user and token
+			const assocQuery = `
+			  INSERT OR REPLACE INTO push_token_user_assoc
+			  (push_token_id, user_id, created_at)
+			  VALUES (?, ?, CURRENT_TIMESTAMP)
+			`;
+
+			await this.dbService.db.prepare(assocQuery).bind(
+				deviceId,
+				userId
+			).run();
+
+			console.log("Push token registered for user:", userId, "Device:", deviceId, "FCM:", !!fcmToken);
+			return { success: true, deviceId, userId };
 		} catch (error) {
-			console.error('Error registering push token:', error);
+			console.error("Error registering push token:", error);
 			throw error;
 		}
 	}

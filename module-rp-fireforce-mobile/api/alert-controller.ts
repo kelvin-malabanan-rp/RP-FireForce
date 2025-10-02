@@ -11,8 +11,6 @@ import {
 } from '@/types/response-types';
 import { BASE_URL_DEV } from '@/utils/backend-url';
 
-const ALERT_API_BASE_URL = BASE_URL_DEV;
-
 /**
  * Register device push tokens (Expo + optional FCM/APNs).
  */
@@ -23,7 +21,7 @@ export const registerPushToken = async (
 ): Promise<APIResponse<PushTokenRegistrationResponse>> => {
     const { data } = await apiManager.post<
         APIResponse<PushTokenRegistrationResponse>
-    >(`${ALERT_API_BASE_URL}/api/push-token`, registration);
+    >(`${BASE_URL_DEV}/api/push-token`, registration);
 
     return data;
 };
@@ -37,7 +35,7 @@ export const updateAlertSettings = async (
 ): Promise<{ updated: boolean }> => {
     const { data } = await apiManager.put<
         APIResponse<{ updated: boolean }>
-    >(`${ALERT_API_BASE_URL}/api/push-token/${encodeURIComponent(token)}/settings`, {
+    >(`${BASE_URL_DEV}/api/push-token/${encodeURIComponent(token)}/settings`, {
         settings,
     });
     return data.data;
@@ -51,7 +49,7 @@ export const unregisterDevice = async (
 ): Promise<{ unregistered: boolean }> => {
     const { data } = await apiManager.delete<
         APIResponse<{ unregistered: boolean }>
-    >(`${ALERT_API_BASE_URL}/api/push-token/${encodeURIComponent(token)}`);
+    >(`${BASE_URL_DEV}/api/push-token/${encodeURIComponent(token)}`);
     return data.data;
 };
 
@@ -63,7 +61,7 @@ export const getDeviceAlertStatus = async (
 ): Promise<PushTokenStatusResponse> => {
     const { data } = await apiManager.get<
         APIResponse<PushTokenStatusResponse>
-    >(`${ALERT_API_BASE_URL}/api/push-token/${encodeURIComponent(token)}/status`);
+    >(`${BASE_URL_DEV}/api/push-token/${encodeURIComponent(token)}/status`);
     return data.data;
 };
 
@@ -86,7 +84,7 @@ export const sendTestAlert = async (
     const channelId = channelMap[alertType] ?? channelMap.low;
 
     const { data } = await apiManager.post<APIResponse<TestAlertResponse>>(
-        `${ALERT_API_BASE_URL}/api/test/send-alert`,
+        `${BASE_URL_DEV}/api/test/send-alert`,
         {
             token, // Expo token (still works for Expo push delivery)
             fcmToken, // optional for backend if you want to support FCM direct
@@ -114,7 +112,7 @@ export const sendTestAlert = async (
 export const checkAlertSystemHealth =
     async (): Promise<BackendHealthResponse> => {
         const { data } = await apiManager.get<BackendHealthResponse>(
-            `${ALERT_API_BASE_URL}/health`
+            `${BASE_URL_DEV}/health`
         );
         return data;
     };

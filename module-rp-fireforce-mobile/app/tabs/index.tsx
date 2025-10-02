@@ -3,9 +3,6 @@ import {
     ScrollView,
     RefreshControl,
     ActivityIndicator,
-    TouchableOpacity,
-    View,
-    Text,
     StyleSheet
 } from 'react-native';
 import {getAllIncidents, getAllIncidentStats} from '@/api/incident-controller';
@@ -13,9 +10,7 @@ import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
 import IncidentSummary from '@/components/incident-summary';
 import { FONT_FAMILY } from '@/constants/fonts';
-
 import { Incident } from '@/types/incident-types';
-import {getStatusColor} from "@/constants/colors";
 
 export default function HomeScreen() {
     const [incidents, setIncidents] = useState<Incident[]>([]);
@@ -24,14 +19,6 @@ export default function HomeScreen() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [timeframe, setTimeframe] = useState<'24h' | '7d' | '30d'>('24h');
-    const [selectedStatusTab, setSelectedStatusTab] = useState<'open' | 'investigating' | 'resolved'>('open');
-    const [currentPage, setCurrentPage] = useState<Record<string, number>>({
-        open: 0,
-        investigating: 0,
-        resolved: 0,
-    });
-
-    const ITEMS_PER_PAGE = 3;
 
     // Auto-refresh interval (30 seconds)
     const AUTO_REFRESH_INTERVAL = 30000;
@@ -102,137 +89,6 @@ export default function HomeScreen() {
         setTimeframe(newTimeframe);
     };
 
-    // Temporary incident card renderer (use until AlarmCard is fixed)
-    const renderIncidentCard = (incident: Incident) => {
-        const severityColors = {
-            critical: '#DC2626',
-            high: '#EA580C',
-            medium: '#D97706',
-            low: '#16A34A',
-        };
-
-        return (
-            <View style={styles.incidentCard}>
-                <View style={styles.incidentHeader}>
-                    <Text style={styles.incidentTitle} numberOfLines={1}>
-                        {incident.title || incident.awsAlarmName || 'Untitled Incident'}
-                    </Text>
-                    <View style={[styles.severityBadge, { backgroundColor: severityColors[incident.severity] }]}>
-                        <Text style={styles.severityText}>{incident.severity.toUpperCase()}</Text>
-                    </View>
-                </View>
-                <Text style={styles.incidentDescription} numberOfLines={2}>
-                    {incident.description || incident.stateReason || 'No description available'}
-                </Text>
-                <View style={styles.incidentFooter}>
-                    <Text style={styles.incidentLocation}>
-                        {incident.location || 'Unknown Location'}
-                    </Text>
-                    <Text style={styles.incidentTime}>
-                        {new Date(incident.timestamp || incident.createdAt).toLocaleTimeString()}
-                    </Text>
-                </View>
-            </View>
-        );
-    };
-
-    // Convert incident to alarm format for AlarmCard compatibility
-    const incidentToAlarm = (incident: Incident) => ({
-        alarmName: incident.awsAlarmName || incident.title || 'Untitled Incident',
-        stateValue: incident.status?.toUpperCase() || 'OPEN',
-        stateReason: incident.stateReason || incident.description || 'No description available',
-        stateUpdatedTimestamp: incident.updatedAt || incident.createdAt || new Date().toISOString(),
-        metricName: incident.metricName || 'Incident',
-        namespace: incident.location || 'General',
-        statistic: incident.severity || 'medium',
-        threshold: incident.severity || 'medium',
-        comparisonOperator: '',
-        evaluationPeriods: 0,
-        period: 0,
-        unit: '',
-        dimensions: [],
-        // Additional incident-specific fields
-        id: incident.id,
-        assigned_to: incident.assignedTo,
-        resolved_at: incident.resolvedAt,
-        resolved_by: incident.resolvedBy,
-        reported_by: incident.reportedBy,
-        timestamp: incident.timestamp,
-        aws_account_id: incident.awsAccountId,
-        aws_console_url: incident.aws_console_url,
-        statusColor: getStatusColor(incident.status),
-    });
-
-    // Group incidents by status
-    const groupedIncidents = incidents.reduce((acc, incident) => {
-        const status = incident.status || 'open';
-        if (!acc[status]) {
-            acc[status] = [];
-        }
-        acc[status].push(incident);
-        return acc;
-    }, {} as Record<string, Incident[]>);
-
-    // Map incident status to display info
-    const statusTabs = [
-        {
-            key: 'open',
-            label: 'Open',
-            color: '#DC2626',
-            bgColor: '#FEE2E2',
-            count: groupedIncidents.open?.length || 0
-        },
-        {
-            key: 'investigating',
-            label: 'Investigating',
-            color: '#F59E0B',
-            bgColor: '#FEF3C7',
-            count: groupedIncidents.investigating?.length || 0
-        },
-        {
-            key: 'resolved',
-            label: 'Resolved',
-            color: '#10B981',
-            bgColor: '#D1FAE5',
-            count: groupedIncidents.resolved?.length || 0
-        },
-    ];
-
-    // Get current status incidents with pagination
-    const getAllStatusIncidents = groupedIncidents[selectedStatusTab] || [];
-
-    const totalPages = Math.ceil(getAllStatusIncidents.length / ITEMS_PER_PAGE) || 1;
-    const currentPageNum = currentPage[selectedStatusTab] || 0;
-
-    // Get paginated incidents for current status
-    const startIndex = currentPageNum * ITEMS_PER_PAGE;
-    const endIndex = startIndex + ITEMS_PER_PAGE;
-    const currentStatusIncidents = getAllStatusIncidents.slice(startIndex, endIndex);
-
-    // Handle page navigation
-    const handlePageChange = (direction: 'prev' | 'next') => {
-        const newPage = direction === 'next'
-            ? Math.min(currentPageNum + 1, totalPages - 1)
-            : Math.max(currentPageNum - 1, 0);
-
-        setCurrentPage(prev => ({
-            ...prev,
-            [selectedStatusTab]: newPage
-        }));
-    };
-
-    // Reset page when switching tabs
-    const handleTabChange = (tab: 'open' | 'investigating' | 'resolved') => {
-        setSelectedStatusTab(tab);
-        // Don't reset if already on page 0
-        if (currentPage[tab] > 0 && currentPage[tab] >= Math.ceil((groupedIncidents[tab]?.length || 0) / ITEMS_PER_PAGE)) {
-            setCurrentPage(prev => ({
-                ...prev,
-                [tab]: 0
-            }));
-        }
-    };
-
     if (loading) {
         return (
             <ThemedView style={styles.loadingContainer}>
@@ -261,133 +117,6 @@ export default function HomeScreen() {
                     timeframe={timeframe}
                     onTimeframeChange={handleTimeframeChange}
                 />
-
-                {/*/!* Incidents Section *!/*/}
-                {/*<ThemedView style={styles.incidentsSection}>*/}
-                {/*    <ThemedText style={styles.sectionTitle}>*/}
-                {/*        Incidents & AWS Alarms*/}
-                {/*    </ThemedText>*/}
-
-                {/*    {error && (*/}
-                {/*        <ThemedView style={styles.errorContainer}>*/}
-                {/*            <ThemedText style={styles.errorText}>*/}
-                {/*                {error}*/}
-                {/*            </ThemedText>*/}
-                {/*        </ThemedView>*/}
-                {/*    )}*/}
-
-                {/*    /!* Status Tabs *!/*/}
-                {/*    <View style={styles.tabContainer}>*/}
-                {/*        {statusTabs.map((tab) => (*/}
-                {/*            <TouchableOpacity*/}
-                {/*                key={tab.key}*/}
-                {/*                style={[*/}
-                {/*                    styles.tab,*/}
-                {/*                    selectedStatusTab === tab.key && styles.activeTab,*/}
-                {/*                    { borderBottomColor: selectedStatusTab === tab.key ? tab.color : 'transparent' }*/}
-                {/*                ]}*/}
-                {/*                onPress={() => handleTabChange(tab.key as any)}*/}
-                {/*            >*/}
-                {/*                <Text*/}
-                {/*                    style={[*/}
-                {/*                        styles.tabText,*/}
-                {/*                        selectedStatusTab === tab.key && styles.activeTabText,*/}
-                {/*                        { color: selectedStatusTab === tab.key ? tab.color : '#6B7280' }*/}
-                {/*                    ]}*/}
-                {/*                >*/}
-                {/*                    {tab.label}*/}
-                {/*                </Text>*/}
-                {/*                <View*/}
-                {/*                    style={[*/}
-                {/*                        styles.badge,*/}
-                {/*                        { backgroundColor: tab.bgColor }*/}
-                {/*                    ]}*/}
-                {/*                >*/}
-                {/*                    <Text style={[styles.badgeText, { color: tab.color }]}>*/}
-                {/*                        {tab.count}*/}
-                {/*                    </Text>*/}
-                {/*                </View>*/}
-                {/*            </TouchableOpacity>*/}
-                {/*        ))}*/}
-                {/*    </View>*/}
-
-                {/*    /!* Incident Cards *!/*/}
-                {/*    <View style={styles.cardsContainer}>*/}
-                {/*        {currentStatusIncidents.map((incident) => {*/}
-                {/*            return (*/}
-                {/*                <View key={incident.id} style={styles.cardWrapper}>*/}
-                {/*                    /!* Temporary: Use custom renderer until AlarmCard is fixed *!/*/}
-                {/*                    {renderIncidentCard(incident)}*/}
-                {/*                    /!* <AlarmCard alarm={incidentToAlarm(incident)} /> *!/*/}
-                {/*                </View>*/}
-                {/*            );*/}
-                {/*        })}*/}
-
-                {/*        {getAllStatusIncidents.length === 0 && (*/}
-                {/*            <ThemedView style={styles.emptyState}>*/}
-                {/*                <ThemedText style={styles.emptyText}>*/}
-                {/*                    No {statusTabs.find(tab => tab.key === selectedStatusTab)?.label.toLowerCase()} incidents*/}
-                {/*                </ThemedText>*/}
-                {/*                <ThemedText style={styles.emptySubtext}>*/}
-                {/*                    {selectedStatusTab === 'open' ? 'All systems operational' :*/}
-                {/*                        selectedStatusTab === 'investigating' ? 'No ongoing investigations' :*/}
-                {/*                            'No recently resolved incidents'}*/}
-                {/*                </ThemedText>*/}
-                {/*            </ThemedView>*/}
-                {/*        )}*/}
-
-                {/*        /!* Pagination Controls *!/*/}
-                {/*        {getAllStatusIncidents.length > ITEMS_PER_PAGE && (*/}
-                {/*            <View style={styles.paginationContainer}>*/}
-                {/*                <TouchableOpacity*/}
-                {/*                    style={[*/}
-                {/*                        styles.paginationButton,*/}
-                {/*                        currentPageNum === 0 && styles.paginationButtonDisabled*/}
-                {/*                    ]}*/}
-                {/*                    onPress={() => handlePageChange('prev')}*/}
-                {/*                    disabled={currentPageNum === 0}*/}
-                {/*                >*/}
-                {/*                    <Text style={[*/}
-                {/*                        styles.paginationButtonText,*/}
-                {/*                        currentPageNum === 0 && styles.paginationButtonTextDisabled*/}
-                {/*                    ]}>Previous</Text>*/}
-                {/*                </TouchableOpacity>*/}
-
-                {/*                <View style={styles.paginationInfo}>*/}
-                {/*                    <Text style={styles.paginationText}>*/}
-                {/*                        Page {currentPageNum + 1} of {totalPages}*/}
-                {/*                    </Text>*/}
-                {/*                    <Text style={styles.paginationSubtext}>*/}
-                {/*                        {startIndex + 1}-{Math.min(endIndex, getAllStatusIncidents.length)} of {getAllStatusIncidents.length}*/}
-                {/*                    </Text>*/}
-                {/*                </View>*/}
-
-                {/*                <TouchableOpacity*/}
-                {/*                    style={[*/}
-                {/*                        styles.paginationButton,*/}
-                {/*                        currentPageNum >= totalPages - 1 && styles.paginationButtonDisabled*/}
-                {/*                    ]}*/}
-                {/*                    onPress={() => handlePageChange('next')}*/}
-                {/*                    disabled={currentPageNum >= totalPages - 1}*/}
-                {/*                >*/}
-                {/*                    <Text style={[*/}
-                {/*                        styles.paginationButtonText,*/}
-                {/*                        currentPageNum >= totalPages - 1 && styles.paginationButtonTextDisabled*/}
-                {/*                    ]}>Next</Text>*/}
-                {/*                </TouchableOpacity>*/}
-                {/*            </View>*/}
-                {/*        )}*/}
-                {/*    </View>*/}
-
-                {/*    /!* Stats Summary *!/*/}
-                {/*    {stats && incidents.length > 0 && (*/}
-                {/*        <ThemedView style={styles.statsFooter}>*/}
-                {/*            <ThemedText style={styles.statsText}>*/}
-                {/*                Total incidents in last {timeframe}: {incidents.length}*/}
-                {/*            </ThemedText>*/}
-                {/*        </ThemedView>*/}
-                {/*    )}*/}
-                {/*</ThemedView>*/}
             </ScrollView>
         </ThemedView>
     );
