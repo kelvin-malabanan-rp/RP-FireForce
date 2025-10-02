@@ -476,7 +476,6 @@ const styles = StyleSheet.create({
     actionButtonText: {
         fontSize: 16,
         color: '#374151',
-        fontWeight: '500',
         marginLeft: 12,
         fontFamily: FONT_FAMILY.POPPINS_MEDIUM,
     },

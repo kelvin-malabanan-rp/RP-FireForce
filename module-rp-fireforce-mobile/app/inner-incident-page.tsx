@@ -7,7 +7,7 @@ import {
     TouchableOpacity,
     TextInput,
     Alert,
-    ActivityIndicator,
+    ActivityIndicator, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -29,6 +29,7 @@ import {
 import { FONT_FAMILY } from '@/constants/fonts';
 import { UserSession } from "@/types";
 import { retrieveUserSession } from "@/constants/local-storage";
+import {Ionicons} from "@expo/vector-icons";
 
 export default function InnerIncidentPage() {
     const router = useRouter();
@@ -285,7 +286,11 @@ export default function InnerIncidentPage() {
                     style={styles.backButton}
                     onPress={() => router.push('/tabs/incidents')}
                 >
-                    <IconSymbol name="chevron.left" size={20} color="#3B82F6" />
+                    {Platform.OS === 'ios' ? (
+                        <IconSymbol name="chevron.left" size={20} color="#3B82F6" />
+                    ) : (
+                        <Ionicons name="arrow-back" size={20} color="#3B82F6" />
+                    )}
                     <Text style={styles.backButtonText}></Text>
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Incident Details</Text>
@@ -587,8 +592,7 @@ const styles = StyleSheet.create({
         marginBottom: 16,
     },
     incidentTitle: {
-        fontSize: 20,
-        fontWeight: '700',
+        fontSize: 17,
         color: '#111827',
         flex: 1,
         marginRight: 12,

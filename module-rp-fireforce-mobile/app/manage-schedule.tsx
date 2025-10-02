@@ -9,6 +9,7 @@ import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { oncallController } from '@/api/oncall-schedule-controller';
 import { SafeAreaView } from "react-native-safe-area-context";
+import {FONT_FAMILY} from "@/constants/fonts";
 
 // Enable LayoutAnimation for Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -208,7 +209,7 @@ export default function ManageSchedule() {
     }
 
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
             <Stack.Screen options={{ title: 'Manage Schedule' }} />
 
             <ScrollView
@@ -467,28 +468,84 @@ function DraggableMemberCard({
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#F3F4F6' },
-    scrollContent: { padding: 16, paddingBottom: 32 },
-    center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-    muted: { color: '#6B7280', marginTop: 8 },
-    section: { backgroundColor: '#FFFFFF', borderRadius: 12, padding: 16, marginBottom: 16 },
-    label: { fontSize: 16, fontWeight: '600', color: '#111827', marginBottom: 8 },
-    input: {
-        backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E5E7EB',
-        borderRadius: 8, padding: 12, fontSize: 16, color: '#111827'
+    container: {
+        flex: 1,
+        backgroundColor: '#F3F4F6',
     },
-    rowChip: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    scrollContent: {
+        padding: 16,
+        paddingBottom: 32
+    },
+    center: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center'
+    },
+    muted: {
+        color: '#6B7280',
+        marginTop: 8,
+        fontFamily: FONT_FAMILY.POPPINS_REGULAR
+    },
+    section: {
+        backgroundColor: '#FFFFFF',
+        borderRadius: 12,
+        padding: 16,
+        marginBottom: 16,
+    },
+    label: {
+        fontSize: 16,
+        color: '#111827',
+        marginBottom: 8,
+        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD
+    },
+    input: {
+        backgroundColor: '#FFFFFF',
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+        borderRadius: 8,
+        padding: 12,
+        fontSize: 16,
+        color: '#111827',
+        fontFamily: FONT_FAMILY.POPPINS_REGULAR
+    },
+    rowChip: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8
+    },
     chip: {
-        paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 20,
         backgroundColor: '#F3F4F6'
     },
-    chipActive: { backgroundColor: '#2563EB' },
-    chipText: { color: '#374151', fontWeight: '600' },
-    chipTextActive: { color: '#FFFFFF' },
-    smallBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
-    smallBtnText: { color: '#2563EB', fontWeight: '600' },
-    utcDisplay: { fontSize: 14, color: '#2563EB', marginTop: 4 },
-
+    chipActive: {
+        backgroundColor: '#2563EB'
+    },
+    chipText: {
+        color: '#374151',
+        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD
+    },
+    chipTextActive: {
+        color: '#FFFFFF',
+        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD
+    },
+    smallBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        marginTop: 8
+    },
+    smallBtnText: {
+        color: '#2563EB',
+        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD
+    },
+    utcDisplay: {
+        fontSize: 14,
+        color: '#2563EB',
+        marginTop: 4,
+        fontFamily: FONT_FAMILY.POPPINS_REGULAR
+    },
     memberCard: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -509,11 +566,32 @@ const styles = StyleSheet.create({
         elevation: 8,
         zIndex: 1000,
     },
-    memberName: { fontSize: 16, fontWeight: '600', color: '#111827' },
-    memberEmail: { fontSize: 12, color: '#6B7280' },
-    memberMeta: { fontSize: 12, color: '#6B7280', marginTop: 2 },
-    bold: { fontWeight: '700', color: '#111827' },
-    btnGroup: { flexDirection: 'row', gap: 12, marginLeft: 12, alignItems: 'center' },
+    memberName: {
+        fontSize: 16,
+        color: '#111827',
+        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD
+    },
+    memberEmail: {
+        fontSize: 12,
+        color: '#6B7280',
+        fontFamily: FONT_FAMILY.POPPINS_REGULAR
+    },
+    memberMeta: {
+        fontSize: 12,
+        color: '#6B7280',
+        marginTop: 2,
+        fontFamily: FONT_FAMILY.POPPINS_REGULAR
+    },
+    bold: {
+        color: '#111827',
+        fontFamily: FONT_FAMILY.POPPINS_BOLD
+    },
+    btnGroup: {
+        flexDirection: 'row',
+        gap: 12,
+        marginLeft: 12,
+        alignItems: 'center'
+    },
     iconBtn: {
         padding: 8,
         alignItems: 'center',
@@ -537,11 +615,30 @@ const styles = StyleSheet.create({
         shadowRadius: 2,
         elevation: 3,
     },
-    sep: { height: 12 },
-    hint: { fontSize: 12, color: '#6B7280', fontStyle: 'italic', marginTop: 12, textAlign: 'center' },
-    saveBtn: {
-        flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-        backgroundColor: '#10B981', borderRadius: 10, padding: 16, marginTop: 8
+    sep: {
+        height: 12
     },
-    saveText: { color: '#FFF', fontWeight: '700', marginLeft: 8, fontSize: 16 },
+    hint: {
+        fontSize: 12,
+        color: '#6B7280',
+        fontStyle: 'italic',
+        marginTop: 12,
+        textAlign: 'center',
+        fontFamily: FONT_FAMILY.POPPINS_REGULAR_ITALIC
+    },
+    saveBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#10B981',
+        borderRadius: 10,
+        padding: 16,
+        marginTop: 8
+    },
+    saveText: {
+        color: '#FFF',
+        marginLeft: 8,
+        fontSize: 16,
+        fontFamily: FONT_FAMILY.POPPINS_BOLD
+    },
 });

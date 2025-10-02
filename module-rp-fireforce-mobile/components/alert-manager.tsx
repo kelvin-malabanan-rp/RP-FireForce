@@ -25,6 +25,7 @@ import {
     storeRegistrationStatus
 } from "@/constants/local-storage";
 import { FONT_FAMILY } from '@/constants/fonts';
+import {Ionicons} from "@expo/vector-icons";
 
 interface AlertManagerProps {
     style?: any;
@@ -293,7 +294,11 @@ const AlertManager: React.FC<AlertManagerProps> = ({ style }) => {
                         style={styles.settingsButton}
                         onPress={() => setShowSettings(true)}
                     >
-                        <IconSymbol name="gearshape" size={20} color="#6B7280" />
+                        {Platform.OS === 'ios' ? (
+                            <IconSymbol name="gearshape" size={20} color="#6B7280" />
+                        ) : (
+                            <Ionicons name="settings-sharp" size={20} color="#6B7280" />
+                        )}
                     </TouchableOpacity>
                 </View>
 
@@ -309,8 +314,11 @@ const AlertManager: React.FC<AlertManagerProps> = ({ style }) => {
                         Permissions: {getPermissionStatusText(permissionStatus)}
                     </Text>
                     {permissionStatus !== 'granted' && (
-                        <TouchableOpacity onPress={requestPermissions} style={styles.enableButton}>
-                            <Text style={styles.enableButtonText}>Enable</Text>
+                        <TouchableOpacity
+                            style={styles.settingsButton}
+                            onPress={() => setShowSettings(true)}
+                        >
+                            <Ionicons name="settings-outline" size={20} color="#6B7280" />
                         </TouchableOpacity>
                     )}
                 </View>
@@ -489,7 +497,6 @@ const styles = StyleSheet.create({
     },
     title: {
         fontSize: 18,
-        fontWeight: '700',
         color: '#111827',
         marginLeft: 8,
         flex: 1,

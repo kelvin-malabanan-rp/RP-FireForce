@@ -5,12 +5,13 @@ import {
     StyleSheet,
     ScrollView,
     TouchableOpacity,
-    ActivityIndicator,
+    ActivityIndicator, Platform,
 } from 'react-native';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { getAllIncidents, getAllIncidentStats } from '@/api/incident-controller';
 import { Incident, IncidentStatsResponse } from '@/types/incident-types';
 import {FONT_FAMILY} from "@/constants/fonts";
+import {Ionicons} from "@expo/vector-icons";
 
 interface IncidentSummaryProps {
     timeframe?: '24h' | '7d' | '30d';
@@ -325,19 +326,31 @@ const IncidentSummary: React.FC<IncidentSummaryProps> = ({
                 {/* Quick Stats */}
                 <View style={styles.quickStats}>
                     <View style={[styles.statCard, styles.totalCard]}>
-                        <IconSymbol name="exclamationmark.triangle" size={20} color="#3B82F6" />
+                        {Platform.OS === 'ios' ? (
+                            <IconSymbol name="exclamationmark.triangle" size={20} color="#3B82F6" />
+                        ) : (
+                            <Ionicons name="alert-circle-outline" size={20} color="#3B82F6" />
+                        )}
                         <Text style={styles.statNumber}>{currentStats.total}</Text>
                         <Text style={styles.statLabel}>Total Incidents</Text>
                     </View>
 
                     <View style={[styles.statCard, styles.criticalCard]}>
-                        <IconSymbol name="exclamationmark.circle.fill" size={20} color="#DC2626" />
+                        {Platform.OS === 'ios' ? (
+                            <IconSymbol name="exclamationmark.circle.fill" size={20} color="#DC2626" />
+                        ) : (
+                            <Ionicons name="alert-circle" size={20} color="#DC2626" />
+                        )}
                         <Text style={styles.statNumber}>{currentStats.severities.critical}</Text>
                         <Text style={styles.statLabel}>Critical</Text>
                     </View>
 
                     <View style={[styles.statCard, styles.openCard]}>
-                        <IconSymbol name="clock" size={20} color="#EA580C" />
+                        {Platform.OS === 'ios' ? (
+                            <IconSymbol name="clock" size={20} color="#EA580C" />
+                        ) : (
+                            <Ionicons name="time-outline" size={20} color="#EA580C" />
+                        )}
                         <Text style={styles.statNumber}>{currentStats.open + currentStats.investigating}</Text>
                         <Text style={styles.statLabel}>Active</Text>
                     </View>
@@ -454,9 +467,8 @@ const styles = StyleSheet.create({
     },
     title: {
         fontSize: 18,
-        fontWeight: '700',
         color: '#111827',
-        fontFamily: FONT_FAMILY.POPPINS_BOLD,
+        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
     subtitle: {
         fontSize: 13,
@@ -510,7 +522,6 @@ const styles = StyleSheet.create({
     openCard: { backgroundColor: '#FEF3C7' },
     statNumber: {
         fontSize: 22,
-        fontWeight: '800',
         color: '#111827',
         marginTop: 8,
         fontFamily: FONT_FAMILY.POPPINS_BOLD,
@@ -530,7 +541,6 @@ const styles = StyleSheet.create({
     },
     chartTitle: {
         fontSize: 16,
-        fontWeight: '700',
         color: '#111827',
         marginBottom: 16,
         fontFamily: FONT_FAMILY.POPPINS_BOLD,
