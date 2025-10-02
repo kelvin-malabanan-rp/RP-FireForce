@@ -2,33 +2,16 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
     View, Text, StyleSheet, TouchableOpacity,
-    TextInput, Alert, ActivityIndicator, ScrollView,
-    Animated, PanResponder, LayoutAnimation, Platform, UIManager
+    Alert, ActivityIndicator, ScrollView,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { oncallController } from '@/api/oncall-schedule-controller';
 import { SafeAreaView } from "react-native-safe-area-context";
-import {FONT_FAMILY} from "@/constants/fonts";
+import DateTimePickerModal from "react-native-modal-datetime-picker";
 
-// Enable LayoutAnimation for Android
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-    UIManager.setLayoutAnimationEnabledExperimental(true);
-}
-
-// Custom Toggle Switch Component
+// Simple Toggle Switch Component
 function ToggleSwitch({ isActive, onToggle }: { isActive: boolean; onToggle: () => void }) {
-    const translateX = React.useRef(new Animated.Value(isActive ? 20 : 2)).current;
-
-    React.useEffect(() => {
-        Animated.spring(translateX, {
-            toValue: isActive ? 20 : 2,
-            useNativeDriver: true,
-            tension: 50,
-            friction: 7,
-        }).start();
-    }, [isActive, translateX]);
-
     return (
         <TouchableOpacity
             onPress={onToggle}
@@ -37,12 +20,11 @@ function ToggleSwitch({ isActive, onToggle }: { isActive: boolean; onToggle: () 
                 { backgroundColor: isActive ? '#10B981' : '#D1D5DB' }
             ]}
             activeOpacity={0.8}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
-            <Animated.View
+            <View
                 style={[
                     styles.toggleCircle,
-                    { transform: [{ translateX }] }
+                    { marginLeft: isActive ? 20 : 2 }
                 ]}
             />
         </TouchableOpacity>
@@ -61,10 +43,261 @@ type MemberRow = {
 type ScheduleConfig = {
     teamId: string;
     rotationType: 'daily' | 'weekly' | 'biweekly' | 'monthly';
-    rotationLengthHours: number;
     rotationStartISO: string;
     members: MemberRow[];
 };
+
+// Date Picker Component
+function DatePickerField({
+                             value,
+                             onChange
+                         }: {
+    value: string;
+    onChange: (date: string) => void;
+}) {
+    const [isVisible, setIsVisible] = useState(false);
+
+    const formatUTC = (isoString: string) => {
+        try {
+            const d = new Date(isoString);
+            const options: Intl.DateTimeFormatOptions = {
+                timeZone: 'UTC',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true,
+                weekday: 'short'
+            };
+            return d.toLocaleString('en-US', options) + ' UTC';
+        } catch {
+            return 'Invalid date';
+        }
+    };
+
+    const handleConfirm = (date: Date) => {
+        onChange(date.toISOString());
+        setIsVisible(false);
+    };
+
+    return (
+        <View>
+            <TouchableOpacity
+                style={styles.dateDisplay}
+                onPress={() => setIsVisible(true)}
+            >
+                <Ionicons name="calendar-outline" size={20} color="#2563EB" />
+                <Text style={styles.dateDisplayText}>
+                    {formatUTC(value)}
+                </Text>
+                <Ionicons name="chevron-down" size={20} color="#6B7280" />
+            </TouchableOpacity>
+
+            <DateTimePickerModal
+                isVisible={isVisible}
+                mode="datetime"
+                date={new Date(value)}
+                onConfirm={handleConfirm}
+                onCancel={() => setIsVisible(false)}
+            />
+
+            <View style={styles.buttonRow}>
+                <TouchableOpacity
+                    onPress={() => onChange(new Date().toISOString())}
+                    style={styles.dateBtn}
+                >
+                    <Ionicons name="time" size={16} color="#2563EB" />
+                    <Text style={styles.dateBtnText}>Set to now</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    onPress={() => {
+                        const tomorrow = new Date();
+                        tomorrow.setDate(tomorrow.getDate() + 1);
+                        tomorrow.setHours(0, 0, 0, 0);
+                        onChange(tomorrow.toISOString());
+                    }}
+                    style={styles.dateBtn}
+                >
+                    <Ionicons name="calendar" size={16} color="#2563EB" />
+                    <Text style={styles.dateBtnText}>Tomorrow</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    onPress={() => {
+                        const nextMonday = new Date();
+                        const day = nextMonday.getDay();
+                        const daysUntilMonday = day === 0 ? 1 : 8 - day;
+                        nextMonday.setDate(nextMonday.getDate() + daysUntilMonday);
+                        nextMonday.setHours(0, 0, 0, 0);
+                        onChange(nextMonday.toISOString());
+                    }}
+                    style={styles.dateBtn}
+                >
+                    <Ionicons name="calendar-outline" size={16} color="#2563EB" />
+                    <Text style={styles.dateBtnText}>Next Monday</Text>
+                </TouchableOpacity>
+            </View>
+        </View>
+    );
+}
+
+// Calendar Preview Component
+function CalendarPreview({
+                             config
+                         }: {
+    config: ScheduleConfig;
+}) {
+    const [schedule, setSchedule] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        loadSchedule();
+    }, [config]);
+
+    const loadSchedule = async () => {
+        try {
+            setLoading(true);
+            const result = await oncallController.getSchedule(config.teamId, 14);
+            setSchedule(result.schedule || []);
+        } catch (e) {
+            console.error('Failed to load schedule preview', e);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const formatDate = (dateStr: string) => {
+        const d = new Date(dateStr);
+        return d.toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+        });
+    };
+
+    if (loading) {
+        return (
+            <View style={styles.calendarContainer}>
+                <ActivityIndicator size="small" />
+                <Text style={styles.muted}>Loading preview...</Text>
+            </View>
+        );
+    }
+
+    return (
+        <View style={styles.calendarContainer}>
+            <View style={styles.calendarHeader}>
+                <Ionicons name="calendar" size={20} color="#2563EB" />
+                <Text style={styles.calendarTitle}>14-Day Schedule Preview</Text>
+            </View>
+
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <View style={styles.calendarGrid}>
+                    {schedule.map((day, index) => {
+                        const isToday = day.isToday;
+                        const primary = day.assignment?.primary;
+
+                        return (
+                            <View
+                                key={index}
+                                style={[
+                                    styles.dayCard,
+                                    isToday && styles.dayCardToday
+                                ]}
+                            >
+                                <Text style={[
+                                    styles.dayDate,
+                                    isToday && styles.dayDateToday
+                                ]}>
+                                    {formatDate(day.date)}
+                                </Text>
+                                <Text style={styles.dayOfWeek}>
+                                    {day.dayOfWeek}
+                                </Text>
+                                {primary ? (
+                                    <>
+                                        <Text style={styles.onCallName} numberOfLines={1}>
+                                            {primary.firstName} {primary.lastName}
+                                        </Text>
+                                        <View style={styles.roleBadge}>
+                                            <Text style={styles.roleBadgeText}>Primary</Text>
+                                        </View>
+                                    </>
+                                ) : (
+                                    <Text style={styles.noOnCall}>No one</Text>
+                                )}
+                            </View>
+                        );
+                    })}
+                </View>
+            </ScrollView>
+        </View>
+    );
+}
+
+// Member Card Component
+function MemberCard({
+                        member,
+                        onMoveUp,
+                        onMoveDown,
+                        onCycleRole,
+                        onToggleActive,
+                        isFirst,
+                        isLast
+                    }: {
+    member: MemberRow;
+    onMoveUp: () => void;
+    onMoveDown: () => void;
+    onCycleRole: () => void;
+    onToggleActive: () => void;
+    isFirst: boolean;
+    isLast: boolean;
+}) {
+    return (
+        <View style={styles.memberCard}>
+            <View style={styles.arrowContainer}>
+                <TouchableOpacity
+                    onPress={onMoveUp}
+                    disabled={isFirst}
+                    style={styles.arrowBtn}
+                >
+                    <Text style={[styles.arrowText, { color: isFirst ? '#D1D5DB' : '#2563EB' }]}>
+                        ▲
+                    </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                    onPress={onMoveDown}
+                    disabled={isLast}
+                    style={styles.arrowBtn}
+                >
+                    <Text style={[styles.arrowText, { color: isLast ? '#D1D5DB' : '#2563EB' }]}>
+                        ▼
+                    </Text>
+                </TouchableOpacity>
+            </View>
+
+            <View style={{ flex: 1 }}>
+                <Text style={styles.memberName}>{member.name}</Text>
+                {!!member.email && <Text style={styles.memberEmail}>{member.email}</Text>}
+                <Text style={styles.memberMeta}>
+                    Role: <Text style={styles.bold}>{member.role}</Text> • Order: {member.orderIndex}
+                </Text>
+            </View>
+
+            <View style={styles.controls}>
+                <TouchableOpacity
+                    style={styles.iconBtn}
+                    onPress={onCycleRole}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                    <Ionicons name="swap-horizontal" size={18} color="#2563EB" />
+                </TouchableOpacity>
+                <ToggleSwitch isActive={member.isActive} onToggle={onToggleActive} />
+            </View>
+        </View>
+    );
+}
 
 export default function ManageSchedule() {
     const router = useRouter();
@@ -74,30 +307,6 @@ export default function ManageSchedule() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [cfg, setCfg] = useState<ScheduleConfig | null>(null);
-    const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
-
-    // Helper functions
-    const formatUTC = (isoString: string) => {
-        try {
-            const date = new Date(isoString);
-            const options: Intl.DateTimeFormatOptions = {
-                timeZone: 'UTC',
-                year: 'numeric',
-                month: 'short',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-                hour12: true
-            };
-            return date.toLocaleString('en-US', options) + ' UTC';
-        } catch {
-            return 'Invalid date';
-        }
-    };
-
-    const capitalize = (str: string) => {
-        return str.charAt(0).toUpperCase() + str.slice(1);
-    };
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -106,10 +315,8 @@ export default function ManageSchedule() {
             const normalized: ScheduleConfig = {
                 teamId,
                 rotationType: data.rotationType ?? 'weekly',
-                rotationLengthHours: Number(data.rotationLengthHours ?? 168),
                 rotationStartISO: data.rotationStartISO ?? new Date().toISOString(),
                 members: (data.members ?? []).map((m: any, i: number) => {
-                    // Try to get name from different possible fields
                     let displayName = '';
                     if (m.firstName || m.lastName) {
                         displayName = `${m.firstName ?? ''} ${m.lastName ?? ''}`.trim();
@@ -121,7 +328,7 @@ export default function ManageSchedule() {
 
                     return {
                         userId: m.userId,
-                        name: displayName,
+                        name: displayName || m.userId,
                         email: m.email,
                         role: (m.role ?? 'primary') as MemberRow['role'],
                         orderIndex: Number(m.orderIndex ?? i),
@@ -140,22 +347,19 @@ export default function ManageSchedule() {
 
     useEffect(() => { load(); }, [load]);
 
-    const reorderMembers = (fromIndex: number, toIndex: number) => {
-        if (!cfg || fromIndex === toIndex) return;
-
-        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-
+    const moveUp = (index: number) => {
+        if (!cfg || index === 0) return;
         const next = [...cfg.members];
-        const [removed] = next.splice(fromIndex, 1);
-        next.splice(toIndex, 0, removed);
+        [next[index - 1], next[index]] = [next[index], next[index - 1]];
         next.forEach((m, i) => (m.orderIndex = i));
         setCfg({ ...cfg, members: next });
     };
 
-    const toggleActive = (index: number) => {
-        if (!cfg) return;
+    const moveDown = (index: number) => {
+        if (!cfg || index === cfg.members.length - 1) return;
         const next = [...cfg.members];
-        next[index].isActive = !next[index].isActive;
+        [next[index], next[index + 1]] = [next[index + 1], next[index]];
+        next.forEach((m, i) => (m.orderIndex = i));
         setCfg({ ...cfg, members: next });
     };
 
@@ -169,14 +373,26 @@ export default function ManageSchedule() {
         setCfg({ ...cfg, members: next });
     };
 
+    const toggleActive = (index: number) => {
+        if (!cfg) return;
+        const next = [...cfg.members];
+        next[index].isActive = !next[index].isActive;
+        setCfg({ ...cfg, members: next });
+    };
+
     const save = async () => {
         if (!cfg) return;
         setSaving(true);
         try {
+            const rotationLengthHours =
+                cfg.rotationType === 'daily' ? 24 :
+                    cfg.rotationType === 'weekly' ? 168 :
+                        cfg.rotationType === 'biweekly' ? 336 : 720;
+
             await oncallController.updateScheduleConfig({
                 teamId: cfg.teamId,
                 rotationType: cfg.rotationType,
-                rotationLengthHours: cfg.rotationLengthHours,
+                rotationLengthHours,
                 rotationStartISO: cfg.rotationStartISO,
                 members: cfg.members.map(m => ({
                     userId: m.userId,
@@ -209,80 +425,77 @@ export default function ManageSchedule() {
     }
 
     return (
-        <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
+        <SafeAreaView style={styles.container}>
             <Stack.Screen options={{ title: 'Manage Schedule' }} />
 
-            <ScrollView
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={styles.scrollContent}
-                scrollEnabled={draggingIndex === null}
-            >
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+                {/* Rotation Type */}
                 <View style={styles.section}>
-                    <Text style={styles.label}>Rotation Type</Text>
-                    <View style={styles.rowChip}>
-                        {(['daily', 'weekly', 'biweekly', 'monthly'] as const).map(rt => (
+                    <Text style={styles.sectionTitle}>Rotation Schedule</Text>
+                    <Text style={styles.sectionDesc}>How often should the on-call person change?</Text>
+                    <View style={styles.chipRow}>
+                        {[
+                            { value: 'daily', label: 'Daily', desc: '24 hours' },
+                            { value: 'weekly', label: 'Weekly', desc: '7 days' },
+                            { value: 'biweekly', label: 'Bi-weekly', desc: '14 days' },
+                            { value: 'monthly', label: 'Monthly', desc: '30 days' }
+                        ].map(({ value, label, desc }) => (
                             <TouchableOpacity
-                                key={rt}
-                                style={[styles.chip, cfg.rotationType === rt && styles.chipActive]}
-                                onPress={() => setCfg({ ...cfg, rotationType: rt })}
+                                key={value}
+                                style={[styles.chip, cfg.rotationType === value && styles.chipActive]}
+                                onPress={() => setCfg({ ...cfg, rotationType: value as any })}
                             >
-                                <Text style={[styles.chipText, cfg.rotationType === rt && styles.chipTextActive]}>
-                                    {capitalize(rt)}
+                                <Text style={[styles.chipLabel, cfg.rotationType === value && styles.chipLabelActive]}>
+                                    {label}
+                                </Text>
+                                <Text style={[styles.chipDesc, cfg.rotationType === value && styles.chipDescActive]}>
+                                    {desc}
                                 </Text>
                             </TouchableOpacity>
                         ))}
                     </View>
                 </View>
 
+                {/* Start Date */}
                 <View style={styles.section}>
-                    <Text style={styles.label}>Rotation Length (hours)</Text>
-                    <TextInput
-                        value={String(cfg.rotationLengthHours)}
-                        onChangeText={(t) => setCfg({ ...cfg, rotationLengthHours: Number(t || 0) })}
-                        keyboardType="numeric"
-                        style={styles.input}
-                        placeholder="e.g. 168"
-                    />
-                </View>
-
-                <View style={styles.section}>
-                    <Text style={styles.label}>Rotation Start (UTC)</Text>
-                    <TextInput
+                    <Text style={styles.sectionTitle}>Rotation Start Date (UTC)</Text>
+                    <Text style={styles.sectionDesc}>When should this rotation schedule begin?</Text>
+                    <DatePickerField
                         value={cfg.rotationStartISO}
-                        onChangeText={(t) => setCfg({ ...cfg, rotationStartISO: t })}
-                        style={styles.input}
-                        placeholder="YYYY-MM-DDTHH:mm:ss.sssZ"
+                        onChange={(date) => setCfg({ ...cfg, rotationStartISO: date })}
                     />
-                    <Text style={styles.utcDisplay}>{formatUTC(cfg.rotationStartISO)}</Text>
-                    <TouchableOpacity
-                        onPress={() => setCfg({ ...cfg, rotationStartISO: new Date().toISOString() })}
-                        style={styles.smallBtn}
-                    >
-                        <Ionicons name="time" size={16} color="#2563EB" />
-                        <Text style={styles.smallBtnText}>Set to now</Text>
-                    </TouchableOpacity>
                 </View>
 
+                {/* Calendar Preview */}
                 <View style={styles.section}>
-                    <Text style={styles.label}>Members</Text>
-                    {cfg.members.map((item, index) => (
-                        <DraggableMemberCard
-                            key={item.userId}
-                            item={item}
-                            index={index}
-                            totalCount={cfg.members.length}
-                            onReorder={reorderMembers}
-                            onCycleRole={cycleRole}
-                            onToggleActive={toggleActive}
-                            onDragStart={() => setDraggingIndex(index)}
-                            onDragEnd={() => setDraggingIndex(null)}
-                            capitalize={capitalize}
+                    <CalendarPreview config={cfg} />
+                </View>
+
+                {/* Members */}
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Team Members</Text>
+                    <Text style={styles.sectionDesc}>
+                        Arrange team members in rotation order (first person starts on-call)
+                    </Text>
+                    {cfg.members.map((member, index) => (
+                        <MemberCard
+                            key={member.userId}
+                            member={member}
+                            onMoveUp={() => moveUp(index)}
+                            onMoveDown={() => moveDown(index)}
+                            onCycleRole={() => cycleRole(index)}
+                            onToggleActive={() => toggleActive(index)}
+                            isFirst={index === 0}
+                            isLast={index === cfg.members.length - 1}
                         />
                     ))}
-                    <Text style={styles.hint}>Tip: Long-press and drag to reorder</Text>
                 </View>
 
-                <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.6 }]} onPress={save} disabled={saving}>
+                <TouchableOpacity
+                    style={[styles.saveBtn, saving && { opacity: 0.6 }]}
+                    onPress={save}
+                    disabled={saving}
+                >
                     <Ionicons name="save" size={20} color="#FFFFFF" />
                     <Text style={styles.saveText}>{saving ? 'Saving…' : 'Save changes'}</Text>
                 </TouchableOpacity>
@@ -291,260 +504,65 @@ export default function ManageSchedule() {
     );
 }
 
-// Draggable Member Card Component
-function DraggableMemberCard({
-                                 item,
-                                 index,
-                                 totalCount,
-                                 onReorder,
-                                 onCycleRole,
-                                 onToggleActive,
-                                 onDragStart,
-                                 onDragEnd,
-                                 capitalize
-                             }: {
-    item: MemberRow;
-    index: number;
-    totalCount: number;
-    onReorder: (from: number, to: number) => void;
-    onCycleRole: (index: number) => void;
-    onToggleActive: (index: number) => void;
-    onDragStart: () => void;
-    onDragEnd: () => void;
-    capitalize: (str: string) => string;
-}) {
-    const pan = React.useRef(new Animated.ValueXY()).current;
-    const scale = React.useRef(new Animated.Value(1)).current;
-    const [isDragging, setIsDragging] = useState(false);
-
-    const CARD_HEIGHT = 90; // Approximate height of each card including separator
-
-    const panResponder = React.useRef(
-        PanResponder.create({
-            onStartShouldSetPanResponder: () => false,
-            onStartShouldSetPanResponderCapture: () => false,
-            onMoveShouldSetPanResponder: (_, gesture) => {
-                // Only set if we're dragging and there's significant movement
-                return isDragging && (Math.abs(gesture.dx) > 2 || Math.abs(gesture.dy) > 2);
-            },
-            onMoveShouldSetPanResponderCapture: (_, gesture) => {
-                return isDragging && (Math.abs(gesture.dx) > 2 || Math.abs(gesture.dy) > 2);
-            },
-            onPanResponderGrant: () => {
-                if (isDragging) {
-                    Animated.spring(scale, {
-                        toValue: 1.05,
-                        useNativeDriver: true,
-                    }).start();
-                }
-            },
-            onPanResponderMove: (_, gesture) => {
-                if (isDragging) {
-                    pan.setValue({ x: 0, y: gesture.dy });
-                }
-            },
-            onPanResponderRelease: (_, gesture) => {
-                if (!isDragging) return;
-
-                const movedIndex = Math.round(gesture.dy / CARD_HEIGHT);
-                const newIndex = Math.max(0, Math.min(totalCount - 1, index + movedIndex));
-
-                if (newIndex !== index) {
-                    onReorder(index, newIndex);
-                }
-
-                Animated.parallel([
-                    Animated.spring(pan, {
-                        toValue: { x: 0, y: 0 },
-                        useNativeDriver: true,
-                    }),
-                    Animated.spring(scale, {
-                        toValue: 1,
-                        useNativeDriver: true,
-                    }),
-                ]).start(() => {
-                    setIsDragging(false);
-                    onDragEnd();
-                });
-            },
-            onPanResponderTerminate: () => {
-                // Reset if gesture is interrupted
-                Animated.parallel([
-                    Animated.spring(pan, {
-                        toValue: { x: 0, y: 0 },
-                        useNativeDriver: true,
-                    }),
-                    Animated.spring(scale, {
-                        toValue: 1,
-                        useNativeDriver: true,
-                    }),
-                ]).start(() => {
-                    setIsDragging(false);
-                    onDragEnd();
-                });
-            },
-        })
-    ).current;
-
-    const handleLongPress = () => {
-        setIsDragging(true);
-        onDragStart();
-    };
-
-    const handlePressOut = () => {
-        if (!isDragging) return;
-        // If user releases without dragging much, cancel drag mode
-        setTimeout(() => {
-            setIsDragging(false);
-            onDragEnd();
-            Animated.spring(scale, {
-                toValue: 1,
-                useNativeDriver: true,
-            }).start();
-        }, 100);
-    };
-
-    return (
-        <View>
-            <Animated.View
-                style={[
-                    {
-                        transform: [
-                            { translateY: pan.y },
-                            { scale: scale }
-                        ],
-                    },
-                    isDragging && styles.dragging
-                ]}
-            >
-                <View
-                    {...panResponder.panHandlers}
-                    style={{ width: '100%' }}
-                >
-                    <TouchableOpacity
-                        style={[
-                            styles.memberCard,
-                            isDragging && styles.memberCardDragging
-                        ]}
-                        onLongPress={handleLongPress}
-                        onPressOut={handlePressOut}
-                        delayLongPress={400}
-                        activeOpacity={0.7}
-                    >
-                        <Ionicons
-                            name="menu"
-                            size={20}
-                            color="#9CA3AF"
-                            style={{ marginRight: 12 }}
-                        />
-
-                        <View style={{ flex: 1 }} pointerEvents="none">
-                            <Text style={styles.memberName}>{item.name || item.userId}</Text>
-                            {!!item.email && <Text style={styles.memberEmail}>{item.email}</Text>}
-                            <Text style={styles.memberMeta}>
-                                Role: <Text style={styles.bold}>{capitalize(item.role)}</Text> • Order: {item.orderIndex}
-                            </Text>
-                        </View>
-
-                        <View style={styles.btnGroup} pointerEvents="box-none">
-                            <TouchableOpacity
-                                style={styles.iconBtn}
-                                onPress={() => onCycleRole(index)}
-                                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                            >
-                                <Ionicons name="swap-horizontal" size={18} color="#2563EB" />
-                            </TouchableOpacity>
-                            <ToggleSwitch
-                                isActive={item.isActive}
-                                onToggle={() => onToggleActive(index)}
-                            />
-                        </View>
-                    </TouchableOpacity>
-                </View>
-            </Animated.View>
-            {index < totalCount - 1 && <View style={styles.sep} />}
-        </View>
-    );
-}
-
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#F3F4F6',
-    },
-    scrollContent: {
-        padding: 16,
-        paddingBottom: 32
-    },
-    center: {
-        flex: 1,
-        alignItems: 'center',
-        justifyContent: 'center'
-    },
-    muted: {
-        color: '#6B7280',
-        marginTop: 8,
-        fontFamily: FONT_FAMILY.POPPINS_REGULAR
-    },
-    section: {
-        backgroundColor: '#FFFFFF',
-        borderRadius: 12,
-        padding: 16,
-        marginBottom: 16,
-    },
-    label: {
-        fontSize: 16,
-        color: '#111827',
-        marginBottom: 8,
-        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD
-    },
-    input: {
-        backgroundColor: '#FFFFFF',
-        borderWidth: 1,
-        borderColor: '#E5E7EB',
+    container: { flex: 1, backgroundColor: '#F3F4F6' },
+    scrollContent: { padding: 16, paddingBottom: 32 },
+    center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+    muted: { color: '#6B7280', marginTop: 8, fontSize: 14, textAlign: 'center' },
+    section: { backgroundColor: '#FFFFFF', borderRadius: 12, padding: 16, marginBottom: 16 },
+    sectionTitle: { fontSize: 18, fontWeight: '600', color: '#111827', marginBottom: 4 },
+    sectionDesc: { fontSize: 14, color: '#6B7280', marginBottom: 12 },
+    chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    chip: {
+        paddingHorizontal: 16,
+        paddingVertical: 12,
         borderRadius: 8,
-        padding: 12,
-        fontSize: 16,
-        color: '#111827',
-        fontFamily: FONT_FAMILY.POPPINS_REGULAR
+        backgroundColor: '#F3F4F6',
+        minWidth: 100,
+        alignItems: 'center'
     },
-    rowChip: {
+    chipActive: { backgroundColor: '#2563EB' },
+    chipLabel: { color: '#374151', fontWeight: '600', fontSize: 14 },
+    chipLabelActive: { color: '#FFFFFF' },
+    chipDesc: { fontSize: 12, color: '#6B7280', marginTop: 4, fontWeight: 'normal' },
+    chipDescActive: { color: '#E0E7FF' },
+    dateDisplay: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#EFF6FF',
+        padding: 16,
+        borderRadius: 8,
+        borderWidth: 2,
+        borderColor: '#2563EB',
+        gap: 12,
+        marginBottom: 12
+    },
+    dateDisplayText: {
+        fontSize: 16,
+        color: '#1E40AF',
+        fontWeight: '600',
+        flex: 1
+    },
+    buttonRow: {
         flexDirection: 'row',
         flexWrap: 'wrap',
-        gap: 8
+        gap: 8,
     },
-    chip: {
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 20,
-        backgroundColor: '#F3F4F6'
-    },
-    chipActive: {
-        backgroundColor: '#2563EB'
-    },
-    chipText: {
-        color: '#374151',
-        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD
-    },
-    chipTextActive: {
-        color: '#FFFFFF',
-        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD
-    },
-    smallBtn: {
+    dateBtn: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 6,
-        marginTop: 8
+        backgroundColor: '#F3F4F6',
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 6,
+        borderWidth: 1,
+        borderColor: '#E5E7EB'
     },
-    smallBtnText: {
+    dateBtnText: {
         color: '#2563EB',
-        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD
-    },
-    utcDisplay: {
-        fontSize: 14,
-        color: '#2563EB',
-        marginTop: 4,
-        fontFamily: FONT_FAMILY.POPPINS_REGULAR
+        fontWeight: '600',
+        fontSize: 13
     },
     memberCard: {
         flexDirection: 'row',
@@ -553,50 +571,18 @@ const styles = StyleSheet.create({
         padding: 12,
         borderRadius: 8,
         borderWidth: 1,
-        borderColor: '#E5E7EB'
+        borderColor: '#E5E7EB',
+        marginBottom: 12
     },
-    memberCardDragging: {
-        backgroundColor: '#E5E7EB',
-    },
-    dragging: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-        elevation: 8,
-        zIndex: 1000,
-    },
-    memberName: {
-        fontSize: 16,
-        color: '#111827',
-        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD
-    },
-    memberEmail: {
-        fontSize: 12,
-        color: '#6B7280',
-        fontFamily: FONT_FAMILY.POPPINS_REGULAR
-    },
-    memberMeta: {
-        fontSize: 12,
-        color: '#6B7280',
-        marginTop: 2,
-        fontFamily: FONT_FAMILY.POPPINS_REGULAR
-    },
-    bold: {
-        color: '#111827',
-        fontFamily: FONT_FAMILY.POPPINS_BOLD
-    },
-    btnGroup: {
-        flexDirection: 'row',
-        gap: 12,
-        marginLeft: 12,
-        alignItems: 'center'
-    },
-    iconBtn: {
-        padding: 8,
-        alignItems: 'center',
-        justifyContent: 'center'
-    },
+    arrowContainer: { flexDirection: 'column', marginRight: 12 },
+    arrowBtn: { padding: 4 },
+    arrowText: { fontSize: 16, lineHeight: 16 },
+    memberName: { fontSize: 16, fontWeight: '600', color: '#111827' },
+    memberEmail: { fontSize: 12, color: '#6B7280' },
+    memberMeta: { fontSize: 12, color: '#6B7280', marginTop: 2 },
+    bold: { fontWeight: '700', color: '#111827' },
+    controls: { flexDirection: 'row', gap: 12, marginLeft: 12, alignItems: 'center' },
+    iconBtn: { padding: 8, alignItems: 'center', justifyContent: 'center' },
     toggleContainer: {
         width: 44,
         height: 24,
@@ -615,16 +601,73 @@ const styles = StyleSheet.create({
         shadowRadius: 2,
         elevation: 3,
     },
-    sep: {
-        height: 12
+    calendarContainer: {
+        marginTop: 8,
     },
-    hint: {
+    calendarHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 12,
+    },
+    calendarTitle: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#111827'
+    },
+    calendarGrid: {
+        flexDirection: 'row',
+        gap: 8,
+    },
+    dayCard: {
+        width: 120,
+        padding: 12,
+        backgroundColor: '#F9FAFB',
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+    },
+    dayCardToday: {
+        backgroundColor: '#EFF6FF',
+        borderColor: '#2563EB',
+        borderWidth: 2,
+    },
+    dayDate: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#111827',
+        marginBottom: 2,
+    },
+    dayDateToday: {
+        color: '#2563EB',
+    },
+    dayOfWeek: {
         fontSize: 12,
         color: '#6B7280',
+        marginBottom: 8,
+    },
+    onCallName: {
+        fontSize: 14,
+        fontWeight: '500',
+        color: '#111827',
+        marginBottom: 4,
+    },
+    roleBadge: {
+        backgroundColor: '#DBEAFE',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 4,
+        alignSelf: 'flex-start',
+    },
+    roleBadgeText: {
+        fontSize: 10,
+        fontWeight: '600',
+        color: '#2563EB',
+    },
+    noOnCall: {
+        fontSize: 12,
+        color: '#9CA3AF',
         fontStyle: 'italic',
-        marginTop: 12,
-        textAlign: 'center',
-        fontFamily: FONT_FAMILY.POPPINS_REGULAR_ITALIC
     },
     saveBtn: {
         flexDirection: 'row',
@@ -635,10 +678,5 @@ const styles = StyleSheet.create({
         padding: 16,
         marginTop: 8
     },
-    saveText: {
-        color: '#FFF',
-        marginLeft: 8,
-        fontSize: 16,
-        fontFamily: FONT_FAMILY.POPPINS_BOLD
-    },
+    saveText: { color: '#FFF', fontWeight: '700', marginLeft: 8, fontSize: 16 },
 });

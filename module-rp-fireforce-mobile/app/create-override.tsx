@@ -8,12 +8,11 @@ import {
     TouchableOpacity,
     Alert,
     TextInput,
-    Platform,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePickerModal from "react-native-modal-datetime-picker";
 import { oncallController } from '@/api/oncall-schedule-controller';
 import { OnCallUser } from '@/types/oncall-types';
 import { FONT_FAMILY } from '@/constants/fonts';
@@ -26,7 +25,7 @@ export default function CreateOverrideScreen() {
     const [selectedUser, setSelectedUser] = useState<string>('');
     const [role, setRole] = useState<'primary' | 'backup'>('primary');
     const [startDate, setStartDate] = useState(new Date());
-    const [endDate, setEndDate] = useState(new Date(Date.now() + 24 * 60 * 60 * 1000)); // 24 hours from now
+    const [endDate, setEndDate] = useState(new Date(Date.now() + 24 * 60 * 60 * 1000));
     const [reason, setReason] = useState('');
     const [showStartPicker, setShowStartPicker] = useState(false);
     const [showEndPicker, setShowEndPicker] = useState(false);
@@ -97,6 +96,16 @@ export default function CreateOverrideScreen() {
         });
     };
 
+    const handleStartConfirm = (date: Date) => {
+        setStartDate(date);
+        setShowStartPicker(false);
+    };
+
+    const handleEndConfirm = (date: Date) => {
+        setEndDate(date);
+        setShowEndPicker(false);
+    };
+
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
@@ -162,20 +171,18 @@ export default function CreateOverrideScreen() {
                         style={styles.dateButton}
                         onPress={() => setShowStartPicker(true)}
                     >
-                        <Ionicons name="calendar-outline" size={20} color="#6B7280" />
+                        <Ionicons name="calendar-outline" size={20} color="#3B82F6" />
                         <Text style={styles.dateText}>{formatDate(startDate)}</Text>
+                        <Ionicons name="chevron-down" size={20} color="#6B7280" />
                     </TouchableOpacity>
 
-                    {showStartPicker && (
-                        <DateTimePicker
-                            value={startDate}
-                            mode="datetime"
-                            onChange={(event, date) => {
-                                setShowStartPicker(Platform.OS === 'ios');
-                                if (date) setStartDate(date);
-                            }}
-                        />
-                    )}
+                    <DateTimePickerModal
+                        isVisible={showStartPicker}
+                        mode="datetime"
+                        date={startDate}
+                        onConfirm={handleStartConfirm}
+                        onCancel={() => setShowStartPicker(false)}
+                    />
                 </View>
 
                 <View style={styles.section}>
@@ -184,20 +191,18 @@ export default function CreateOverrideScreen() {
                         style={styles.dateButton}
                         onPress={() => setShowEndPicker(true)}
                     >
-                        <Ionicons name="calendar-outline" size={20} color="#6B7280" />
+                        <Ionicons name="calendar-outline" size={20} color="#3B82F6" />
                         <Text style={styles.dateText}>{formatDate(endDate)}</Text>
+                        <Ionicons name="chevron-down" size={20} color="#6B7280" />
                     </TouchableOpacity>
 
-                    {showEndPicker && (
-                        <DateTimePicker
-                            value={endDate}
-                            mode="datetime"
-                            onChange={(event, date) => {
-                                setShowEndPicker(Platform.OS === 'ios');
-                                if (date) setEndDate(date);
-                            }}
-                        />
-                    )}
+                    <DateTimePickerModal
+                        isVisible={showEndPicker}
+                        mode="datetime"
+                        date={endDate}
+                        onConfirm={handleEndConfirm}
+                        onCancel={() => setShowEndPicker(false)}
+                    />
                 </View>
 
                 {/* Reason */}
@@ -323,17 +328,20 @@ const styles = StyleSheet.create({
     dateButton: {
         flexDirection: 'row',
         alignItems: 'center',
+        justifyContent: 'space-between',
         padding: 12,
-        backgroundColor: '#FFFFFF',
+        backgroundColor: '#EFF6FF',
         borderRadius: 8,
-        borderWidth: 1,
-        borderColor: '#E5E7EB',
+        borderWidth: 2,
+        borderColor: '#3B82F6',
     },
     dateText: {
         fontSize: 16,
-        color: '#374151',
+        color: '#1E40AF',
+        flex: 1,
         marginLeft: 8,
-        fontFamily: FONT_FAMILY.POPPINS_REGULAR,
+        fontFamily: FONT_FAMILY.POPPINS_MEDIUM,
+        fontWeight: '600',
     },
     input: {
         backgroundColor: '#FFFFFF',
