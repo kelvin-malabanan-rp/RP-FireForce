@@ -22,7 +22,8 @@ import {
     retrieveRegistrationStatus,
     storeAlertSettings,
     storePushToken,
-    storeRegistrationStatus
+    storeRegistrationStatus,
+    retrieveUserSession
 } from "@/constants/local-storage";
 import { FONT_FAMILY } from '@/constants/fonts';
 import {Ionicons} from "@expo/vector-icons";
@@ -118,36 +119,62 @@ const AlertManager: React.FC<AlertManagerProps> = ({ style }) => {
                 setPushToken(token.data);
                 await storePushToken(token.data);
 
+                // Get platform token for Android FCM
+                let platformToken = null;
+                if (Platform.OS === 'android') {
+                    platformToken = await Notifications.getDevicePushTokenAsync();
+                }
+
+                const retrieveUser = await retrieveUserSession();
+
                 console.log('Token:', token);
+
+                // Check if user session exists
+                if (!retrieveUser || !retrieveUser.id) {
+                    console.error('No user session found. User must be logged in to register push token.');
+                    setRegistrationStatus('failed');
+                    await storeRegistrationStatus('failed');
+                    return;  // ← Changed from 'return null' since function returns Promise<void>
+                }
+
+                console.log('Registering push token for user:', retrieveUser.id);
+
                 // Register token with backend using alert-controller
                 try {
                     const response = await registerPushToken({
+                        userId: retrieveUser.id,
                         token: token.data,
                         deviceType: Platform.OS,
+                        fcmToken: Platform.OS === 'android' && platformToken ? (platformToken as any).data : undefined,
                         settings
                     });
 
-                    setRegistrationStatus('registered');
-                    await storeRegistrationStatus('registered');
-                    console.log('Device registered successfully:', response);
+                    if (response.httpStatus === 'OK' || response.data.success) {
+                        setRegistrationStatus('registered');
+                        await storeRegistrationStatus('registered');
+                        console.log('Device registered successfully for user:', retrieveUser.id);
+                    } else {
+                        setRegistrationStatus('failed');
+                        await storeRegistrationStatus('failed');
+                        console.warn('Backend registration failed:', response);
+                    }
                 } catch (error) {
                     console.error('Registration failed:', error);
                     setRegistrationStatus('failed');
                     await storeRegistrationStatus('failed');
                 }
-            }
 
-            // Set up notification channels for Android
-            if (Platform.OS === 'android') {
-                await Notifications.setNotificationChannelAsync('critical-alerts-v4', {
-                    name: 'Critical Incidents',
-                    importance: Notifications.AndroidImportance.MAX,
-                    vibrationPattern: [0, 250, 250, 250],
-                    lightColor: '#DC2626',
-                    sound: 'alarm_sound.mp3',
-                });
+                // Set up notification channels for Android
+                if (Platform.OS === 'android') {
+                    await Notifications.setNotificationChannelAsync('critical-alerts-v4', {
+                        name: 'Critical Incidents',
+                        importance: Notifications.AndroidImportance.MAX,
+                        vibrationPattern: [0, 250, 250, 250],
+                        lightColor: '#DC2626',
+                        sound: 'alarm_sound.mp3',
+                    });
+                }
             }
-
         } catch (error) {
             console.error('Error setting up notifications:', error);
             setRegistrationStatus('error');
@@ -184,7 +211,7 @@ const AlertManager: React.FC<AlertManagerProps> = ({ style }) => {
                 settings
             });
 
-            if (response.httpStatus === 200) {
+            if (response.httpStatus === "OK") {
                 setRegistrationStatus('registered');
                 await storeRegistrationStatus('registered');
                 console.log('Retry registration successful');

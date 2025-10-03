@@ -82,7 +82,7 @@ export interface DeviceInfo {
 export type PushTokenRegistrationResponse = {
   success: boolean;
   deviceId: string;
-  registeredAt?: string;
+  userId: string;
 };
 
 export type PushTokenStatusResponse = {
@@ -110,7 +110,7 @@ export type BackendHealthResponse = {
 };
 
 export type APIResponse<T> = {
-  httpStatus: number;   // keep number if that’s what your server returns
+  httpStatus: string;   // keep number if that’s what your server returns
   message: string;
   data: T;
 };
