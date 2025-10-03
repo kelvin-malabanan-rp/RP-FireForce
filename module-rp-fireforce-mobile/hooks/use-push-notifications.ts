@@ -4,18 +4,30 @@ import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
-import {registerPushToken, respondToIncident} from '@/api/alert-controller';
-import {router} from "expo-router";
+import { registerPushToken, respondToIncident } from '@/api/alert-controller';
+import { router } from "expo-router";
+import {retrieveUserSession} from "@/constants/local-storage";
 
 export const usePushNotifications = () => {
     const [expoPushToken, setExpoPushToken] = useState<string | null>(null);
     const [fcmToken, setFcmToken] = useState<string | null>(null);
     const [permissionStatus, setPermissionStatus] = useState<string>('unknown');
-    const [registrationStatus, setRegistrationStatus] =
-        useState<'pending' | 'registered' | 'failed'>('pending');
-    // PLEASE IMPLEMENT AFTER LOGIN
-    const userId = 'kelbs'
-    //const userId = currentUser.i
+    const [registrationStatus, setRegistrationStatus] = useState<'pending' | 'registered' | 'failed'>('pending');
+    const [id, setId] = useState<string | null>(null);
+
+    // Load user session on mount
+    useEffect(() => {
+        const loadUserSession = async () => {
+            const session = await retrieveUserSession();
+            if (session?.id) {
+                setId(session.id);
+                console.log('[push] User session loaded:', session.id);
+            } else {
+                console.warn('[push] No user session found');
+            }
+        };
+        loadUserSession();
+    }, []);
 
     useEffect(() => {
         const sub = Notifications.addNotificationResponseReceivedListener((response) => {
@@ -32,10 +44,10 @@ export const usePushNotifications = () => {
         return () => sub.remove();
     }, []);
 
-    // ► response listener (runs once) TODO
+    // ► response listener for action buttons
     useEffect(() => {
         const sub = Notifications.addNotificationResponseReceivedListener((response) => {
-            const { actionIdentifier, notification } = response;
+            const { actionIdentifier } = response;
             const data = response.notification.request.content.data as
                 | { incidentId?: string }
                 | undefined;
@@ -45,11 +57,18 @@ export const usePushNotifications = () => {
 
             if (actionIdentifier === "ACKNOWLEDGE") {
                 console.log("User acknowledged incident", incidentId);
-                // Call backend to respond
-                respondToIncident(incidentId, "acknowledge", userId);
+                if (id) {
+                    respondToIncident(incidentId, "acknowledge", id);
+                } else {
+                    console.error('[push] Cannot acknowledge - no id available');
+                }
             } else if (actionIdentifier === "DECLINE") {
                 console.log("User declined incident", incidentId);
-                respondToIncident(incidentId, "decline", userId);
+                if (id) {
+                    respondToIncident(incidentId, "decline", id);
+                } else {
+                    console.error('[push] Cannot decline - no id available');
+                }
             } else {
                 // Default tap → navigate inside app
                 if (data.incidentId) {
@@ -62,9 +81,7 @@ export const usePushNotifications = () => {
         });
 
         return () => sub.remove();
-    }, []);
-
-
+    }, [id]); // ← Add id as dependency
 
     useEffect(() => {
         console.log('[push] useEffect start');
@@ -75,7 +92,7 @@ export const usePushNotifications = () => {
     const ensureCategoriesAsync = async () => {
         await Notifications.setNotificationCategoryAsync('incident-actions', [
             {
-                identifier: 'ACK',
+                identifier: 'ACKNOWLEDGE',
                 buttonTitle: "I've got this ✅",
                 options: { opensAppToForeground: false },
             },
@@ -111,7 +128,6 @@ export const usePushNotifications = () => {
             console.log('[push] permissions:', status);
 
             if (status === 'granted') {
-                // ► make sure category exists before any notifications arrive
                 await ensureCategoriesAsync();
                 await createNotificationChannels();
                 await registerDevice();
@@ -178,6 +194,16 @@ export const usePushNotifications = () => {
         }
 
         try {
+            // Get user session
+            const userSession = await retrieveUserSession();
+            if (!userSession || !userSession.id) {
+                console.error('[push] No user session found. Cannot register push token.');
+                setRegistrationStatus('failed');
+                return null;
+            }
+
+            setId(userSession.id);
+
             const expoTok = await Notifications.getExpoPushTokenAsync({
                 projectId: Constants.expoConfig?.extra?.eas?.projectId,
             });
@@ -188,12 +214,14 @@ export const usePushNotifications = () => {
             console.log('[push] platform token:', platformTok.type, (platformTok as any).data?.slice?.(0, 32) + '...');
             console.log('[push] Platform.OS:', Platform.OS);
             console.log('[push] platformTok.type:', platformTok.type);
+
             if (Platform.OS === 'android' && platformTok.type === 'android') {
                 console.log('[push] fcm token:', (platformTok as any).data);
                 setFcmToken((platformTok as any).data);
             }
 
             const response = await registerPushToken({
+                userId: userSession.id, // ← Added id
                 token: expoTok.data,
                 deviceType: Platform.OS,
                 fcmToken: Platform.OS === 'android' ? (platformTok as any).data : undefined,
@@ -211,12 +239,12 @@ export const usePushNotifications = () => {
                 },
             });
 
-            if ((response as any).httpStatus === 200 || (response as any).success) {
+            if ((response as any).httpStatus === 'OK' || (response as any).success) {
                 setRegistrationStatus('registered');
-                console.log('[push] device registered');
+                console.log('[push] device registered for user:', userSession.id);
             } else {
                 setRegistrationStatus('failed');
-                console.warn('[push] backend registration non-200:', response);
+                console.warn('[push] backend registration failed:', response);
             }
             return expoTok.data;
         } catch (err) {
@@ -226,7 +254,7 @@ export const usePushNotifications = () => {
         }
     };
 
-    // Local notification helper (► attach categoryIdentifier)
+    // Local notification helper
     const sendIncidentNotification = async (incident: any) => {
         const channelId = getChannelBySeverity(incident.severity);
         const notificationContent = getNotificationContent(incident);
@@ -239,8 +267,8 @@ export const usePushNotifications = () => {
                 sound: notificationContent.sound,
                 badge: notificationContent.badge ?? 1,
                 data: { incidentId: incident.id, severity: incident.severity },
-                channelId, // Android
-                categoryIdentifier: 'incident-actions', // ► shows the two buttons
+                channelId,
+                categoryIdentifier: 'incident-actions',
             },
             trigger: null,
             identifier: `incident-${incident.id}`,
@@ -255,7 +283,7 @@ export const usePushNotifications = () => {
                     badge: 99,
                     data: { incidentId: incident.id, severity: 'critical', isReminder: true },
                     channelId: CHANNELS.critical,
-                    categoryIdentifier: 'incident-actions', // ► include here too
+                    categoryIdentifier: 'incident-actions',
                 },
                 trigger: { seconds: 30, repeats: false } as Notifications.TimeIntervalTriggerInput,
                 identifier: `incident-${incident.id}-reminder`,
@@ -294,6 +322,7 @@ export const usePushNotifications = () => {
         fcmToken,
         permissionStatus,
         registrationStatus,
+        id, // ← Export id if needed elsewhere
         registerDevice,
         sendIncidentNotification,
         clearIncidentNotifications,

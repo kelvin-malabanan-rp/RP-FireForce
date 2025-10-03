@@ -39,16 +39,6 @@ CREATE INDEX idx_users_username ON users(username);
 CREATE INDEX idx_users_role     ON users(role);
 CREATE INDEX idx_users_active   ON users(is_active);
 
-CREATE TABLE teams (
-					   id          TEXT PRIMARY KEY,
-					   name        TEXT UNIQUE,
-					   description TEXT,
-					   is_active   INTEGER,
-					   created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
-					   updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-CREATE INDEX idx_teams_active ON teams(is_active);
-
 CREATE TABLE incidents (
 						   id               TEXT PRIMARY KEY,
 						   title            TEXT,
@@ -147,19 +137,6 @@ CREATE TABLE oncall_teams (
 							  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX idx_oncall_teams_active ON oncall_teams(is_active);
-
-CREATE TABLE team_members (
-							  id         TEXT PRIMARY KEY,
-							  team_id    TEXT,
-							  user_id    TEXT,
-							  role       TEXT,
-							  is_active  INTEGER,
-							  joined_at  DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-CREATE UNIQUE INDEX uq_team_members_team_user ON team_members(team_id, user_id);
-CREATE INDEX idx_team_members_team ON team_members(team_id);
-CREATE INDEX idx_team_members_user ON team_members(user_id);
-CREATE INDEX idx_team_members_role ON team_members(role);
 
 CREATE TABLE oncall_team_members (
 									 id          TEXT PRIMARY KEY,
@@ -278,11 +255,6 @@ VALUES
 ('user-9','lisa.anderson@rocketpartners.io','landerson','$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe','Lisa','Anderson','operator',1,1),
 ('user-10','alex.kim@rocketpartners.io','akim','$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe','Alex','Kim','operator',1,1);
 
-INSERT OR IGNORE INTO teams (id,name,description,is_active)
-VALUES
-('team-1','Platform Engineering','Primary platform and infrastructure team',1),
-('team-2','Application Support','Application-level incident response team',1);
-
 INSERT OR IGNORE INTO incidents
 (id,title,description,severity,status,priority,escalation_level,timestamp,location,aws_alarm_name,assigned_to)
 VALUES
@@ -294,18 +266,6 @@ INSERT OR IGNORE INTO oncall_teams (id,name,description,timezone,is_active)
 VALUES
 ('team-1','Platform Engineering','Primary platform and infrastructure team','America/New_York',1),
 ('team-2','Application Support','Application-level incident response team','America/Los_Angeles',1);
-
-INSERT OR IGNORE INTO team_members (id,team_id,user_id,role,is_active) VALUES
-('tm-1','team-1','user-1','manager',1),
-('tm-2','team-1','user-2','lead',1),
-('tm-3','team-1','user-3','member',1),
-('tm-4','team-1','user-4','member',1),
-('tm-5','team-1','user-5','member',1),
-('tm-6','team-2','user-6','lead',1),
-('tm-7','team-2','user-7','member',1),
-('tm-8','team-2','user-8','member',1),
-('tm-9','team-2','user-9','member',1),
-('tm-10','team-2','user-10','member',1);
 
 INSERT OR IGNORE INTO oncall_team_members (id,team_id,user_id,role,order_index,is_active) VALUES
 ('member-1','team-1','user-4','primary',0,1),
