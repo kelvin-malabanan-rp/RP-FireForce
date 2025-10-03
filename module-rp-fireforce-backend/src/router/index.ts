@@ -20,6 +20,7 @@ import {
 	handleGetOnCallSchedule,
 	handleGetOnCallTeams, handleGetScheduleConfig, handleUpdateScheduleConfig
 } from "../handlers/oncall.handler";
+import {handleGetAllUsers} from "../handlers/user-handlers";
 
 export class Router {
 	private env: Env;
@@ -45,6 +46,10 @@ export class Router {
 			// Public routes (no auth required)
 			if (path === '/health' && method === 'GET') {
 				return handleHealth(CORS_HEADERS);
+			}
+			// Users routes
+			if (path === '/api/users' && method === 'GET') {
+				return handleGetAllUsers(request, this.env, CORS_HEADERS);
 			}
 
 			// Authentication routes

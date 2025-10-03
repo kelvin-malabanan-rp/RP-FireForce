@@ -11,7 +11,7 @@ DROP TABLE IF EXISTS team_members;
 DROP TABLE IF EXISTS teams;
 DROP TABLE IF EXISTS incident_notifications;
 DROP TABLE IF EXISTS incident_comments;
-DROP TABLE IF EXISTS push_token_user_assoc;  -- ← Drop this BEFORE push_tokens
+DROP TABLE IF EXISTS push_token_user_assoc;
 DROP TABLE IF EXISTS push_tokens;
 DROP TABLE IF EXISTS user_sessions;
 DROP TABLE IF EXISTS incidents;
