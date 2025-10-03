@@ -240,7 +240,6 @@ CREATE TABLE incident_escalations (
 );
 CREATE INDEX idx_incident_escalations_incident ON incident_escalations(incident_id);
 CREATE INDEX idx_incident_escalations_status   ON incident_escalations(status);
-
 /* ======= SEED ======= */
 INSERT OR IGNORE INTO users (id,email,username,password_hash,first_name,last_name,role,is_active,is_verified)
 VALUES
@@ -253,7 +252,8 @@ VALUES
 ('user-7','emily.nakamura@rocketpartners.io','enakamura','$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe','Emily','Nakamura','operator',1,1),
 ('user-8','david.oconnor@rocketpartners.io','doconnor','$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe','David','OConnor','operator',1,1),
 ('user-9','lisa.anderson@rocketpartners.io','landerson','$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe','Lisa','Anderson','operator',1,1),
-('user-10','alex.kim@rocketpartners.io','akim','$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe','Alex','Kim','operator',1,1);
+('user-10','alex.kim@rocketpartners.io','akim','$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe','Alex','Kim','operator',1,1),
+('user-11','keannu.brillante@rocketpartners.io','kbrillante','$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe','Keannu','Brillante','admin',1,1);
 
 INSERT OR IGNORE INTO incidents
 (id,title,description,severity,status,priority,escalation_level,timestamp,location,aws_alarm_name,assigned_to)
@@ -265,19 +265,34 @@ VALUES
 INSERT OR IGNORE INTO oncall_teams (id,name,description,timezone,is_active)
 VALUES
 ('team-1','Platform Engineering','Primary platform and infrastructure team','America/New_York',1),
-('team-2','Application Support','Application-level incident response team','America/Los_Angeles',1);
+('team-2','Application Support','Application-level incident response team','America/Los_Angeles',1),
+('team-3','Database Operations','Database reliability and performance team','America/Chicago',1),
+('team-4','Network Operations','Network infrastructure and connectivity team','America/Denver',1),
+('team-5','Security Response','Security incidents and threat response team','America/New_York',1),
+('team-6','DevOps','CI/CD pipeline and deployment automation team','America/Los_Angeles',1),
+('team-7','API Services','API gateway and microservices team','America/New_York',1),
+('team-8','Frontend Engineering','Client-side application and user interface team','America/Los_Angeles',1),
+('team-9','Data Engineering','Data pipeline and analytics infrastructure team','America/Chicago',1),
+('team-10','Cloud Infrastructure','Cloud platform and resource management team','America/New_York',1);
 
 INSERT OR IGNORE INTO oncall_team_members (id,team_id,user_id,role,order_index,is_active) VALUES
 ('member-1','team-1','user-4','primary',0,1),
 ('member-2','team-1','user-2','primary',1,1),
-('member-3','team-1','user-3','backup',0,1),
-('member-4','team-1','user-5','backup',1,1),
-('member-5','team-1','user-1','escalation',0,1),
+('member-3','team-1','user-3','backup',2,1),
+('member-4','team-1','user-5','backup',3,1),
+('member-5','team-1','user-1','escalation',4,1),
 ('member-6','team-2','user-6','primary',0,1),
 ('member-7','team-2','user-7','primary',1,1),
-('member-8','team-2','user-8','backup',0,1),
-('member-9','team-2','user-9','backup',1,1),
-('member-10','team-2','user-10','escalation',0,1);
+('member-8','team-2','user-8','backup',2,1),
+('member-9','team-2','user-9','backup',3,1),
+('member-10','team-2','user-10','escalation',4,1),
+('member-11','team-3','user-11','primary',0,1),
+('member-12','team-3','user-2','backup',1,1),
+('member-13','team-3','user-5','escalation',2,1),
+('member-14','team-4','user-3','primary',0,1),
+('member-15','team-4','user-6','backup',1,1),
+('member-16','team-5','user-1','primary',0,1),
+('member-17','team-5','user-4','backup',1,1);
 
 INSERT OR IGNORE INTO escalation_chains (id,team_id,user_id,level,is_active) VALUES
 ('ec-1','team-1','user-4',1,1),
@@ -285,12 +300,16 @@ INSERT OR IGNORE INTO escalation_chains (id,team_id,user_id,level,is_active) VAL
 ('ec-3','team-1','user-1',3,1),
 ('ec-4','team-2','user-6',1,1),
 ('ec-5','team-2','user-7',2,1),
-('ec-6','team-2','user-10',3,1);
+('ec-6','team-2','user-10',3,1),
+('ec-7','team-3','user-11',1,1),
+('ec-8','team-3','user-2',2,1),
+('ec-9','team-3','user-5',3,1);
 
 INSERT OR IGNORE INTO oncall_schedules (id,team_id,name,rotation_type,rotation_start,rotation_length_hours,is_active)
 VALUES
 ('schedule-1','team-1','Weekly Platform Rotation','weekly',datetime('now','weekday 1'),168,1),
-('schedule-2','team-2','Daily App Support','daily',datetime('now'),24,1);
+('schedule-2','team-2','Daily App Support','daily',datetime('now'),24,1),
+('schedule-3','team-3','Database Ops Weekly','weekly',datetime('now','weekday 1'),168,1);
 
 INSERT OR IGNORE INTO oncall_assignments (id,schedule_id,user_id,team_id,start_time,end_time,role,is_active) VALUES
 ('assign-1','schedule-1','user-4','team-1',datetime('now','-1 day'),datetime('now','+6 days'),'primary',1),
@@ -302,9 +321,12 @@ INSERT OR IGNORE INTO oncall_assignments (id,schedule_id,user_id,team_id,start_t
 ('assign-7','schedule-2','user-6','team-2',datetime('now','-1 day'),datetime('now'),'primary',1),
 ('assign-8','schedule-2','user-8','team-2',datetime('now','-1 day'),datetime('now'),'backup',1),
 ('assign-9','schedule-2','user-7','team-2',datetime('now'),datetime('now','+1 day'),'primary',1),
-('assign-10','schedule-2','user-9','team-2',datetime('now'),datetime('now','+1 day'),'backup',1);
+('assign-10','schedule-2','user-9','team-2',datetime('now'),datetime('now','+1 day'),'backup',1),
+('assign-11','schedule-3','user-11','team-3',datetime('now','-1 day'),datetime('now','+6 days'),'primary',1),
+('assign-12','schedule-3','user-2','team-3',datetime('now','-1 day'),datetime('now','+6 days'),'backup',1);
 
 INSERT OR IGNORE INTO escalation_policies (id,team_id,name,steps,timeout_minutes,is_active)
 VALUES
 ('escalation-1','team-1','Platform Escalation','[{"step":1,"notify":["primary"],"wait_minutes":5},{"step":2,"notify":["backup"],"wait_minutes":10},{"step":3,"notify":["primary","backup"],"wait_minutes":15}]',15,1),
-('escalation-2','team-2','App Support Escalation','[{"step":1,"notify":["primary"],"wait_minutes":3},{"step":2,"notify":["backup"],"wait_minutes":7},{"step":3,"notify":["escalation"],"wait_minutes":10}]',10,1);
+('escalation-2','team-2','App Support Escalation','[{"step":1,"notify":["primary"],"wait_minutes":3},{"step":2,"notify":["backup"],"wait_minutes":7},{"step":3,"notify":["escalation"],"wait_minutes":10}]',10,1),
+('escalation-3','team-3','Database Ops Escalation','[{"step":1,"notify":["primary"],"wait_minutes":5},{"step":2,"notify":["backup"],"wait_minutes":10},{"step":3,"notify":["escalation"],"wait_minutes":15}]',15,1);

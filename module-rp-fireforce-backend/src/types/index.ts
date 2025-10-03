@@ -33,6 +33,7 @@ export interface CreateIncidentTypes {
 	location: string | null;
 	reportedBy: string;
 	severity: 'low' | 'medium' | 'high' | 'critical';
+	notify_users?: string[];
 }
 
 export interface CloudWatchAlarm {

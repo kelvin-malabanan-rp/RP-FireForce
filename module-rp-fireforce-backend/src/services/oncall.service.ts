@@ -2,6 +2,7 @@
 import { Env, OnCallTeam, OnCallUser } from '../types';
 import { DatabaseService } from './database.service';
 import { CurrentOnCall } from '../types';
+import {EmailService} from "./email.service";
 
 export class OnCallService {
 	private dbService: DatabaseService;
@@ -523,12 +524,9 @@ export class OnCallService {
 		notifiedCount: number;
 		users: Array<{ name: string; email: string }>;
 	}> {
-		// Get all users who were notified about this incident
 		const notifiedUsers = await this.getNotifiedUsers(incidentId);
-
-		// Get incident details
 		const incident = await this.dbService.db
-			.prepare('SELECT title, severity FROM incidents WHERE id = ?')
+			.prepare('SELECT * FROM incidents WHERE id = ?')
 			.bind(incidentId)
 			.first();
 
@@ -536,23 +534,30 @@ export class OnCallService {
 			throw new Error('Incident not found');
 		}
 
-		// Send all-clear notifications (implement your actual notification service here)
-		const notifications = notifiedUsers.map(user => ({
-			name: `${user.firstName} ${user.lastName}`,
-			email: user.email
-		}));
+		const emailService = new EmailService(this.dbService.env);
+		const notifications = [];
 
-		// Log the all-clear notifications
 		for (const user of notifiedUsers) {
-			await this.dbService.db.prepare(`
-            INSERT INTO incident_notifications
-            (id, incident_id, user_id, notification_type, sent_at)
-            VALUES (?, ?, ?, 'all_clear', CURRENT_TIMESTAMP)
-        `).bind(crypto.randomUUID(), incidentId, user.userId).run();
+			try {
+				await emailService.sendAllClearEmail(incident, user.email);
+				notifications.push({
+					name: `${user.firstName} ${user.lastName}`,
+					email: user.email
+				});
+
+				// Log the all-clear notification
+				await this.dbService.db.prepare(`
+                INSERT INTO incident_notifications
+                (id, incident_id, user_id, notification_type, sent_at)
+                VALUES (?, ?, ?, 'all_clear', CURRENT_TIMESTAMP)
+            `).bind(crypto.randomUUID(), incidentId, user.userId).run();
+			} catch (error) {
+				console.error(`Failed to send all-clear to ${user.email}:`, error);
+			}
 		}
 
 		return {
-			notifiedCount: notifiedUsers.length,
+			notifiedCount: notifications.length,
 			users: notifications
 		};
 	}
@@ -565,5 +570,31 @@ export class OnCallService {
 		if (!current) {
 			console.warn('No current assignment generated for team', teamId);
 		}
+	}
+
+
+	async sendNotification(alert: any, userId: string, type: string, env: Env) {
+		const user = await this.dbService.db
+			.prepare('SELECT * FROM users WHERE id = ?')
+			.bind(userId)
+			.first();
+
+		if (!user) return;
+
+		// Send email notification
+		try {
+			const emailService = new EmailService(env);
+			await emailService.sendIncidentAlert(alert, (user as any).email);
+			console.log(`Notification sent to ${(user as any).email}`);
+		} catch (error) {
+			console.error(`Failed to send notification to ${(user as any).email}:`, error);
+		}
+
+		// Track notification in database
+		const notificationId = crypto.randomUUID();
+		await this.dbService.db.prepare(`
+        INSERT INTO notifications (id, alert_id, user_id, type, status)
+        VALUES (?, ?, ?, ?, 'sent')
+    `).bind(notificationId, alert.id, userId, type).run();
 	}
 }

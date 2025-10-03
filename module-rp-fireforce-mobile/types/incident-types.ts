@@ -73,6 +73,7 @@ export interface CreateIncidentData {
     severity: "low" | "medium" | "high" | "critical";
     location?: string | null;
     reportedBy: string;  // Changed from reported_by and made required to match backend
+    notify_users?: string[];
 }
 
 // Response types for created incident

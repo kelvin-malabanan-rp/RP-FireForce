@@ -12,3 +12,8 @@ FIREBASE_PRIVATE_KEY = "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQE
 binding = "DB"
 database_name = "incident-management"
 database_id = "c3c21ca1-204d-4db3-ab18-2cf69ec7418c"
+
+# Add email routing
+send_email = [
+	{type = "send_email", name = "EMAIL"}
+]
