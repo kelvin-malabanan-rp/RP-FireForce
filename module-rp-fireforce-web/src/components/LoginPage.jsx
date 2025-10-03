@@ -247,6 +247,8 @@ const LoginPage = () => {
     setLoading(true);
     
     try {
+      console.log('Attempting login with:', { email: formData.email, password: '***' });
+      
       const response = await fetch('https://incident-webhook-api.rapidresponse.workers.dev/api/auth/login', {
         method: 'POST',
         headers: {
@@ -258,11 +260,15 @@ const LoginPage = () => {
         })
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
+      console.log('Response status:', response.status);
+      console.log('Response headers:', Object.fromEntries(response.headers));
 
       const responseData = await response.json();
+      console.log('Response data:', responseData);
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status} - ${responseData.message || 'Unknown error'}`);
+      }
       
       if (responseData.httpStatus === 'OK' && responseData.data) {
         // Store authentication data
@@ -274,26 +280,34 @@ const LoginPage = () => {
           id: userData.id,
           email: userData.email,
           firstName: userData.firstName,
-          lastName: userData.lastName
+          lastName: userData.lastName,
+          role: userData.role
         }));
+        localStorage.setItem('user', JSON.stringify(userData));
+        localStorage.setItem('isAuthenticated', 'true');
         
         console.log('Login successful:', userData);
         
         // Show success message
-        alert(`Welcome back, ${userData.firstName || userData.email}!`);
+        alert(`Welcome back, ${userData.firstName || userData.lastName || userData.email}!`);
         
-        // Here you would typically redirect to the dashboard
-        // window.location.href = '/dashboard';
+        // Trigger authentication state change
+        window.location.reload();
+        
       } else {
-        throw new Error(responseData.message || 'Login failed');
+        throw new Error(responseData.message || 'Login failed - Invalid response format');
       }
     } catch (error) {
-      console.error('Login error:', error);
+      console.error('Login error details:', error);
       
       if (error.message.includes('401') || error.message.includes('Unauthorized')) {
-        setErrors({ general: 'Invalid email or password. Please try again.' });
+        setErrors({ general: 'Invalid email or password. Please check your credentials and try again.' });
       } else if (error.message.includes('404')) {
         setErrors({ general: 'Login service unavailable. Please try again later.' });
+      } else if (error.message.includes('500')) {
+        setErrors({ general: 'Server error. Please try again later.' });
+      } else if (error.name === 'TypeError' || error.message.includes('fetch')) {
+        setErrors({ general: 'Network error. Please check your connection and try again.' });
       } else {
         setErrors({ general: error.message || 'Login failed. Please try again.' });
       }

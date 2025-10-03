@@ -17,7 +17,7 @@ import {
   Globe
 } from 'lucide-react';
 
-const TopNavigation = ({ user, onLogout, toggleSidebar, collapsed }) => {
+const TopNavigation = ({ user, onLogout, toggleSidebar, collapsed, onNavigateToSettings }) => {
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -89,6 +89,13 @@ const TopNavigation = ({ user, onLogout, toggleSidebar, collapsed }) => {
     onLogout();
   };
 
+  const handleAccountSettings = () => {
+    setShowUserDropdown(false);
+    if (onNavigateToSettings) {
+      onNavigateToSettings();
+    }
+  };
+
   return (
     <header className="bg-white border-b border-gray-200 shadow-sm relative">
       {/* Alignment indicator with sidebar */}
@@ -125,51 +132,10 @@ const TopNavigation = ({ user, onLogout, toggleSidebar, collapsed }) => {
             )}
           </div>
 
-          {/* System Status */}
-          <div className="hidden xl:flex items-center space-x-3 px-3 py-2 bg-green-50 rounded-lg border border-green-200">
-            <div className="flex items-center space-x-2">
-              <Activity className="w-4 h-4 text-green-600" />
-              <span className="text-sm font-medium text-green-700">All Systems Operational</span>
-            </div>
-            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-          </div>
         </div>
 
         {/* Right Section */}
         <div className="flex items-center space-x-3">
-          {/* Quick Actions */}
-          <div className="hidden lg:flex items-center space-x-2">
-            {/* Performance Indicator */}
-            <button className="flex items-center space-x-2 px-3 py-2 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors duration-200 border border-blue-200">
-              <Zap className="w-4 h-4 text-blue-600" />
-              <span className="text-sm font-medium text-blue-700">99.9%</span>
-            </button>
-
-            {/* Globe Status */}
-            <button className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors duration-200 text-gray-600 hover:text-gray-800">
-              <Globe className="w-5 h-5" />
-            </button>
-          </div>
-
-          {/* Divider */}
-          <div className="w-px h-6 bg-gray-300"></div>
-
-          {/* Theme Toggle */}
-          <button
-            onClick={() => setDarkMode(!darkMode)}
-            className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors duration-200 text-gray-600 hover:text-gray-800"
-          >
-            {darkMode ? (
-              <Sun className="w-5 h-5 text-amber-500" />
-            ) : (
-              <Moon className="w-5 h-5" />
-            )}
-          </button>
-
-          {/* Help Button */}
-          <button className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors duration-200 text-gray-600 hover:text-gray-800">
-            <HelpCircle className="w-5 h-5" />
-          </button>
 
           {/* Notifications */}
           <div className="relative" ref={notificationRef}>
@@ -250,12 +216,14 @@ const TopNavigation = ({ user, onLogout, toggleSidebar, collapsed }) => {
                 <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>
               </div>
               {!collapsed && (
-                <div className="text-left">
-                  <p className="text-sm font-medium text-gray-900">
-                    {user?.name || 'Administrator'}
+                <div className="text-left min-w-0 flex-1">
+                  <p className="text-sm font-medium text-gray-900 truncate">
+                    {user?.firstName && user?.lastName 
+                      ? `${user.firstName} ${user.lastName}` 
+                      : user?.name || 'Administrator'}
                   </p>
-                  <p className="text-xs text-gray-500">
-                    {user?.role || 'System Admin'}
+                  <p className="text-xs text-gray-500 truncate" title={user?.role}>
+                    {user?.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : 'User'}
                   </p>
                 </div>
               )}
@@ -264,24 +232,28 @@ const TopNavigation = ({ user, onLogout, toggleSidebar, collapsed }) => {
 
             {/* User Dropdown */}
             {showUserDropdown && (
-              <div className="absolute right-0 mt-2 w-64 bg-white border border-gray-200 rounded-lg shadow-xl z-50">
+              <div className="absolute right-0 mt-2 w-96 bg-white border border-gray-200 rounded-lg shadow-xl z-50">
                 <div className="p-4 border-b border-gray-200">
                   <div className="flex items-center space-x-3">
-                    <div className="relative">
+                    <div className="relative flex-shrink-0">
                       <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center shadow-md">
                         <User className="w-5 h-5 text-white" />
                       </div>
                       <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>
                     </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">
-                        {user?.name || 'Administrator'}
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-gray-900 truncate">
+                        {user?.firstName && user?.lastName 
+                          ? `${user.firstName} ${user.lastName}` 
+                          : user?.name || 'Administrator'}
                       </p>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-xs text-gray-500 break-all" title={user?.email || 'admin@fireforce.com'}>
                         {user?.email || 'admin@fireforce.com'}
                       </p>
+                      <p className="text-xs text-blue-600 font-medium mt-1">
+                        {user?.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : 'User'}
+                      </p>
                       <div className="flex items-center mt-1">
-                        <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
                         <span className="text-xs text-green-600">Online</span>
                       </div>
                     </div>
@@ -289,17 +261,12 @@ const TopNavigation = ({ user, onLogout, toggleSidebar, collapsed }) => {
                 </div>
 
                 <div className="py-1">
-                  <button className="w-full flex items-center px-4 py-3 text-sm text-gray-700 hover:text-gray-900 hover:bg-gray-50 transition-colors duration-200">
-                    <User className="w-4 h-4 mr-3" />
-                    My Profile
-                  </button>
-                  <button className="w-full flex items-center px-4 py-3 text-sm text-gray-700 hover:text-gray-900 hover:bg-gray-50 transition-colors duration-200">
+                  <button 
+                    onClick={handleAccountSettings}
+                    className="w-full flex items-center px-4 py-3 text-sm text-gray-700 hover:text-gray-900 hover:bg-gray-50 transition-colors duration-200"
+                  >
                     <Settings className="w-4 h-4 mr-3" />
                     Account Settings
-                  </button>
-                  <button className="w-full flex items-center px-4 py-3 text-sm text-gray-700 hover:text-gray-900 hover:bg-gray-50 transition-colors duration-200">
-                    <MessageSquare className="w-4 h-4 mr-3" />
-                    Support Center
                   </button>
                 </div>
 
@@ -322,3 +289,4 @@ const TopNavigation = ({ user, onLogout, toggleSidebar, collapsed }) => {
 };
 
 export default TopNavigation;
+  

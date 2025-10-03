@@ -4,10 +4,12 @@ import CurrentOnCallSection from './CurrentOnCallSection';
 import TeamSelector from './TeamSelector';
 import { LoadingState, ErrorState } from './LoadingAndError';
 import ScheduleCalendar from './ScheduleCalendar';
+import CreateOverrideModal from './CreateOverrideModal';
 
 const OnCallSchedulePage = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedTeam, setSelectedTeam] = useState('');
+  const [isOverrideModalOpen, setIsOverrideModalOpen] = useState(false);
 
   // API state management
   const [teams, setTeams] = useState([]);
@@ -82,6 +84,13 @@ const OnCallSchedulePage = () => {
     loadData();
   }, []);
 
+  // Auto-select first team when teams are loaded and no team is selected
+  useEffect(() => {
+    if (teams.length > 0 && !selectedTeam) {
+      setSelectedTeam(teams[0].id);
+    }
+  }, [teams, selectedTeam]);
+
   useEffect(() => {
     if (selectedTeam) {
       fetchCurrentOnCall(selectedTeam);
@@ -107,6 +116,39 @@ const OnCallSchedulePage = () => {
     const newDate = new Date(currentDate);
     newDate.setMonth(currentDate.getMonth() + direction);
     setCurrentDate(newDate);
+  };
+
+  const handleCreateOverride = async (overrideData) => {
+    try {
+      // Format dates to ISO string
+      const payload = {
+        ...overrideData,
+        startTime: new Date(overrideData.startTime).toISOString(),
+        endTime: new Date(overrideData.endTime).toISOString()
+      };
+
+      const response = await fetch(`${BASE_URL}/api/oncall/override`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      
+      const data = await response.json();
+      
+      // Refresh the schedule data
+      if (selectedTeam) {
+        await fetchSchedule(selectedTeam);
+        await fetchCurrentOnCall(selectedTeam);
+      }
+      
+      alert('Override created successfully!');
+      return data;
+    } catch (err) {
+      console.error('Error creating override:', err);
+      throw new Error('Failed to create override. Please try again.');
+    }
   };
 
   return (
@@ -160,7 +202,10 @@ const OnCallSchedulePage = () => {
               <h2 className="text-xl font-bold text-gray-900 mb-6">Quick Actions</h2>
               
               <div className="space-y-4">
-                <button className="w-full flex items-center justify-center px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium">
+                <button 
+                  onClick={() => setIsOverrideModalOpen(true)}
+                  className="w-full flex items-center justify-center px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                >
                   Create Override
                 </button>
                 <button className="w-full flex items-center justify-center px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors">
@@ -195,6 +240,14 @@ const OnCallSchedulePage = () => {
           </div>
         </>
       )}
+
+      {/* Create Override Modal */}
+      <CreateOverrideModal
+        isOpen={isOverrideModalOpen}
+        onClose={() => setIsOverrideModalOpen(false)}
+        teams={teams}
+        onSubmit={handleCreateOverride}
+      />
     </div>
   );
 };

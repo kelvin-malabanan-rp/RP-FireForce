@@ -11,7 +11,10 @@ import TeamsPage from '../../pages/teams/TeamsPage';
 import SettingsPage from '../../pages/settings/SettingsPage';
 
 const DashboardLayout = ({ user, onLogout }) => {
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState(() => {
+    // Restore active tab from localStorage on initial load
+    return localStorage.getItem('activeTab') || 'dashboard';
+  });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
@@ -34,10 +37,16 @@ const DashboardLayout = ({ user, onLogout }) => {
     setSidebarCollapsed(!sidebarCollapsed);
   };
 
+  // Custom setActiveTab function that also persists to localStorage
+  const handleSetActiveTab = (tabName) => {
+    setActiveTab(tabName);
+    localStorage.setItem('activeTab', tabName);
+  };
+
   const renderActivePage = () => {
     switch (activeTab) {
       case 'dashboard':
-        return <DashboardPage onNavigate={setActiveTab} />;
+        return <DashboardPage onNavigate={handleSetActiveTab} />;
       case 'analytics':
         return <AnalyticsPage />;
       case 'incidents':
@@ -49,7 +58,7 @@ const DashboardLayout = ({ user, onLogout }) => {
       case 'settings':
         return <SettingsPage />;
       default:
-        return <DashboardPage onNavigate={setActiveTab} />;
+        return <DashboardPage onNavigate={handleSetActiveTab} />;
     }
   };
 
@@ -66,7 +75,7 @@ const DashboardLayout = ({ user, onLogout }) => {
         <div className={`${isMobile ? 'absolute left-0 top-0 h-full z-10' : 'relative'}`}>
           <SideNavigation
             activeTab={activeTab}
-            setActiveTab={setActiveTab}
+            setActiveTab={handleSetActiveTab}
             collapsed={sidebarCollapsed}
             setCollapsed={setSidebarCollapsed}
           />
@@ -81,6 +90,7 @@ const DashboardLayout = ({ user, onLogout }) => {
           onLogout={onLogout}
           toggleSidebar={toggleSidebar}
           collapsed={sidebarCollapsed}
+          onNavigateToSettings={() => handleSetActiveTab('settings')}
         />
 
         {/* Page Content */}
