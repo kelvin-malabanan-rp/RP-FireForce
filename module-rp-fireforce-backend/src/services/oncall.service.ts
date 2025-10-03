@@ -1,5 +1,5 @@
 // services/oncall.service.ts
-import { Env, OnCallTeam, OnCallUser } from '../types';
+import {Env, OnCallTeam, OnCallTeamOfUser, OnCallUser} from '../types';
 import { DatabaseService } from './database.service';
 import { CurrentOnCall } from '../types';
 
@@ -12,7 +12,7 @@ export class OnCallService {
 
 	// ---------- READS ----------
 
-	async getCurrentOnCall(teamId?: string): Promise<CurrentOnCall | null> {
+	async getCurrentOnCallByTeamId(teamId?: string): Promise<CurrentOnCall | null> {
 		try {
 			const now = new Date().toISOString();
 			let sql = `
@@ -38,6 +38,127 @@ export class OnCallService {
 		} catch (e) {
 			console.error('getCurrentOnCall error:', e);
 			return null;
+		}
+	}
+
+	async getAllCurrentOnCall(teamId?: string): Promise<any> {
+		try {
+			let sql = `
+				SELECT
+					oa.id, oa.schedule_id, oa.team_id,
+					oa.user_id, oa.role,
+					oa.start_time, oa.end_time,
+					u.email,
+					u.first_name || ' ' || u.last_name as fullname,
+					t.name as team_name,
+					t.timezone,
+					DATE('now') as today,
+					pt.id as push_token_id,
+					pt.token as push_token,
+					pt.fcm_token as fcm_token,
+					pt.device_type as device_type
+				FROM oncall_assignments oa
+					JOIN users u ON oa.user_id = u.id
+					JOIN oncall_teams t ON oa.team_id = t.id
+					LEFT JOIN push_token_user_assoc ptua ON ptua.user_id = u.id
+					LEFT JOIN push_tokens pt ON pt.id = ptua.push_token_id AND pt.is_active = 1
+				WHERE oa.is_active = 1
+				  AND oa.start_time <= DATETIME('now')
+				  AND oa.end_time > DATETIME('now')
+			`;
+
+			const params: any[] = [];
+			if (teamId) {
+				sql += ' AND oa.team_id = ?';
+				params.push(teamId);
+			}
+
+			sql += ` ORDER BY t.name,
+            CASE oa.role
+                WHEN 'primary' THEN 1
+                WHEN 'backup' THEN 2
+                WHEN 'escalation' THEN 3
+            END`;
+
+			const { results } = await this.dbService.db.prepare(sql).bind(...params).all();
+
+			if (!results || results.length === 0) {
+				return await this.generateCurrentAssignment(teamId);
+			}
+
+			// Group by team
+			const teamGroups = results.reduce((acc: any, row: any) => {
+				const teamId = row.team_id;
+				if (!acc[teamId]) {
+					acc[teamId] = {
+						teamId: row.team_id,
+						teamName: row.team_name,
+						timezone: row.timezone,
+						today: row.today,
+						members: []
+					};
+				}
+				acc[teamId].members.push({
+					userId: row.user_id,
+					fullname: row.fullname,
+					email: row.email,
+					role: row.role,
+					startTime: row.start_time,
+					endTime: row.end_time,
+					pushTokenId: row.push_token_id || null,
+					pushToken: row.push_token || null,
+					fcmToken: row.fcm_token || null,
+					deviceType: row.device_type || null
+				});
+				return acc;
+			}, {});
+
+			// Convert to array
+			return Object.values(teamGroups);
+		} catch (e) {
+			console.error('getAllCurrentOnCall error:', e);
+			return null;
+		}
+	}
+
+	async getUserTeam(userId: string): Promise<OnCallTeamOfUser | null> {
+		try {
+			console.log('Fetching team for user:', userId);
+
+			const query = `
+				SELECT
+					ot.id,
+					ot.name,
+					ot.description,
+					ot.timezone
+				FROM oncall_teams ot
+						 INNER JOIN oncall_team_members otm ON otm.team_id = ot.id
+				WHERE otm.user_id = ?
+				  AND otm.is_active = 1
+				  AND ot.is_active = 1
+					LIMIT 1
+			`;
+
+			const result = await this.dbService.db.prepare(query).bind(userId).first();
+
+			if (!result) {
+				console.log('No team found for user:', userId);
+				return null;
+			}
+
+			const team: OnCallTeamOfUser = {
+				id: result.id as string,
+				name: result.name as string,
+				timezone: result.timezone as string,
+				fullname: result.description as string,
+				email: result.email as string,
+			};
+
+			console.log('Found team:', team.name, 'for user:', userId);
+			return team;
+		} catch (error) {
+			console.error('Error fetching user team:', error);
+			throw error;
 		}
 	}
 
@@ -321,7 +442,7 @@ export class OnCallService {
       `).bind(args.teamId).first();
 
 			if (!lead) {
-				const current = await this.getCurrentOnCall(args.teamId);
+				const current = await this.getCurrentOnCallByTeamId(args.teamId);
 				if (!current?.primary) throw new Error('No escalation path available');
 				target = { user_id: current.primary.id, email: current.primary.email, first_name: current.primary.firstName, last_name: current.primary.lastName, phone_number: current.primary.phoneNumber, level: 999 } as any;
 			} else {
@@ -566,4 +687,7 @@ export class OnCallService {
 			console.warn('No current assignment generated for team', teamId);
 		}
 	}
+
+	//Get Scheduled Oncall TODAY!!!!!
+
 }

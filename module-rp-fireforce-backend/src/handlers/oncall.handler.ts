@@ -1,5 +1,5 @@
 // handlers/oncall.handlers.ts
-import { Env } from '../types';
+import {ApiResponse, Env} from '../types';
 import { OnCallService } from '../services/oncall.service';
 
 const json = (obj: any, init?: ResponseInit) =>
@@ -9,12 +9,53 @@ export async function handleGetCurrentOnCall(url: URL, env: Env, headers: Header
 	try {
 		const teamId = url.searchParams.get('teamId') || undefined;
 		const svc = new OnCallService(env);
-		const current = await svc.getCurrentOnCall(teamId);
+		const current = await svc.getCurrentOnCallByTeamId(teamId);
 		if (!current) return json({ success: false, error: 'No active on-call found' }, { status: 404, headers });
 		return json({ success: true, object: current }, { headers });
 	} catch (err) {
 		console.error('Error getting current on-call:', err);
 		return json({ success: false, error: 'Failed to get current on-call', message: (err as Error).message }, { status: 500, headers });
+	}
+}
+
+export async function handleGetAllCurrentOnCall(
+	url: URL,
+	env: Env,
+	headers: HeadersInit
+): Promise<Response> {
+	try {
+		const teamId = url.searchParams.get('teamId') || undefined;
+		const svc = new OnCallService(env);
+		const current = await svc.getAllCurrentOnCall(teamId);
+
+		if (!current) {
+			return json({
+				httpStatus: "NOT_FOUND",
+				message: "No active on-call assignments found",
+				data: null
+			}, {
+				status: 404,
+				headers
+			});
+		}
+
+		return json({
+			httpStatus: "OK",
+			message: "Retrieved current on-call assignments successfully",
+			data: current
+		}, {
+			headers
+		});
+	} catch (err) {
+		console.error('Error getting all current on-call:', err);
+		return json({
+			httpStatus: "INTERNAL_SERVER_ERROR",
+			message: "Failed to get current on-call assignments",
+			data: null
+		}, {
+			status: 500,
+			headers
+		});
 	}
 }
 
@@ -30,6 +71,67 @@ export async function handleGetOnCallSchedule(url: URL, env: Env, headers: Heade
 	} catch (err) {
 		console.error('Error getting on-call schedule:', err);
 		return json({ success: false, error: 'Failed to get on-call schedule', message: (err as Error).message }, { status: 500, headers });
+	}
+}
+
+export async function handleGetUserTeam(
+	request: Request,
+	env: Env,
+	corsHeaders: Record<string, string>
+): Promise<Response> {
+	try {
+		const url = new URL(request.url);
+		const userId = url.searchParams.get('userId');
+
+		if (!userId) {
+			return new Response(JSON.stringify({
+				httpStatus: "BAD_REQUEST",
+				message: "userId is required",
+				data: null
+			}), {
+				status: 400,
+				headers: corsHeaders
+			});
+		}
+
+		const oncallService = new OnCallService(env);
+
+		const team = await oncallService.getUserTeam(userId);
+
+		if (!team) {
+			return new Response(JSON.stringify({
+				httpStatus: "NOT_FOUND",
+				message: "User is not assigned to any team",
+				data: null
+			}), {
+				status: 404,
+				headers: corsHeaders
+			});
+		}
+
+		const response: ApiResponse<typeof team> = {
+			httpStatus: "OK",
+			message: `Retrieved team successfully`,
+			data: team  // Single object, not array
+		};
+
+		console.log(`Retrieved team for user: ${userId}`);
+
+		return new Response(JSON.stringify(response), {
+			status: 200,
+			headers: corsHeaders
+		});
+
+	} catch (error) {
+		console.error('Error fetching user team:', error);
+		return new Response(JSON.stringify({
+			httpStatus: "INTERNAL_SERVER_ERROR",
+			message: "An error occurred while fetching user team",
+			data: null
+		}), {
+			status: 500,
+			headers: corsHeaders
+		});
 	}
 }
 

@@ -63,4 +63,57 @@ export class UserServices {
 			throw error;
 		}
 	}
+
+	async getUserById(userId: string): Promise<User | null> {
+		try {
+			console.log('Fetching user by ID:', userId);
+
+			const query = `
+            SELECT
+                id,
+                email,
+                username,
+                first_name,
+                last_name,
+                phone_number,
+                role,
+                is_active,
+                is_verified,
+                last_login,
+                created_at,
+                updated_at
+            FROM users
+            WHERE id = ?
+            LIMIT 1
+        `;
+
+			const result = await this.dbService.db.prepare(query).bind(userId).first();
+
+			if (!result) {
+				console.log('User not found:', userId);
+				return null;
+			}
+
+			const user: User = {
+				id: result.id as string,
+				email: result.email as string,
+				passwordHash: '',
+				firstName: result.first_name as string,
+				lastName: result.last_name as string,
+				phoneNumber: result.phone_number as string,
+				role: result.role as "admin" | "operator" | "viewer",
+				isActive: !!result.is_active,
+				isVerified: !!result.is_verified,
+				lastLogin: result.last_login as string,
+				createdAt: result.created_at as string,
+				updatedAt: result.updated_at as string,
+			};
+
+			console.log('Found user:', user.email);
+			return user;
+		} catch (error) {
+			console.error('Error fetching user by ID:', error);
+			throw error;
+		}
+	}
 }

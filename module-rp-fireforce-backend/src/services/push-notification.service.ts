@@ -1,6 +1,7 @@
 // services/push-notification.service.ts
 import { Env, Incident } from '../types';
 import { DatabaseService } from './database.service';
+import {OnCallService} from "./oncall.service";
 
 interface PushMessage {
 	to: string;
@@ -17,10 +18,12 @@ export class PushNotificationService {
 	private env: Env;
 	private dbService: DatabaseService;
 	private expoPushUrl = 'https://exp.host/--/api/v2/push/send';
+	private oncallService: OnCallService;
 
 	constructor(env: Env) {
 		this.env = env;
 		this.dbService = new DatabaseService(env);
+		this.oncallService = new OnCallService(env);
 	}
 
 	private async logDelivery(incidentId: string, kind: 'alert' | 'all_clear', token?: string, fcmToken?: string) {
@@ -41,30 +44,45 @@ export class PushNotificationService {
 
 	async sendIncidentAlert(incident: Incident): Promise<void> {
 		try {
-			const pushTokens = await this.getActivePushTokens();
-			if (pushTokens.length === 0) {
-				console.log('No push tokens registered - skipping notifications');
+			// Get current on-call assignments with push tokens for today
+			const currentOnCall = await this.oncallService.getAllCurrentOnCall();
+
+			if (!currentOnCall || currentOnCall.length === 0) {
+				console.log('No on-call assignments found for today - skipping notifications');
 				return;
 			}
 
 			const message = this.createNotificationMessage(incident);
 			let sentCount = 0;
+			let skippedCount = 0;
 
-			for (const tokenData of pushTokens) {
-				if (this.shouldSendAlert(incident, tokenData.settings)) {
-					const tokenUsed = tokenData.fcmToken || tokenData.token;
-					const success = await this.sendPushNotification(tokenUsed, message);
-					if (success) {
-						sentCount++;
-						await this.logDelivery(incident.id, 'alert',
-							tokenUsed.startsWith('ExponentPushToken') ? tokenUsed : undefined,
-							tokenUsed.startsWith('ExponentPushToken') ? undefined : tokenUsed
-						);
+			// Loop through each team
+			for (const team of currentOnCall) {
+				console.log(`Processing team: ${team.teamName}`);
+
+				// Loop through each on-call member
+				for (const member of team.members) {
+					// Only send if member has a push token
+					if (member.pushToken) {
+						const success = await this.sendPushNotification(member.pushToken, message);
+						if (success) {
+							sentCount++;
+							await this.logDelivery(
+								incident.id,
+								'alert',
+								member.pushToken,
+								member.fcmToken
+							);
+							console.log(`✓ Sent to ${member.fullname} (${member.role})`);
+						}
+					} else {
+						skippedCount++;
+						console.log(`⊘ No token for ${member.fullname} (${member.role})`);
 					}
 				}
 			}
 
-			console.log(`Sent incident alert to ${sentCount}/${pushTokens.length} device(s)`);
+			console.log(`Sent incident alert to ${sentCount} on-call members, ${skippedCount} skipped (no token)`);
 		} catch (error) {
 			console.error('Error sending incident alerts:', error);
 		}
@@ -203,6 +221,7 @@ export class PushNotificationService {
 			priority: config.priority,
 			sound: config.sound,
 			channelId: config.channelId,
+			categoryId: 'incident-actions', // ← ADD THIS for acknowledge/decline buttons
 		};
 	}
 

@@ -15,12 +15,12 @@ import {handleLogin, handleLogout} from "../handlers/auth.handlers";
 import {handleRegisterPushToken, handleSendTestAlert} from "../handlers/push-notification.handlers";
 import {handleFetchIncidentComment} from "../handlers/incident-comment.handlers";
 import {
-	handleCreateOverride, handleEscalateIncident,
+	handleCreateOverride, handleEscalateIncident, handleGetAllCurrentOnCall,
 	handleGetCurrentOnCall,
 	handleGetOnCallSchedule,
-	handleGetOnCallTeams, handleGetScheduleConfig, handleUpdateScheduleConfig
+	handleGetOnCallTeams, handleGetScheduleConfig, handleGetUserTeam, handleUpdateScheduleConfig
 } from "../handlers/oncall.handler";
-import {handleGetAllUsers} from "../handlers/user-handlers";
+import {handleGetAllUsers, handleGetUserById} from "../handlers/user-handlers";
 
 export class Router {
 	private env: Env;
@@ -50,6 +50,11 @@ export class Router {
 			// Users routes
 			if (path === '/api/users' && method === 'GET') {
 				return handleGetAllUsers(request, this.env, CORS_HEADERS);
+			}
+
+			// In your worker/router file
+			if (path === '/api/users/by-id' && method === 'GET') {
+				return handleGetUserById(request, this.env, CORS_HEADERS);
 			}
 
 			// Authentication routes
@@ -122,6 +127,11 @@ export class Router {
 				return handleGetCurrentOnCall(url, this.env, CORS_HEADERS);
 			}
 
+			if (path === '/api/oncall/current/all' && method === 'GET') {
+				const url = new URL(request.url);
+				return handleGetAllCurrentOnCall(url, this.env, CORS_HEADERS);
+			}
+
 			if (path === '/api/oncall/schedule' && method === 'GET') {
 				return handleGetOnCallSchedule(url, this.env, CORS_HEADERS);
 			}
@@ -136,6 +146,10 @@ export class Router {
 
 			if (path === '/api/oncall/escalate' && method === 'POST') {
 				return handleEscalateIncident(request, this.env, CORS_HEADERS);
+			}
+
+			if (path === '/api/oncall/user/team' && method === 'GET') {
+				return handleGetUserTeam(request, this.env, CORS_HEADERS);
 			}
 
 			// router/index.ts (add alongside your other oncall routes)

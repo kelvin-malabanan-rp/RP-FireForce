@@ -158,6 +158,14 @@ export interface OnCallTeam {
 	members: OnCallUser[];
 }
 
+export interface OnCallTeamOfUser{
+	id: string;
+	name: string;
+	timezone: string;
+	fullname: string;
+	email: string;
+}
+
 export interface OnCallSchedule {
 	id: string;
 	teamId: string;
