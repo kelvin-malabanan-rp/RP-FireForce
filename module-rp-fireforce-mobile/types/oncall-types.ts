@@ -55,6 +55,14 @@ export interface OnCallScheduleResponse {
     endDate?: string;
 }
 
+export interface OnCallTeamOfUser {
+    id: string;
+    name: string;
+    timezone: string;
+    fullname: string;
+    email: string;
+}
+
 export interface OnCallOverride {
     id: string;
     teamId: string;
@@ -112,3 +120,26 @@ export interface GetScheduleParams {
     startDate?: string;
     endDate?: string;
 }
+
+export interface OnCallMemberWithToken {
+    userId: string;
+    fullname: string;
+    email: string;
+    role: "primary" | "backup" | "escalation";
+    startTime: string;
+    endTime: string;
+    pushTokenId: string | null;
+    pushToken: string | null;
+    fcmToken: string | null;
+    deviceType: string | null;
+}
+
+export interface OnCallTeamCurrent {
+    teamId: string;
+    teamName: string;
+    timezone: string;
+    today: string;
+    members: OnCallMemberWithToken[];
+}
+
+export type AllCurrentOnCallResponse = OnCallTeamCurrent[];

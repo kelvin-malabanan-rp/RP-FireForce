@@ -1,6 +1,15 @@
 // controllers/oncallController.ts
-import { CurrentOnCall, OnCallTeam, OnCallScheduleResponse } from '@/types/oncall-types';
+import {
+    CurrentOnCall,
+    OnCallTeam,
+    OnCallScheduleResponse,
+    OnCallTeamOfUser,
+    ApiResponse,
+    AllCurrentOnCallResponse
+} from '@/types/oncall-types';
 import { BASE_URL_DEV } from "@/utils/backend-url";
+import {API_RESPONSE} from "@/types/incident-types";
+import apiManager from "@/api/api-manager";
 
 type RotationType = 'daily' | 'weekly' | 'biweekly' | 'monthly';
 
@@ -77,6 +86,18 @@ export class OnCallController {
         const res = await fetch(url, { signal: this.withTimeout() });
         const data = await this.json<{ success: boolean; object: OnCallTeam[] }>(res);
         return data.object || [];
+    }
+
+    async getUserTeam(userId: string): Promise<OnCallTeamOfUser | null> {
+        try {
+            const response = await fetch(`${this.baseUrl}/api/oncall/user/team?userId=${userId}`);
+            if (!response.ok) return null;
+            const data = await response.json();
+            return data.data; // Now returns single object
+        } catch (error) {
+            console.error('Error fetching user team:', error);
+            return null;
+        }
     }
 
     /** Load all on-call shards for the tab */
@@ -163,6 +184,23 @@ export class OnCallController {
         return { success: !!data.success };
     }
 }
+
+// In your api/alert-controller.ts or api/oncall-schedule-controller.ts
+export const getAllCurrentOnCall = async (
+    teamId?: string
+): Promise<API_RESPONSE<AllCurrentOnCallResponse>> => {
+    try {
+        const url = teamId
+            ? `${BASE_URL_DEV}/api/oncall/current/all?teamId=${teamId}`
+            : `${BASE_URL_DEV}/api/oncall/current/all`;
+
+        const response = await apiManager.get<API_RESPONSE<AllCurrentOnCallResponse>>(url);
+        return response.data;
+    } catch (error) {
+        console.error("Error fetching current on-call:", error);
+        throw error;
+    }
+};
 
 // Export singleton instance for convenience
 export const oncallController = OnCallController.getInstance();

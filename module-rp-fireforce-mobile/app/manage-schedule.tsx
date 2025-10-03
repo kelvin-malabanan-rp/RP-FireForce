@@ -425,7 +425,7 @@ export default function ManageSchedule() {
     }
 
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
             <Stack.Screen options={{ title: 'Manage Schedule' }} />
 
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>

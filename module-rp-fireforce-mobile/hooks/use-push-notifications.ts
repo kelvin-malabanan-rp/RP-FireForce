@@ -4,9 +4,10 @@ import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
-import { registerPushToken, respondToIncident } from '@/api/alert-controller';
+import { registerPushToken, respondToIncident} from '@/api/alert-controller';
 import { router } from "expo-router";
-import {retrieveUserSession} from "@/constants/local-storage";
+import { retrieveUserSession } from "@/constants/local-storage";
+import {getAllCurrentOnCall} from "@/api/oncall-schedule-controller";
 
 export const usePushNotifications = () => {
     const [expoPushToken, setExpoPushToken] = useState<string | null>(null);
@@ -81,7 +82,7 @@ export const usePushNotifications = () => {
         });
 
         return () => sub.remove();
-    }, [id]); // ← Add id as dependency
+    }, [id]);
 
     useEffect(() => {
         console.log('[push] useEffect start');
@@ -221,7 +222,7 @@ export const usePushNotifications = () => {
             }
 
             const response = await registerPushToken({
-                userId: userSession.id, // ← Added id
+                userId: userSession.id,
                 token: expoTok.data,
                 deviceType: Platform.OS,
                 fcmToken: Platform.OS === 'android' ? (platformTok as any).data : undefined,
@@ -251,6 +252,92 @@ export const usePushNotifications = () => {
             console.error('[push] register error:', err);
             setRegistrationStatus('failed');
             return null;
+        }
+    };
+
+    // Send notification to on-call team members with push tokens
+    const sendNotificationToOnCallTeam = async (incident: {
+        id: string;
+        title: string;
+        description: string;
+        severity: "low" | "medium" | "high" | "critical";
+        teamId?: string;
+    }) => {
+        try {
+            console.log('[push] Fetching current on-call assignments');
+
+            // Get current on-call assignments for today
+            const response = await getAllCurrentOnCall(incident.teamId);
+
+            if (response.httpStatus !== 'OK' || !response.data || response.data.length === 0) {
+                console.error('[push] No on-call assignments found for today');
+                return { sent: 0, failed: 0, skipped: 0 };
+            }
+
+            let sentCount = 0;
+            let failedCount = 0;
+            let skippedCount = 0;
+
+            // Loop through each team
+            for (const team of response.data) {
+                console.log(`[push] Processing team: ${team.teamName}`);
+
+                // Loop through each member
+                for (const member of team.members) {
+                    // Only send if member has a push token
+                    if (member.pushToken) {
+                        try {
+                            const channelId = getChannelBySeverity(incident.severity);
+                            const notificationContent = getNotificationContent(incident);
+
+                            // Build Expo push message
+                            const message = {
+                                to: member.pushToken,
+                                sound: 'default',
+                                title: notificationContent.title,
+                                body: notificationContent.body,
+                                data: {
+                                    incidentId: incident.id,
+                                    severity: incident.severity
+                                },
+                                channelId: member.deviceType === 'android' ? channelId : undefined,
+                                categoryId: 'incident-actions',
+                                priority: incident.severity === 'critical' ? 'high' : 'default',
+                            };
+
+                            console.log(`[push] Sending to ${member.fullname} (${member.role})`);
+
+                            // Send via Expo Push Notification service
+                            const pushResponse = await fetch('https://exp.host/--/api/v2/push/send', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify(message),
+                            });
+
+                            if (pushResponse.ok) {
+                                console.log(`[push] ✓ Sent to ${member.fullname} (${member.role})`);
+                                sentCount++;
+                            } else {
+                                const error = await pushResponse.json();
+                                console.error(`[push] ✗ Failed to send to ${member.fullname}:`, error);
+                                failedCount++;
+                            }
+                        } catch (error) {
+                            console.error(`[push] ✗ Error sending to ${member.fullname}:`, error);
+                            failedCount++;
+                        }
+                    } else {
+                        console.log(`[push] ⊘ No token for ${member.fullname} (${member.role}), skipping`);
+                        skippedCount++;
+                    }
+                }
+            }
+
+            console.log(`[push] Summary - Sent: ${sentCount}, Failed: ${failedCount}, Skipped: ${skippedCount}`);
+            return { sent: sentCount, failed: failedCount, skipped: skippedCount };
+        } catch (error) {
+            console.error('[push] Error sending to on-call team:', error);
+            return { sent: 0, failed: 0, skipped: 0 };
         }
     };
 
@@ -322,9 +409,10 @@ export const usePushNotifications = () => {
         fcmToken,
         permissionStatus,
         registrationStatus,
-        id, // ← Export id if needed elsewhere
+        id,
         registerDevice,
-        sendIncidentNotification,
+        sendIncidentNotification, // Local notification
+        sendNotificationToOnCallTeam, // ← NEW: Send to on-call team with tokens
         clearIncidentNotifications,
         getNotificationSettings,
     };

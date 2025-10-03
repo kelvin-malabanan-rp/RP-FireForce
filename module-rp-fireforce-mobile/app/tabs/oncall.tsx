@@ -15,10 +15,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { CurrentOnCall, OnCallUser, OnCallTeam, OnCallScheduleDay } from '@/types/oncall-types';
 import { oncallController } from '@/api/oncall-schedule-controller';
-import { Colors } from '@/constants/theme';
 import { useColorScheme } from 'react-native';
 import { FONT_FAMILY } from '@/constants/fonts';
-import { SafeAreaView } from "react-native-safe-area-context";
+import { retrieveUserSession } from "@/constants/local-storage";
 
 export default function OnCallTab() {
     const router = useRouter();
@@ -32,10 +31,33 @@ export default function OnCallTab() {
     const [selectedTeamId, setSelectedTeamId] = useState(teamId);
     const [refreshing, setRefreshing] = useState(false);
     const [loading, setLoading] = useState(true);
+    const [userTeamId, setUserTeamId] = useState<string | null>(null);
 
     useEffect(() => {
-        loadOnCallData();
+        loadUserTeam();
+    }, []);
+
+    useEffect(() => {
+        if (selectedTeamId) {
+            loadOnCallData();
+        }
     }, [selectedTeamId]);
+
+    const loadUserTeam = async () => {
+        try {
+            const session = await retrieveUserSession();
+            if (session?.id) {
+                const userTeam = await oncallController.getUserTeam(session.id);
+                if (userTeam) {
+                    setUserTeamId(userTeam.id);
+                    setSelectedTeamId(userTeam.id);
+                }
+                console.log(userTeam)
+            }
+        } catch (error) {
+            console.error('Error loading user team:', error);
+        }
+    };
 
     const loadOnCallData = async () => {
         try {
@@ -54,6 +76,7 @@ export default function OnCallTab() {
 
     const onRefresh = async () => {
         setRefreshing(true);
+        await loadUserTeam();
         await loadOnCallData();
         setRefreshing(false);
     };
@@ -111,6 +134,8 @@ export default function OnCallTab() {
         });
     };
 
+    const isMyTeam = userTeamId && selectedTeamId === userTeamId;
+
     if (loading) {
         return (
             <View style={[styles.container, styles.loadingContainer]}>
@@ -137,7 +162,7 @@ export default function OnCallTab() {
             >
                 {/* Team Selector */}
                 <View style={styles.teamSelector}>
-                    <Text style={styles.sectionTitle}>Team</Text>
+                    <Text style={styles.sectionTitle}>On Call Teams</Text>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                         {teams.map(team => (
                             <TouchableOpacity
@@ -154,6 +179,11 @@ export default function OnCallTab() {
                                 ]}>
                                     {team.name}
                                 </Text>
+                                {userTeamId === team.id && (
+                                    <View style={styles.myTeamBadge}>
+                                        <Text style={styles.myTeamBadgeText}>My Team</Text>
+                                    </View>
+                                )}
                             </TouchableOpacity>
                         ))}
                     </ScrollView>
@@ -254,34 +284,36 @@ export default function OnCallTab() {
                     ))}
                 </View>
 
-                {/* Quick Actions */}
-                <View style={styles.actionsCard}>
-                    <Text style={styles.sectionTitle}>Quick Actions</Text>
+                {/* Quick Actions - Only show for user's own team */}
+                {isMyTeam && (
+                    <View style={styles.actionsCard}>
+                        <Text style={styles.sectionTitle}>Quick Actions</Text>
 
-                    <TouchableOpacity
-                        style={styles.actionButton}
-                        onPress={handleCreateOverride}
-                    >
-                        <Ionicons name="swap-horizontal" size={20} color="#3B82F6" />
-                        <Text style={styles.actionButtonText}>Create Override</Text>
-                    </TouchableOpacity>
+                        <TouchableOpacity
+                            style={styles.actionButton}
+                            onPress={handleCreateOverride}
+                        >
+                            <Ionicons name="swap-horizontal" size={20} color="#3B82F6" />
+                            <Text style={styles.actionButtonText}>Create Override</Text>
+                        </TouchableOpacity>
 
-                    <TouchableOpacity
-                        style={styles.actionButton}
-                        onPress={handleEscalate}
-                    >
-                        <Ionicons name="arrow-up-circle" size={20} color="#EA580C" />
-                        <Text style={styles.actionButtonText}>Escalate Incident</Text>
-                    </TouchableOpacity>
+                        <TouchableOpacity
+                            style={styles.actionButton}
+                            onPress={handleEscalate}
+                        >
+                            <Ionicons name="arrow-up-circle" size={20} color="#EA580C" />
+                            <Text style={styles.actionButtonText}>Escalate Incident</Text>
+                        </TouchableOpacity>
 
-                    <TouchableOpacity
-                        style={styles.actionButton}
-                        onPress={handleManageSchedule}
-                    >
-                        <Ionicons name="calendar" size={20} color="#8B5CF6" />
-                        <Text style={styles.actionButtonText}>Manage Schedule</Text>
-                    </TouchableOpacity>
-                </View>
+                        <TouchableOpacity
+                            style={styles.actionButton}
+                            onPress={handleManageSchedule}
+                        >
+                            <Ionicons name="calendar" size={20} color="#8B5CF6" />
+                            <Text style={styles.actionButtonText}>Manage Schedule</Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
             </ScrollView>
         </View>
     );
@@ -320,11 +352,14 @@ const styles = StyleSheet.create({
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
     teamButton: {
+        marginTop: 10,
         paddingHorizontal: 16,
         paddingVertical: 8,
         borderRadius: 20,
         backgroundColor: '#F3F4F6',
         marginRight: 8,
+        position: 'relative',
+        overflow: 'visible', // Allow badge to show outside bounds
     },
     teamButtonActive: {
         backgroundColor: '#3B82F6',
@@ -338,6 +373,25 @@ const styles = StyleSheet.create({
     teamButtonTextActive: {
         color: '#FFFFFF',
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
+    },
+    myTeamBadge: {
+        position: 'absolute',
+        top: -10,
+        backgroundColor: '#10B981',
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 8,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.2,
+        shadowRadius: 2,
+        elevation: 3,
+    },
+    myTeamBadgeText: {
+        fontSize: 9,
+        color: '#FFFFFF',
+        fontWeight: '700',
+        fontFamily: FONT_FAMILY.POPPINS_BOLD,
     },
     currentOnCallCard: {
         backgroundColor: '#FFFFFF',

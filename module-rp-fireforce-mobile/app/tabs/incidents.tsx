@@ -12,13 +12,17 @@ import {
     ActivityIndicator,
 } from "react-native";
 import {
-    createIncident, getAllIncidents
+    createIncident,
+    getAllIncidents
 } from "@/api/incident-controller";
 import {getSeverityColor} from "@/constants/colors";
-import {CreateIncidentData, Incident, IncidentUI} from "@/types/incident-types";
+import {CreateIncidentData,
+    Incident,
+    IncidentUI} from "@/types/incident-types";
 import { FONT_FAMILY } from '@/constants/fonts';
 import {Ionicons} from "@expo/vector-icons";
 import IncidentList from "@/components/incident-list";
+import {usePushNotifications} from "@/hooks/use-push-notifications";
 
 export default function IncidentsScreen() {
     const [incidents, setIncidents] = useState<IncidentUI[]>([]);
@@ -27,6 +31,7 @@ export default function IncidentsScreen() {
     const [modalVisible, setModalVisible] = useState(false);
     const [creating, setCreating] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const { sendNotificationToOnCallTeam, sendIncidentNotification } = usePushNotifications();
     const [newIncident, setNewIncident] = useState({
         title: "",
         description: "",
@@ -83,6 +88,66 @@ export default function IncidentsScreen() {
         fetchAllIncidents();
     }, []);
 
+    // const createNewIncident = async () => {
+    //     if (!newIncident.title || !newIncident.description) {
+    //         Alert.alert("Error", "Please fill in all required fields");
+    //         return;
+    //     }
+    //
+    //     setCreating(true);
+    //     try {
+    //         const incidentData: CreateIncidentData = {
+    //             title: newIncident.title,
+    //             description: newIncident.description,
+    //             severity: newIncident.severity,
+    //             location: newIncident.location || null,
+    //             reportedBy: "Mobile App User",
+    //         };
+    //
+    //         const response = await createIncident(incidentData);
+    //
+    //         if (response.httpStatus === "OK" && response.data) {
+    //             const transformedIncident = transformApiIncident(response.data);
+    //             setIncidents((prev) => [transformedIncident, ...prev]);
+    //
+    //             // Send push notification to on-call team
+    //             const notificationResult = await sendNotificationToOnCallTeam({
+    //                 id: response.data.id,
+    //                 title: response.data.title,
+    //                 description: response.data.description,
+    //                 severity: response.data.severity,
+    //                 // teamId: 'team-1' // Optional: specify team if known
+    //             });
+    //
+    //             console.log(`[incident] Notified ${notificationResult.sent} on-call members`);
+    //             if (notificationResult.skipped > 0) {
+    //                 console.log(`[incident] ${notificationResult.skipped} members had no push tokens`);
+    //             }
+    //
+    //             setNewIncident({
+    //                 title: "",
+    //                 description: "",
+    //                 severity: "medium",
+    //                 location: "",
+    //             });
+    //             setModalVisible(false);
+    //
+    //             const message = notificationResult.sent > 0
+    //                 ? `Incident created and ${notificationResult.sent} on-call member(s) notified`
+    //                 : "Incident created successfully";
+    //
+    //             Alert.alert("Success", message);
+    //         } else {
+    //             throw new Error(response.message || "Failed to create incident");
+    //         }
+    //     } catch (error) {
+    //         console.error('Failed to create incident:', error);
+    //         Alert.alert("Error", "Failed to create incident");
+    //     } finally {
+    //         setCreating(false);
+    //     }
+    // };
+
     const createNewIncident = async () => {
         if (!newIncident.title || !newIncident.description) {
             Alert.alert("Error", "Please fill in all required fields");
@@ -104,6 +169,23 @@ export default function IncidentsScreen() {
             if (response.httpStatus === "OK" && response.data) {
                 const transformedIncident = transformApiIncident(response.data);
                 setIncidents((prev) => [transformedIncident, ...prev]);
+
+                // Show local notification immediately (for testing/current user)
+                await sendIncidentNotification(transformedIncident);
+
+                // Also send remote notifications to on-call team
+                try {
+                    const notificationResult = await sendNotificationToOnCallTeam({
+                        id: response.data.id,
+                        title: response.data.title,
+                        description: response.data.description,
+                        severity: response.data.severity,
+                    });
+                    console.log(`[incident] Remote: ${notificationResult.sent} sent, ${notificationResult.skipped} skipped`);
+                } catch (error) {
+                    console.error('[incident] Remote notification failed, but local notification sent');
+                }
+
                 setNewIncident({
                     title: "",
                     description: "",
@@ -111,7 +193,7 @@ export default function IncidentsScreen() {
                     location: "",
                 });
                 setModalVisible(false);
-                Alert.alert("Success", response.message || "Incident created successfully");
+                Alert.alert("Success", "Incident created successfully");
             } else {
                 throw new Error(response.message || "Failed to create incident");
             }
