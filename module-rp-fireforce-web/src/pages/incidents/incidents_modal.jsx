@@ -30,13 +30,9 @@ import {
   Play,
   Pause
 } from 'lucide-react';
+import AIChatbot from '../../components/AIChatbot';
 
 const IncidentsModal = ({ incident, isOpen, onClose, onRefresh }) => {
-  const [isAiLoading, setIsAiLoading] = useState(false);
-  const [aiResponse, setAiResponse] = useState(null);
-  const [aiError, setAiError] = useState(null);
-  const [showAiResponse, setShowAiResponse] = useState(false);
-  
   // Comments state
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState('');
@@ -260,85 +256,6 @@ const IncidentsModal = ({ incident, isOpen, onClose, onRefresh }) => {
     }
   };
 
-  const handleAskAI = async () => {
-    setIsAiLoading(true);
-    setAiError(null);
-    setShowAiResponse(false);
-    
-    try {
-      // Prepare the alert data from the incident
-      const alertData = `
-Incident: ${incident.title}
-Description: ${incident.description}
-Source: ${incident.source || 'Unknown'}
-Location: ${incident.location || 'Unknown'}
-AWS Alarm: ${incident.awsAlarmName || 'N/A'}
-Status: ${incident.status}
-Created: ${incident.created}
-${incident.awsAccountId ? `AWS Account: ${incident.awsAccountId}` : ''}
-      `.trim();
-
-      const response = await fetch('http://localhost:8001/complete-analyze', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          alert_data: alertData,
-          severity: incident.severity?.toLowerCase() || 'medium'
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const aiData = await response.json();
-      setAiResponse(aiData);
-      setShowAiResponse(true);
-    } catch (error) {
-      console.error('Error calling AI API:', error);
-      setAiError('Failed to get AI analysis. Please try again.');
-    } finally {
-      setIsAiLoading(false);
-    }
-  };
-
-  const formatAnalysis = (analysis) => {
-    // Split by **SECTION** headers and format
-    const sections = analysis.split(/\*\*(.*?)\*\*/g);
-    return sections.map((section, index) => {
-      if (index % 2 === 1) {
-        // This is a header
-        return (
-          <h3 key={index} className="text-lg font-bold text-gray-900 mt-4 mb-2 flex items-center">
-            {section.includes('RISK') && <Shield className="w-5 h-5 mr-2 text-red-500" />}
-            {section.includes('ACTION') && <Zap className="w-5 h-5 mr-2 text-orange-500" />}
-            {section.includes('IMPACT') && <TrendingUp className="w-5 h-5 mr-2 text-blue-500" />}
-            {section}
-          </h3>
-        );
-      } else {
-        // This is content
-        return (
-          <div key={index} className="text-gray-700 leading-relaxed mb-3">
-            {section.split('\n').map((line, lineIndex) => {
-              if (line.trim().startsWith('- ')) {
-                return (
-                  <div key={lineIndex} className="flex items-start mb-2">
-                    <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 mr-3 flex-shrink-0"></div>
-                    <span>{line.substring(2)}</span>
-                  </div>
-                );
-              }
-              return line.trim() ? <p key={lineIndex} className="mb-2">{line}</p> : null;
-            })}
-          </div>
-        );
-      }
-    });
-  };
-
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
@@ -484,85 +401,8 @@ ${incident.awsAccountId ? `AWS Account: ${incident.awsAccountId}` : ''}
             </div>
           )}
 
-          {/* Enhanced Ask AI Section */}
-          <div className="space-y-4">
-            <h4 className="text-lg font-semibold text-gray-900 flex items-center">
-              <Brain className="w-5 h-5 mr-2 text-purple-600" />
-              AI Analysis & Recommendations
-            </h4>
-            
-            {!showAiResponse ? (
-              <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl p-6 border border-purple-200">
-                <div className="flex items-center space-x-4">
-                  <div className="w-12 h-12 bg-purple-600 rounded-xl flex items-center justify-center">
-                    <MessageSquare className="w-6 h-6 text-white" />
-                  </div>
-                  <div className="flex-1">
-                    <h5 className="font-semibold text-gray-900 mb-1">Get Intelligent Analysis</h5>
-                    <p className="text-gray-700 text-sm">
-                      Get AI-powered risk assessment, impact analysis, and actionable recommendations for resolving this incident.
-                    </p>
-                  </div>
-                  <button
-                    onClick={handleAskAI}
-                    disabled={isAiLoading}
-                    className="px-6 py-3 bg-purple-600 text-white rounded-xl hover:bg-purple-700 disabled:bg-purple-400 transition-colors font-medium flex items-center space-x-2"
-                  >
-                    {isAiLoading ? (
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                    ) : (
-                      <Bot className="w-5 h-5" />
-                    )}
-                    <span>{isAiLoading ? 'Analyzing...' : 'Ask AI'}</span>
-                  </button>
-                </div>
-                
-                {aiError && (
-                  <div className="mt-4 p-3 bg-red-100 border border-red-200 rounded-lg">
-                    <p className="text-red-700 text-sm">{aiError}</p>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-6">
-                {/* AI Response Header */}
-                <div className="bg-gradient-to-r from-purple-600 to-pink-600 rounded-xl p-4 text-white">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <Brain className="w-6 h-6" />
-                      <div>
-                        <h5 className="font-bold">AI Analysis Complete</h5>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => setShowAiResponse(false)}
-                      className="text-purple-200 hover:text-white"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* AI Analysis Content */}
-                <div className="bg-gray-50 rounded-xl p-6">
-                  <div className="prose max-w-none">
-                    {formatAnalysis(aiResponse.analysis)}
-                  </div>
-                </div>
-
-                {/* Action Buttons */}
-                <div className="flex space-x-3">
-                  <button
-                    onClick={handleAskAI}
-                    className="px-4 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-colors flex items-center space-x-2"
-                  >
-                    <Bot className="w-4 h-4" />
-                    <span>Re-analyze</span>
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
+          {/* AI Chatbot Section */}
+          <AIChatbot incident={incident} />
 
           {/* Additional Metrics */}
           <div className="space-y-4">

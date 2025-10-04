@@ -50,7 +50,7 @@ import {
 import IncidentsModal from './incidents_modal';
 import Pagination from '../../components/Pagination';
 
-const IncidentsPage = () => {
+const IncidentsPage = ({ onViewIncident }) => {
   const [viewMode, setViewMode] = useState('cards');
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [selectedSeverity, setSelectedSeverity] = useState('all');
@@ -349,10 +349,12 @@ const IncidentsPage = () => {
     }
   };
 
-  // Handle view incident
+  // Handle view incident - navigate within the app
   const handleViewIncident = (incident) => {
-    setSelectedIncident(incident);
-    setIsModalOpen(true);
+    // Use the callback from DashboardLayout to navigate to details page
+    if (onViewIncident) {
+      onViewIncident(incident.id);
+    }
   };
 
   // Close modal
