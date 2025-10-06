@@ -8,24 +8,30 @@ export interface Env {
 	AWS_REGION: string;
 }
 
-	export interface Incident {
-		id: string;
-		title: string;
-		description: string;
-		severity: 'low' | 'medium' | 'high' | 'critical' | null | undefined;
-		status: 'open' | 'investigating' | 'resolved';
-		timestamp: string;
-		reportedBy: string;
-		location: string | null;
-		awsAlarmName: string;
-		awsAccountId: string;
-		stateReason: string;
-		metricName: string | null;
-		aws_console_url?: string | null;
-		resolvedAt?: string;
-		createdAt?: string;
-		updatedAt?: string;
-	}
+
+export interface Incident {
+	id: string;
+	title: string;
+	description: string | null;
+	severity: 'low' | 'medium' | 'high' | 'critical' | null | undefined;
+	status: 'open' | 'investigating' | 'resolved';
+	priority: string;
+	escalation_level: number;
+	timestamp: string;
+	reported_by: string | null;
+	location: string | null;
+	aws_alarm_name: string | null;
+	aws_account_id: string | null;
+	state_reason: string | null;
+	metric_name: string | null;
+	aws_console_url: string | null;
+	resolved_at: string | null;
+	assigned_to: string | null;
+	team_id: string | null;
+	resolved_by: string | null;
+	created_at: string;
+	updated_at: string;
+}
 
 export interface CreateIncidentTypes {
 	title: string;
@@ -184,4 +190,171 @@ export interface CurrentOnCall {
 	teamId: string;
 	startTime: Date;
 	endTime: Date;
+}
+// ========================================
+// TYPE DEFINITIONS
+// ========================================
+
+export interface DatabaseConnection {
+	run(query: string, params?: any[]): Promise<{ changes?: number; lastID?: number }>;
+	get(query: string, params?: any[]): Promise<any>;
+	all(query: string, params?: any[]): Promise<any[]>;
+}
+
+export interface RequestHeaders {
+	'x-forwarded-for'?: string;
+	'cf-connecting-ip'?: string;
+	'user-agent'?: string;
+	[key: string]: string | undefined;
+}
+
+export interface RequestConnection {
+	remoteAddress?: string;
+}
+
+export interface AuditRequest {
+	headers: RequestHeaders;
+	connection?: RequestConnection;
+}
+
+export interface AuditLogDetails {
+	[key: string]: any;
+}
+
+export interface NotificationRecord {
+	delivered_at: string;
+}
+
+export interface ResponseResult {
+	responseId: string;
+	responseTime: number | null;
+}
+
+export interface AuditLog {
+	id: string;
+	incident_id: string | null;
+	user_id: string | null;
+	action: string;
+	details: string;
+	ip_address: string | null;
+	user_agent: string | null;
+	created_at: string;
+	first_name?: string;
+	last_name?: string;
+	email?: string;
+}
+
+export interface Notification {
+	id: string;
+	incident_id: string;
+	user_id: string;
+	token: string;
+	fcm_token: string | null;
+	kind: string;
+	delivered_at: string;
+	first_name?: string;
+	last_name?: string;
+	email?: string;
+	response?: 'acknowledge' | 'decline' | 'resolve' | null;
+	response_time?: number | null;
+	responded_at?: string | null;
+}
+
+export interface Comment {
+	id: string;
+	incident_id: string;
+	user_id: string;
+	response: string | null;
+	comment: string;
+	created_at: string;
+	first_name?: string;
+	last_name?: string;
+	email?: string;
+}
+
+export interface Escalation {
+	id: string;
+	incident_id: string;
+	team_id: string;
+	escalated_to_user_id: string;
+	escalated_from_user_id: string | null;
+	escalation_level: number;
+	reason: string | null;
+	priority: string | null;
+	status: string;
+	created_at: string;
+	acknowledged_at: string | null;
+	resolved_at: string | null;
+	escalated_to_first_name?: string;
+	escalated_to_last_name?: string;
+	escalated_from_first_name?: string;
+	escalated_from_last_name?: string;
+}
+
+export interface AuditSummary {
+	total_notifications: number;
+	users_notified: number;
+	total_comments: number;
+	total_escalations: number;
+	responses: {
+		acknowledged: number;
+		declined: number;
+		resolved: number;
+		pending: number;
+	};
+	avg_response_time: number;
+}
+
+export interface FullIncidentAudit {
+	incident: Incident;
+	audit_logs: AuditLog[];
+	notifications: Notification[];
+	comments: Comment[];
+	escalations: Escalation[];
+	summary: AuditSummary;
+}
+
+export interface NotificationStats {
+	total_notifications: number;
+	acknowledged_count: number;
+	declined_count: number;
+	resolved_count: number;
+	pending_count: number;
+	avg_response_time: number | null;
+	min_response_time: number | null;
+	max_response_time: number | null;
+}
+
+export interface IncidentStats {
+	total_incidents: number;
+	open_incidents: number;
+	investigating_incidents: number;
+	resolved_incidents: number;
+	avg_resolution_time_seconds: number | null;
+}
+
+export interface TopResponder {
+	id: string;
+	first_name: string;
+	last_name: string;
+	email: string;
+	response_count: number;
+	avg_response_time: number | null;
+}
+
+export interface AuditStats {
+	notification_stats: NotificationStats;
+	incident_stats: IncidentStats;
+	top_responders: TopResponder[];
+	period: {
+		start: string | null;
+		end: string | null;
+	};
+}
+
+export interface AuditDataForCSV {
+	audit_logs: AuditLog[];
+	notifications: Notification[];
+	comments: Comment[];
+	escalations: Escalation[];
 }
