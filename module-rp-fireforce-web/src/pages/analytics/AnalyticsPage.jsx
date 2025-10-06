@@ -29,6 +29,7 @@ import {
   Zap,
   Target
 } from 'lucide-react';
+import AuditStatisticsPanel from '../../components/AuditStatisticsPanel';
 
 const AnalyticsPage = () => {
   const [selectedTimeRange, setSelectedTimeRange] = useState('7d');
@@ -190,6 +191,11 @@ const AnalyticsPage = () => {
             </div>
           );
         })}
+      </div>
+
+      {/* Audit Statistics Section */}
+      <div className="mb-8">
+        <AuditStatisticsPanel className="shadow-sm" />
       </div>
 
       {/* Charts Row 1 */}
