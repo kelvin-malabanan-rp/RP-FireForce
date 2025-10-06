@@ -6,12 +6,20 @@ import TopNavigation from './TopNavigation';
 import DashboardPage from '../../pages/dashboard/DashboardPage';
 import AnalyticsPage from '../../pages/analytics/AnalyticsPage';
 import IncidentsPage from '../../pages/incidents/IncidentsPage';
+import IncidentDetailsPage from '../../pages/incidents/IncidentDetailsPage';
 import OnCallSchedulePage from '../../pages/oncall-schedule/OnCallSchedulePage';
 import TeamsPage from '../../pages/teams/TeamsPage';
 import SettingsPage from '../../pages/settings/SettingsPage';
 
 const DashboardLayout = ({ user, onLogout }) => {
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState(() => {
+    // Restore active tab from localStorage on initial load
+    return localStorage.getItem('activeTab') || 'dashboard';
+  });
+  const [selectedIncidentId, setSelectedIncidentId] = useState(() => {
+    // Restore selected incident ID from localStorage on initial load
+    return localStorage.getItem('selectedIncidentId') || null;
+  });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
@@ -34,14 +42,31 @@ const DashboardLayout = ({ user, onLogout }) => {
     setSidebarCollapsed(!sidebarCollapsed);
   };
 
+  // Custom setActiveTab function that also persists to localStorage
+  const handleSetActiveTab = (tabName, incidentId = null) => {
+    setActiveTab(tabName);
+    localStorage.setItem('activeTab', tabName);
+    
+    // If navigating to incident details, store the incident ID
+    if (tabName === 'incident-details' && incidentId) {
+      setSelectedIncidentId(incidentId);
+      localStorage.setItem('selectedIncidentId', incidentId);
+    } else if (tabName !== 'incident-details') {
+      setSelectedIncidentId(null);
+      localStorage.removeItem('selectedIncidentId');
+    }
+  };
+
   const renderActivePage = () => {
     switch (activeTab) {
       case 'dashboard':
-        return <DashboardPage onNavigate={setActiveTab} />;
+        return <DashboardPage onNavigate={handleSetActiveTab} />;
       case 'analytics':
         return <AnalyticsPage />;
       case 'incidents':
-        return <IncidentsPage />;
+        return <IncidentsPage onViewIncident={(incidentId) => handleSetActiveTab('incident-details', incidentId)} />;
+      case 'incident-details':
+        return <IncidentDetailsPage incidentId={selectedIncidentId} onBack={() => handleSetActiveTab('incidents')} />;
       case 'oncall-schedule':
         return <OnCallSchedulePage />;
       case 'teams':
@@ -49,7 +74,7 @@ const DashboardLayout = ({ user, onLogout }) => {
       case 'settings':
         return <SettingsPage />;
       default:
-        return <DashboardPage onNavigate={setActiveTab} />;
+        return <DashboardPage onNavigate={handleSetActiveTab} />;
     }
   };
 
@@ -66,7 +91,7 @@ const DashboardLayout = ({ user, onLogout }) => {
         <div className={`${isMobile ? 'absolute left-0 top-0 h-full z-10' : 'relative'}`}>
           <SideNavigation
             activeTab={activeTab}
-            setActiveTab={setActiveTab}
+            setActiveTab={handleSetActiveTab}
             collapsed={sidebarCollapsed}
             setCollapsed={setSidebarCollapsed}
           />
@@ -81,6 +106,8 @@ const DashboardLayout = ({ user, onLogout }) => {
           onLogout={onLogout}
           toggleSidebar={toggleSidebar}
           collapsed={sidebarCollapsed}
+          onNavigateToSettings={() => handleSetActiveTab('settings')}
+          onNavigateToIncident={(incidentId) => handleSetActiveTab('incident-details', incidentId)}
         />
 
         {/* Page Content */}

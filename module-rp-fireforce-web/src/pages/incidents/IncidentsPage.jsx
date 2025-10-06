@@ -44,11 +44,13 @@ import {
   Bookmark,
   Share2,
   Copy,
-  ExternalLink
+  ExternalLink,
+  X
 } from 'lucide-react';
 import IncidentsModal from './incidents_modal';
+import Pagination from '../../components/Pagination';
 
-const IncidentsPage = () => {
+const IncidentsPage = ({ onViewIncident }) => {
   const [viewMode, setViewMode] = useState('cards');
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [selectedSeverity, setSelectedSeverity] = useState('all');
@@ -59,6 +61,20 @@ const IncidentsPage = () => {
   const [error, setError] = useState(null);
   const [selectedIncident, setSelectedIncident] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(9); // 9 items for 3x3 grid
+
+  // Create incident form state
+  const [newIncident, setNewIncident] = useState({
+    title: '',
+    description: '',
+    location: '',
+    severity: 'medium'
+  });
+  const [isCreating, setIsCreating] = useState(false);
 
   // Fetch incidents from API
   useEffect(() => {
@@ -241,6 +257,22 @@ const IncidentsPage = () => {
     return matchesStatus && matchesSeverity && matchesTimeframe && matchesSearch;
   });
 
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredIncidents.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedIncidents = filteredIncidents.slice(startIndex, endIndex);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedStatus, selectedSeverity, selectedTimeframe, searchQuery]);
+
+  const handlePageChange = (page) => {
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   // Filter options based on actual data
   const statusOptions = [
     { value: 'all', label: 'All Status', count: incidents.length },
@@ -317,10 +349,12 @@ const IncidentsPage = () => {
     }
   };
 
-  // Handle view incident
+  // Handle view incident - navigate within the app
   const handleViewIncident = (incident) => {
-    setSelectedIncident(incident);
-    setIsModalOpen(true);
+    // Use the callback from DashboardLayout to navigate to details page
+    if (onViewIncident) {
+      onViewIncident(incident.id);
+    }
   };
 
   // Close modal
@@ -329,76 +363,208 @@ const IncidentsPage = () => {
     setSelectedIncident(null);
   };
 
+  // Create incident
+  const handleCreateIncident = async () => {
+    if (!newIncident.title.trim() || !newIncident.description.trim()) {
+      alert('Please fill in title and description');
+      return;
+    }
+
+    setIsCreating(true);
+    try {
+      const userEmail = localStorage.getItem('userEmail') || 'user@example.com';
+      
+      const response = await fetch(
+        'https://incident-webhook-api.rapidresponse.workers.dev/api/incidents',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: newIncident.title,
+            description: newIncident.description,
+            location: newIncident.location,
+            reportedBy: userEmail,
+            severity: newIncident.severity
+          })
+        }
+      );
+
+      if (response.ok) {
+        alert('Incident created successfully');
+        setNewIncident({
+          title: '',
+          description: '',
+          location: '',
+          severity: 'medium'
+        });
+        setIsCreateModalOpen(false);
+        await refreshIncidents(); // Refresh incidents list
+      } else {
+        alert('Failed to create incident');
+      }
+    } catch (error) {
+      console.error('Error creating incident:', error);
+      alert('Error creating incident');
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
       {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-8 space-y-4 lg:space-y-0">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-            <AlertTriangle className="w-6 h-6 text-white" />
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 bg-red-600 rounded-xl flex items-center justify-center shadow-lg">
+              <AlertTriangle className="w-7 h-7 text-white" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">Incident Management</h1>
+              <p className="text-gray-500 mt-1">Monitor and manage system incidents in real-time</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Incident Management</h1>
-            <p className="text-gray-600">Monitor and manage system incidents in real-time</p>
+          
+          <button
+            onClick={() => setIsCreateModalOpen(true)}
+            className="flex items-center px-5 py-3 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors shadow-lg font-semibold"
+          >
+            <Plus className="w-5 h-5 mr-2" />
+            Create Incident
+          </button>
+        </div>
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <div className="bg-white rounded-xl p-4 border border-gray-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500 mb-1">Total Incidents</p>
+                <p className="text-2xl font-bold text-gray-900">{incidents.length}</p>
+              </div>
+              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                <Activity className="w-6 h-6 text-blue-600" />
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-white rounded-xl p-4 border border-red-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500 mb-1">Critical</p>
+                <p className="text-2xl font-bold text-red-600">{incidents.filter(i => i.severity === 'Critical').length}</p>
+              </div>
+              <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
+                <Flame className="w-6 h-6 text-red-600" />
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-white rounded-xl p-4 border border-yellow-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500 mb-1">Open</p>
+                <p className="text-2xl font-bold text-yellow-600">{incidents.filter(i => i.status === 'Open').length}</p>
+              </div>
+              <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
+                <AlertCircle className="w-6 h-6 text-yellow-600" />
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-white rounded-xl p-4 border border-green-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500 mb-1">Resolved</p>
+                <p className="text-2xl font-bold text-green-600">{incidents.filter(i => i.status === 'Resolved').length}</p>
+              </div>
+              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                <CheckCircle className="w-6 h-6 text-green-600" />
+              </div>
+            </div>
           </div>
         </div>
-        
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="relative">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search incidents..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 pr-4 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 w-64"
-            />
+
+        {/* Filters */}
+        <div className="bg-white rounded-xl p-4 border border-gray-200">
+          <div className="flex flex-col lg:flex-row lg:items-center gap-3">
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search by title, description, or ID..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10 pr-4 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 w-full text-black"
+              />
+            </div>
+            
+            <div className="flex flex-wrap items-center gap-3">
+              <select 
+                value={selectedStatus}
+                onChange={(e) => setSelectedStatus(e.target.value)}
+                className="px-4 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-black"
+              >
+                {statusOptions.map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.label} ({option.count})
+                  </option>
+                ))}
+              </select>
+              
+              <select 
+                value={selectedSeverity}
+                onChange={(e) => setSelectedSeverity(e.target.value)}
+                className="px-4 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-black"
+              >
+                {severityOptions.map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.label} ({option.count})
+                  </option>
+                ))}
+              </select>
+              
+              <select 
+                value={selectedTimeframe}
+                onChange={(e) => setSelectedTimeframe(e.target.value)}
+                className="px-4 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-black"
+              >
+                {timeframeOptions.map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.label} ({option.count})
+                  </option>
+                ))}
+              </select>
+              
+              <button 
+                onClick={refreshIncidents}
+                disabled={loading}
+                className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                {loading ? 'Loading...' : 'Refresh'}
+              </button>
+              
+              <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden">
+                <button
+                  onClick={() => setViewMode('cards')}
+                  className={`px-3 py-2 transition-colors ${
+                    viewMode === 'cards' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  <Grid3X3 className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setViewMode('list')}
+                  className={`px-3 py-2 transition-colors border-l border-gray-300 ${
+                    viewMode === 'list' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  <List className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
           </div>
-          
-          <select 
-            value={selectedStatus}
-            onChange={(e) => setSelectedStatus(e.target.value)}
-            className="px-4 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-          >
-            {statusOptions.map(option => (
-              <option key={option.value} value={option.value}>
-                {option.label} ({option.count})
-              </option>
-            ))}
-          </select>
-          
-          <select 
-            value={selectedSeverity}
-            onChange={(e) => setSelectedSeverity(e.target.value)}
-            className="px-4 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-          >
-            {severityOptions.map(option => (
-              <option key={option.value} value={option.value}>
-                {option.label} ({option.count})
-              </option>
-            ))}
-          </select>
-          
-          <select 
-            value={selectedTimeframe}
-            onChange={(e) => setSelectedTimeframe(e.target.value)}
-            className="px-4 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-          >
-            {timeframeOptions.map(option => (
-              <option key={option.value} value={option.value}>
-                {option.label} ({option.count})
-              </option>
-            ))}
-          </select>
-          
-          <button 
-            onClick={refreshIncidents}
-            disabled={loading}
-            className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-            {loading ? 'Loading...' : 'Refresh'}
-          </button>
         </div>
       </div>
 
@@ -434,206 +600,235 @@ const IncidentsPage = () => {
       {/* Incidents Display */}
       {!loading && !error && (
         <>
-          {/* View Toggle */}
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center space-x-4">
-              <span className="text-sm font-medium text-gray-700">
-                Showing {filteredIncidents.length} of {incidents.length} incidents
-              </span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={() => setViewMode('cards')}
-                className={`p-2 rounded-lg transition-colors ${
-                  viewMode === 'cards' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
-                }`}
-              >
-                <Grid3X3 className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setViewMode('list')}
-                className={`p-2 rounded-lg transition-colors ${
-                  viewMode === 'list' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
-                }`}
-              >
-                <List className="w-4 h-4" />
-              </button>
-            </div>
+          {/* Results Count */}
+          <div className="mb-4">
+            <p className="text-sm font-medium text-gray-600">
+              Showing <span className="text-gray-900 font-semibold">{startIndex + 1}-{Math.min(endIndex, filteredIncidents.length)}</span> of <span className="text-gray-900 font-semibold">{filteredIncidents.length}</span> incidents
+              {filteredIncidents.length !== incidents.length && (
+                <span className="text-gray-500"> (filtered from {incidents.length} total)</span>
+              )}
+            </p>
           </div>
 
           {/* Cards View */}
           {viewMode === 'cards' ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-              {filteredIncidents.length === 0 ? (
-                <div className="col-span-full text-center py-12">
-                  <AlertTriangle className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-xl font-semibold text-gray-600 mb-2">No incidents found</h3>
-                  <p className="text-gray-500">Try adjusting your filters or search terms</p>
-                </div>
-              ) : (
-                filteredIncidents.map((incident) => (
-                  <div key={incident.id} className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex items-center space-x-3">
-                        <div className={`px-3 py-1 rounded-full text-xs font-bold ${getSeverityColor(incident.severity)}`}>
-                          {incident.severity}
-                        </div>
-                        <div className={`flex items-center px-3 py-1 rounded-full text-xs font-bold border ${getStatusColor(incident.status)}`}>
-                          {getStatusIcon(incident.status)}
-                          <span>{incident.status}</span>
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                {paginatedIncidents.length === 0 ? (
+                  <div className="col-span-full bg-white rounded-xl p-12 text-center border border-gray-200">
+                    <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <AlertTriangle className="w-8 h-8 text-gray-400" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">No incidents found</h3>
+                    <p className="text-gray-500">Try adjusting your filters or search terms</p>
+                  </div>
+                ) : (
+                  paginatedIncidents.map((incident) => (
+                  <div key={incident.id} className="bg-white rounded-xl border border-gray-200 hover:border-blue-300 hover:shadow-lg transition-all duration-200 overflow-hidden">
+                    {/* Card Header */}
+                    <div className="p-5 border-b border-gray-100">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <span className={`px-3 py-1 rounded-lg text-xs font-bold ${getSeverityColor(incident.severity)}`}>
+                            {incident.severity}
+                          </span>
+                          <span className={`flex items-center px-3 py-1 rounded-lg text-xs font-semibold border ${getStatusColor(incident.status)}`}>
+                            {getStatusIcon(incident.status)}
+                            {incident.status}
+                          </span>
                         </div>
                       </div>
-                      <button className="p-1 hover:bg-gray-100 rounded">
-                        <MoreHorizontal className="w-4 h-4 text-gray-500" />
-                      </button>
-                    </div>
-
-                    <div className="mb-4">
-                      <h3 className="font-bold text-gray-900 mb-2">{incident.title}</h3>
+                      
+                      <h3 className="text-lg font-bold text-gray-900 mb-2 line-clamp-1">{incident.title}</h3>
                       <p className="text-sm text-gray-600 line-clamp-2">{incident.description}</p>
                     </div>
 
-                    <div className="space-y-2 text-sm">
-                      <div className="flex items-center justify-between">
-                        <span className="text-gray-600">ID:</span>
-                        <span className="font-medium text-gray-900">{incident.id}</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-gray-600">Assignee:</span>
-                        <span className="font-medium text-gray-900">{incident.assignee}</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-gray-600">Source:</span>
-                        <span className="font-medium text-gray-900">{incident.source}</span>
-                      </div>
-                      <div className="flex items-center justify-between">
+                    {/* Card Body */}
+                    <div className="p-5 space-y-3">
+                      <div className="flex items-center text-sm">
+                        <Clock className="w-4 h-4 text-gray-400 mr-2" />
                         <span className="text-gray-600">Created:</span>
-                        <span className="font-medium text-gray-900">{incident.created}</span>
+                        <span className="ml-auto font-medium text-gray-900">{incident.created}</span>
                       </div>
-                      {incident.location && (
-                        <div className="flex items-center justify-between">
-                          <span className="text-gray-600">Location:</span>
-                          <span className="font-medium text-gray-900">{incident.location}</span>
+                      
+                      <div className="flex items-center text-sm">
+                        <User className="w-4 h-4 text-gray-400 mr-2" />
+                        <span className="text-gray-600">Reporter:</span>
+                        <span className="ml-auto font-medium text-gray-900">{incident.reporter}</span>
+                      </div>
+                      
+                      {incident.assignee && incident.assignee !== 'Unassigned' && (
+                        <div className="flex items-center text-sm">
+                          <Users className="w-4 h-4 text-gray-400 mr-2" />
+                          <span className="text-gray-600">Assignee:</span>
+                          <span className="ml-auto font-medium text-gray-900">{incident.assignee}</span>
                         </div>
                       )}
-                      {incident.awsConsoleUrl && (
-                        <div className="mt-3">
-                          <a
-                            href={incident.awsConsoleUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center text-blue-600 hover:text-blue-800 text-sm"
-                          >
-                            <ExternalLink className="w-4 h-4 mr-1" />
-                            View in AWS Console
-                          </a>
+                      
+                      {incident.location && (
+                        <div className="flex items-center text-sm">
+                          <MapPin className="w-4 h-4 text-gray-400 mr-2" />
+                          <span className="text-gray-600">Location:</span>
+                          <span className="ml-auto font-medium text-gray-900 truncate max-w-[150px]">{incident.location}</span>
+                        </div>
+                      )}
+                      
+                      {incident.awsAlarmName && (
+                        <div className="flex items-center text-sm">
+                          <Server className="w-4 h-4 text-gray-400 mr-2" />
+                          <span className="text-gray-600">AWS Alarm:</span>
+                          <span className="ml-auto font-medium text-gray-900 truncate max-w-[130px]">{incident.awsAlarmName}</span>
                         </div>
                       )}
                     </div>
 
-                    {/* Action Buttons */}
-                    <div className="mt-4 pt-4 border-t border-gray-200">
-                      <div className="flex justify-between items-center">
+                    {/* Card Footer */}
+                    <div className="px-5 py-4 bg-gray-50 border-t border-gray-100">
+                      <div className="flex items-center justify-between gap-2">
                         <button
                           onClick={() => handleViewIncident(incident)}
-                          className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                          className="flex-1 flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-semibold"
                         >
                           <Eye className="w-4 h-4 mr-2" />
                           View Details
                         </button>
-                        <div className="flex space-x-2">
-                          <button className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors">
-                            <Edit className="w-4 h-4" />
-                          </button>
-                          <button className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors">
-                            <MoreHorizontal className="w-4 h-4" />
-                          </button>
-                        </div>
+                        {incident.awsConsoleUrl && (
+                          <a
+                            href={incident.awsConsoleUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors"
+                            title="Open AWS Console"
+                          >
+                            <ExternalLink className="w-5 h-5" />
+                          </a>
+                        )}
                       </div>
                     </div>
                   </div>
                 ))
               )}
             </div>
+            
+            {/* Pagination for Cards View */}
+            {paginatedIncidents.length > 0 && (
+              <div className="mt-6">
+                <Pagination
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  totalItems={filteredIncidents.length}
+                  itemsPerPage={itemsPerPage}
+                  onPageChange={handlePageChange}
+                />
+              </div>
+            )}
+          </>
           ) : (
             /* List View */
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-50 border-b border-gray-200">
-                    <tr>
-                      <th className="text-left py-4 px-6 font-bold text-gray-900">Incident</th>
-                      <th className="text-left py-4 px-6 font-bold text-gray-900">Status</th>
-                      <th className="text-left py-4 px-6 font-bold text-gray-900">Severity</th>
-                      <th className="text-left py-4 px-6 font-bold text-gray-900">Assignee</th>
-                      <th className="text-left py-4 px-6 font-bold text-gray-900">Source</th>
-                      <th className="text-left py-4 px-6 font-bold text-gray-900">Created</th>
-                      <th className="text-center py-4 px-6 font-bold text-gray-900">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredIncidents.length === 0 ? (
+            <>
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+              {paginatedIncidents.length === 0 ? (
+                <div className="text-center py-12">
+                  <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <AlertTriangle className="w-8 h-8 text-gray-400" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">No incidents found</h3>
+                  <p className="text-gray-500">Try adjusting your filters or search terms</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50 border-b-2 border-gray-200">
                       <tr>
-                        <td colSpan="7" className="text-center py-12">
-                          <AlertTriangle className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                          <h3 className="text-xl font-semibold text-gray-600 mb-2">No incidents found</h3>
-                          <p className="text-gray-500">Try adjusting your filters or search terms</p>
-                        </td>
+                        <th className="text-left py-4 px-6 font-semibold text-gray-900 text-sm">Incident Details</th>
+                        <th className="text-left py-4 px-6 font-semibold text-gray-900 text-sm">Status</th>
+                        <th className="text-left py-4 px-6 font-semibold text-gray-900 text-sm">Severity</th>
+                        <th className="text-left py-4 px-6 font-semibold text-gray-900 text-sm">Reporter</th>
+                        <th className="text-left py-4 px-6 font-semibold text-gray-900 text-sm">Location</th>
+                        <th className="text-left py-4 px-6 font-semibold text-gray-900 text-sm">Created</th>
+                        <th className="text-center py-4 px-6 font-semibold text-gray-900 text-sm">Actions</th>
                       </tr>
-                    ) : (
-                      filteredIncidents.map((incident, index) => (
-                        <tr key={incident.id} className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {paginatedIncidents.map((incident) => (
+                        <tr key={incident.id} className="hover:bg-gray-50 transition-colors">
                           <td className="py-4 px-6">
-                            <div>
-                              <div className="text-sm text-gray-600 font-medium mb-1">{incident.id}</div>
-                              <div className="font-bold text-gray-900">{incident.title}</div>
-                              <div className="text-sm text-gray-700 mt-1 truncate max-w-xs">{incident.description}</div>
+                            <div className="max-w-md">
+                              <div className="font-bold text-gray-900 mb-1">{incident.title}</div>
+                              <div className="text-sm text-gray-600 line-clamp-1">{incident.description}</div>
+                              <div className="text-xs text-gray-400 mt-1 font-mono">ID: {incident.id}</div>
                             </div>
                           </td>
                           <td className="py-4 px-6">
-                            <div className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold border ${getStatusColor(incident.status)}`}>
+                            <span className={`inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold border ${getStatusColor(incident.status)}`}>
                               {getStatusIcon(incident.status)}
-                              <span>{incident.status}</span>
-                            </div>
+                              {incident.status}
+                            </span>
                           </td>
                           <td className="py-4 px-6">
-                            <div className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold ${getSeverityColor(incident.severity)}`}>
+                            <span className={`inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-bold ${getSeverityColor(incident.severity)}`}>
                               {incident.severity}
+                            </span>
+                          </td>
+                          <td className="py-4 px-6">
+                            <div className="flex items-center text-sm">
+                              <User className="w-4 h-4 text-gray-400 mr-2" />
+                              <span className="font-medium text-gray-900">{incident.reporter}</span>
                             </div>
                           </td>
                           <td className="py-4 px-6">
-                            <div className="font-medium text-gray-900">{incident.assignee}</div>
+                            <div className="flex items-center text-sm">
+                              <MapPin className="w-4 h-4 text-gray-400 mr-2" />
+                              <span className="font-medium text-gray-900 max-w-[150px] truncate">{incident.location || 'N/A'}</span>
+                            </div>
                           </td>
                           <td className="py-4 px-6">
-                            <div className="font-medium text-gray-900">{incident.source}</div>
+                            <div className="flex items-center text-sm text-gray-600">
+                              <Clock className="w-4 h-4 text-gray-400 mr-2" />
+                              <span>{incident.created}</span>
+                            </div>
                           </td>
                           <td className="py-4 px-6">
-                            <div className="text-sm text-gray-600">{incident.created}</div>
-                          </td>
-                          <td className="py-4 px-6 text-center">
-                            <div className="flex items-center justify-center space-x-2">
+                            <div className="flex items-center justify-center gap-2">
                               <button 
                                 onClick={() => handleViewIncident(incident)}
-                                className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded-lg transition-colors"
+                                className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors"
                                 title="View Details"
                               >
                                 <Eye className="w-4 h-4" />
                               </button>
-                              <button className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors">
-                                <Edit className="w-4 h-4" />
-                              </button>
-                              <button className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors">
-                                <MoreHorizontal className="w-4 h-4" />
-                              </button>
+                              {incident.awsConsoleUrl && (
+                                <a
+                                  href={incident.awsConsoleUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="p-2 text-purple-600 hover:bg-purple-100 rounded-lg transition-colors"
+                                  title="Open AWS Console"
+                                >
+                                  <ExternalLink className="w-4 h-4" />
+                                </a>
+                              )}
                             </div>
                           </td>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
+            
+            {/* Pagination for List View */}
+            {paginatedIncidents.length > 0 && (
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                totalItems={filteredIncidents.length}
+                itemsPerPage={itemsPerPage}
+                onPageChange={handlePageChange}
+              />
+            )}
+            </>
           )}
         </>
       )}
@@ -643,7 +838,136 @@ const IncidentsPage = () => {
         incident={selectedIncident}
         isOpen={isModalOpen}
         onClose={closeModal}
+        onRefresh={refreshIncidents}
       />
+
+      {/* Create Incident Modal */}
+      {isCreateModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-red-50">
+              <div className="flex items-center space-x-4">
+                <div className="w-12 h-12 bg-red-600 rounded-xl flex items-center justify-center">
+                  <Plus className="w-7 h-7 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">Create New Incident</h2>
+                  <p className="text-gray-600">Report a new system incident</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsCreateModalOpen(false)}
+                className="p-2 hover:bg-gray-100 rounded-xl transition-colors"
+              >
+                <X className="w-6 h-6 text-gray-500" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 space-y-5">
+              {/* Title */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-900 mb-2">
+                  Incident Title <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={newIncident.title}
+                  onChange={(e) => setNewIncident({ ...newIncident, title: e.target.value })}
+                  placeholder="Brief description of the issue"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 text-black placeholder:text-gray-500"
+                />
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-900 mb-2">
+                  Description <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={newIncident.description}
+                  onChange={(e) => setNewIncident({ ...newIncident, description: e.target.value })}
+                  placeholder="Detailed description of the incident..."
+                  rows={5}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 text-black placeholder:text-gray-500"
+                />
+              </div>
+
+              {/* Location */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-900 mb-2">
+                  Location
+                </label>
+                <input
+                  type="text"
+                  value={newIncident.location}
+                  onChange={(e) => setNewIncident({ ...newIncident, location: e.target.value })}
+                  placeholder="Where is the incident occurring?"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 text-black placeholder:text-gray-500"
+                />
+              </div>
+
+              {/* Severity */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-900 mb-2">
+                  Severity <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={newIncident.severity}
+                  onChange={(e) => setNewIncident({ ...newIncident, severity: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 text-black"
+                >
+                  <option value="low">Low - Minor issue, minimal impact</option>
+                  <option value="medium">Medium - Moderate issue, some impact</option>
+                  <option value="high">High - Serious issue, significant impact</option>
+                  <option value="critical">Critical - Severe issue, major impact</option>
+                </select>
+              </div>
+
+              {/* Severity Preview */}
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                <p className="text-sm text-gray-600 mb-2">Selected Severity:</p>
+                <span className={`inline-flex px-4 py-2 rounded-lg text-sm font-bold ${
+                  newIncident.severity === 'critical' ? 'bg-red-600 text-white' :
+                  newIncident.severity === 'high' ? 'bg-orange-500 text-white' :
+                  newIncident.severity === 'medium' ? 'bg-yellow-500 text-white' :
+                  'bg-green-500 text-white'
+                }`}>
+                  {newIncident.severity.charAt(0).toUpperCase() + newIncident.severity.slice(1)}
+                </span>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex justify-end space-x-3 p-6 bg-gray-50 border-t border-gray-200">
+              <button
+                onClick={() => setIsCreateModalOpen(false)}
+                className="px-6 py-3 bg-gray-200 text-gray-800 rounded-xl hover:bg-gray-300 transition-colors font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateIncident}
+                disabled={isCreating || !newIncident.title.trim() || !newIncident.description.trim()}
+                className="px-6 py-3 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+              >
+                {isCreating ? (
+                  <>
+                    <RefreshCw className="w-5 h-5 mr-2 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-5 h-5 mr-2" />
+                    Create Incident
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

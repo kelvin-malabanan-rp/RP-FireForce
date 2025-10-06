@@ -64,8 +64,20 @@ const SideNavigation = ({ activeTab, setActiveTab, collapsed, setCollapsed }) =>
       <div className={`flex items-center ${collapsed ? 'justify-center' : 'justify-between'} p-4 border-b border-gray-200`}>
         {!collapsed && (
           <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center shadow-md">
-              <Flame className="w-5 h-5 text-white" />
+            <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-md p-1 border border-gray-200">
+              <img 
+                src="/logo.png" 
+                alt="FireForce Logo" 
+                className="w-full h-full object-contain"
+                onError={(e) => {
+                  // Fallback to flame icon if logo doesn't load
+                  e.target.style.display = 'none';
+                  e.target.nextElementSibling.style.display = 'flex';
+                }}
+              />
+              <div className="w-full h-full bg-gradient-to-br from-blue-500 to-blue-600 rounded items-center justify-center hidden">
+                <Flame className="w-5 h-5 text-white" />
+              </div>
             </div>
             <div>
               <h1 className="text-lg font-bold text-gray-900">FireForce</h1>
@@ -75,8 +87,20 @@ const SideNavigation = ({ activeTab, setActiveTab, collapsed, setCollapsed }) =>
         )}
         
         {collapsed && (
-          <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center shadow-md">
-            <Flame className="w-5 h-5 text-white" />
+          <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-md p-1 border border-gray-200">
+            <img 
+              src="/logo.png" 
+              alt="FireForce Logo" 
+              className="w-full h-full object-contain"
+              onError={(e) => {
+                // Fallback to flame icon if logo doesn't load
+                e.target.style.display = 'none';
+                e.target.nextElementSibling.style.display = 'flex';
+              }}
+            />
+            <div className="w-full h-full bg-gradient-to-br from-blue-500 to-blue-600 rounded items-center justify-center hidden">
+              <Flame className="w-5 h-5 text-white" />
+            </div>
           </div>
         )}
       </div>

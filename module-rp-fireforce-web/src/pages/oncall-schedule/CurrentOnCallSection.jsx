@@ -1,7 +1,9 @@
-import React from 'react';
-import { Clock, Phone, Mail, MessageSquare, Users } from 'lucide-react';
+import React, { useState } from 'react';
+import { Clock, Phone, Mail, MessageSquare, Users, Bell } from 'lucide-react';
+import SendAlertModal from '../../components/SendAlertModal';
 
 const CurrentOnCallCard = ({ person, role, color }) => {
+  const [showAlertModal, setShowAlertModal] = useState(false);
   const getInitials = (firstName, lastName) => {
     return `${firstName?.charAt(0) || ''}${lastName?.charAt(0) || ''}`;
   };
@@ -66,33 +68,51 @@ const CurrentOnCallCard = ({ person, role, color }) => {
           <h3 className="font-bold text-gray-900">
             {person.firstName} {person.lastName}
           </h3>
-          <p className="text-sm text-gray-600">{role} On-Call</p>
+          <p className="text-sm text-gray-900 font-semibold">{role} On-Call</p>
         </div>
       </div>
       
       <div className="space-y-2 mb-4">
         {person.phoneNumber && (
-          <div className="flex items-center text-sm text-gray-800 font-medium">
-            <Phone className="w-4 h-4 mr-2 text-gray-700" />
+          <div className="flex items-center text-sm text-gray-900 font-semibold">
+            <Phone className="w-4 h-4 mr-2 text-gray-900" />
             {person.phoneNumber}
           </div>
         )}
-        <div className="flex items-center text-sm text-gray-800 font-medium">
-          <Mail className="w-4 h-4 mr-2 text-gray-700" />
+        <div className="flex items-center text-sm text-gray-900 font-semibold">
+          <Mail className="w-4 h-4 mr-2 text-gray-900" />
           {person.email}
         </div>
       </div>
       
       <div className="flex space-x-2">
-        <button className="flex-1 flex items-center justify-center px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm">
+        <button className="flex-1 flex items-center justify-center px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-semibold shadow-sm hover:shadow-md">
           <Phone className="w-4 h-4 mr-1" />
           Call
         </button>
-        <button className="flex-1 flex items-center justify-center px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm">
+        <button className="flex-1 flex items-center justify-center px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-semibold shadow-sm hover:shadow-md">
           <MessageSquare className="w-4 h-4 mr-1" />
           Message
         </button>
+        <button 
+          onClick={() => setShowAlertModal(true)}
+          className="flex-1 flex items-center justify-center px-3 py-2 bg-gradient-to-r from-orange-600 to-red-600 text-white rounded-lg hover:from-orange-700 hover:to-red-700 transition-all text-sm font-semibold shadow-md hover:shadow-lg"
+        >
+          <Bell className="w-4 h-4 mr-1" />
+          Alert
+        </button>
       </div>
+
+      {/* Send Alert Modal */}
+      {showAlertModal && (
+        <SendAlertModal
+          recipient={person}
+          onClose={() => setShowAlertModal(false)}
+          onSend={(result) => {
+            console.log('Alert sent:', result);
+          }}
+        />
+      )}
     </div>
   );
 };
@@ -103,8 +123,8 @@ const CurrentOnCallSection = ({ currentOnCall, startTime, endTime }) => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
         <div className="col-span-3 text-center py-12">
           <Users className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-xl font-semibold text-gray-600 mb-2">No On-Call Data</h3>
-          <p className="text-gray-500">Select a team to view current on-call assignments</p>
+          <h3 className="text-xl font-bold text-gray-900 mb-2">No On-Call Data</h3>
+          <p className="text-gray-700 font-medium">Select a team to view current on-call assignments</p>
         </div>
       </div>
     );
@@ -116,9 +136,9 @@ const CurrentOnCallSection = ({ currentOnCall, startTime, endTime }) => {
       {(startTime || endTime) && (
         <div className="col-span-3 mb-4">
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <div className="flex items-center text-sm text-blue-800">
+            <div className="flex items-center text-sm text-blue-900">
               <Clock className="w-4 h-4 mr-2" />
-              <span className="font-medium">
+              <span className="font-bold">
                 Current Schedule: {startTime && new Date(startTime).toLocaleDateString()} - {endTime && new Date(endTime).toLocaleDateString()}
               </span>
             </div>

@@ -1,325 +1,203 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  AlertTriangle, 
-  CheckCircle, 
-  Clock, 
-  Users,
-  BarChart3,
-  TrendingUp,
-  TrendingDown,
-  AlertCircle,
-  Calendar,
-  Shield,
-  Activity,
-  Zap,
-  Eye,
-  RefreshCw,
-  Flame,
-  Target,
-  Timer
-} from 'lucide-react';
+import { Activity, AlertTriangle, CheckCircle, Users } from 'lucide-react';
+import DashboardHeader from './components/DashboardHeader';
+import StatCard from './components/StatCard';
+import IncidentCard from './components/IncidentCard';
+import OnCallMember from './components/OnCallMember';
+import SystemStatus from './components/SystemStatus';
+import EmptyState from './components/EmptyState';
+import { incidentService, onCallService } from '../../services/api';
 
-const DashboardPage = ({ onNavigate }) => {
-  const [timeRange, setTimeRange] = useState('24h');
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [refreshing, setRefreshing] = useState(false);
-  const [nextRefresh, setNextRefresh] = useState(30);
-  const [lastUpdated, setLastUpdated] = useState(null);
-  
-  // API Data States
+export default function DashboardPage({ onNavigate }) {
   const [incidents, setIncidents] = useState([]);
-  const [incidentStats, setIncidentStats] = useState({});
-  const [onCallTeams, setOnCallTeams] = useState([]);
-  const [currentOnCall, setCurrentOnCall] = useState([]);
+  const [stats, setStats] = useState(null);
+  const [onCallData, setOnCallData] = useState({ teams: [], currentOnCall: null });
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [error, setError] = useState(null);
 
-  // API Configuration
-  const API_BASE_URL = 'https://incident-webhook-api.rapidresponse.workers.dev';
+  useEffect(() => {
+    loadDashboardData();
+    // Auto-refresh every 30 seconds
+    const interval = setInterval(() => {
+      loadDashboardData(true);
+    }, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
-  // Fetch Incidents
-  const fetchIncidents = async () => {
+  const loadDashboardData = async (isAutoRefresh = false) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/incidents`);
-      if (!response.ok) throw new Error('Failed to fetch incidents');
-      const data = await response.json();
-      const incidentsData = data.response_data?.data || data.data || [];
-      setIncidents(Array.isArray(incidentsData) ? incidentsData : []);
-    } catch (err) {
-      console.error('Error fetching incidents:', err);
-      setIncidents([]);
-    }
-  };
-
-  // Fetch Incident Statistics
-  const fetchIncidentStats = async () => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/incidents/stats?timeframe=${timeRange}`);
-      if (!response.ok) throw new Error('Failed to fetch incident stats');
-      const data = await response.json();
-      setIncidentStats(data.data || {});
-    } catch (err) {
-      console.error('Error fetching incident stats:', err);
-      setIncidentStats({});
-    }
-  };
-
-  // Fetch OnCall Teams
-  const fetchOnCallTeams = async () => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/oncall/teams`);
-      if (!response.ok) throw new Error('Failed to fetch teams');
-      const data = await response.json();
-      const teams = data.object || data.response_data?.data || data.data || [];
-      setOnCallTeams(Array.isArray(teams) ? teams : []);
-    } catch (err) {
-      console.error('Error fetching teams:', err);
-      setOnCallTeams([]);
-    }
-  };
-
-  // Fetch Current OnCall
-  const fetchCurrentOnCall = async () => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/oncall/current`);
-      if (!response.ok) throw new Error('Failed to fetch current on-call');
-      const data = await response.json();
-      const current = data.response_data?.data || data.data || [];
-      setCurrentOnCall(Array.isArray(current) ? current : []);
-    } catch (err) {
-      console.error('Error fetching current on-call:', err);
-      setCurrentOnCall([]);
-    }
-  };
-
-  // Load all dashboard data
-  const loadDashboardData = async (showRefreshing = false) => {
-    if (showRefreshing) {
-      setRefreshing(true);
-    } else {
-      setIsLoading(true);
-    }
-    setError(null);
-
-    try {
-      await Promise.all([
-        fetchIncidents(),
-        fetchIncidentStats(),
-        fetchOnCallTeams(),
-        fetchCurrentOnCall()
+      if (!isAutoRefresh) {
+        setIsLoading(true);
+      } else {
+        setIsRefreshing(true);
+      }
+      setError(null);
+      
+      // Fetch incidents and stats (on-call data is optional)
+      const [incidentsData, incidentStatsData] = await Promise.all([
+        incidentService.getAllIncidents(),
+        incidentService.getIncidentStats('24h'),
       ]);
+
+      setIncidents(Array.isArray(incidentsData) ? incidentsData : []);
+      setStats(incidentStatsData);
+      
+      // Try to fetch on-call data (non-critical, gracefully handle errors)
+      try {
+        const teamsData = await onCallService.getTeams();
+        
+        if (teamsData && Array.isArray(teamsData) && teamsData.length > 0) {
+          // Use the first team's ID to fetch current on-call
+          const teamId = teamsData[0].id || teamsData[0].teamId;
+          
+          if (teamId) {
+            const currentOnCall = await onCallService.getCurrentOnCall(teamId);
+            setOnCallData({ teams: teamsData, currentOnCall });
+          } else {
+            setOnCallData({ teams: teamsData, currentOnCall: null });
+          }
+        } else {
+          setOnCallData({ teams: [], currentOnCall: null });
+        }
+      } catch (onCallError) {
+        // On-call data is optional - don't fail the entire page
+        console.info('On-call data unavailable:', onCallError.message);
+        setOnCallData({ teams: [], currentOnCall: null });
+      }
     } catch (err) {
+      console.error('Error loading dashboard data:', err);
       setError(err.message || 'Failed to load dashboard data');
     } finally {
       setIsLoading(false);
-      setRefreshing(false);
-      setLastUpdated(new Date());
+      setIsRefreshing(false);
     }
   };
 
-  // Initial load and timeRange changes
-  useEffect(() => {
-    loadDashboardData();
-  }, [timeRange]);
-
-  // Auto-refresh every 30 seconds with countdown
-  useEffect(() => {
-    setNextRefresh(30); // Reset countdown when timeRange changes
+  const getDisplayStats = () => {
+    if (stats) {
+      return {
+        total: stats.total || 0,
+        active: (stats.open || 0) + (stats.investigating || 0),
+        resolved: stats.resolved || 0,
+        onCall: onCallData.teams.reduce((sum, team) => sum + (team.members || 0), 0),
+        trends: {
+          total: { trend: 'up', value: '+12%' },
+          active: { trend: stats.open > stats.investigating ? 'up' : 'down', value: `${Math.abs(stats.open - stats.investigating)}` },
+          resolved: { trend: 'up', value: '+23%' },
+          onCall: { trend: 'neutral', value: '0%' }
+        }
+      };
+    }
     
-    const refreshInterval = setInterval(() => {
-      loadDashboardData(true); // Use true to show refreshing indicator
-      setNextRefresh(30); // Reset countdown after refresh
-    }, 30000); // 30 seconds
-
-    const countdownInterval = setInterval(() => {
-      setNextRefresh(prev => prev > 0 ? prev - 1 : 30);
-    }, 1000); // Update countdown every second
-
-    return () => {
-      clearInterval(refreshInterval);
-      clearInterval(countdownInterval);
-    }; // Cleanup on unmount
-  }, [timeRange]); // Re-setup intervals when timeRange changes
-
-  // Calculate dashboard statistics from real data
-  const calculateStats = () => {
-    // Use API stats data if available, fallback to calculated values
-    const activeIncidents = (incidentStats.open || 0) + (incidentStats.investigating || 0) || 
-      incidents.filter(incident => 
-        incident.status === 'Open' || incident.status === 'Investigating'
-      ).length;
-
-    const resolvedIncidents = incidentStats.resolved || 
-      incidents.filter(incident => incident.status === 'Resolved').length;
-
-    const totalOnCallMembers = onCallTeams.reduce((sum, team) => 
-      sum + (team.members?.length || 0), 0
-    );
-
-    const totalIncidents = incidentStats.total || incidents.length;
-    const avgResponseTime = incidentStats.average_response_time || '4.2m';
-
-    return [
-      {
-        title: 'Active Incidents',
-        value: activeIncidents.toString(),
-        change: activeIncidents > 0 ? `+${activeIncidents}` : '0',
-        changeType: activeIncidents > 0 ? 'increase' : 'neutral',
-        icon: AlertTriangle,
-        color: activeIncidents > 0 ? 'red' : 'green',
-        description: activeIncidents > 0 ? 'Requiring immediate attention' : 'All clear!',
-        gradient: activeIncidents > 0 ? 'from-red-500 to-red-600' : 'from-green-500 to-green-600'
-      },
-      {
-        title: 'Resolved Incidents',
-        value: resolvedIncidents.toString(),
-        change: resolvedIncidents > 0 ? `+${resolvedIncidents}` : '0',
-        changeType: 'increase',
-        icon: CheckCircle,
-        color: 'green',
-        description: `Successfully resolved in ${timeRange}`,
-        gradient: 'from-green-500 to-green-600'
-      },
-      {
-        title: 'Total Incidents',
-        value: totalIncidents.toString(),
-        change: totalIncidents > 0 ? `${totalIncidents}` : '0',
-        changeType: totalIncidents > 0 ? 'neutral' : 'neutral',
-        icon: BarChart3,
-        color: 'blue',
-        description: `All incidents in ${timeRange}`,
-        gradient: 'from-blue-500 to-blue-600'
-      },
-      {
-        title: 'On-Call Members',
-        value: totalOnCallMembers.toString(),
-        change: '0',
-        changeType: 'neutral',
-        icon: Users,
-        color: 'purple',
-        description: 'Currently available',
-        gradient: 'from-purple-500 to-purple-600'
+    return {
+      total: 0,
+      active: 0,
+      resolved: 0,
+      onCall: 0,
+      trends: {
+        total: { trend: 'neutral', value: '0%' },
+        active: { trend: 'neutral', value: '0%' },
+        resolved: { trend: 'neutral', value: '0%' },
+        onCall: { trend: 'neutral', value: '0%' }
       }
-    ];
+    };
   };
 
-  // Get recent incidents (latest 5)
   const getRecentIncidents = () => {
     return incidents
-      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      .sort((a, b) => new Date(b.timestamp || b.createdAt) - new Date(a.timestamp || a.createdAt))
       .slice(0, 5)
       .map(incident => ({
-        id: incident.id,
-        title: incident.title || incident.description || 'Untitled Incident',
-        severity: incident.severity || 'Medium',
-        status: incident.status || 'open',
-        time: getTimeAgo(incident.created_at),
-        assignee: incident.assigned_to || 'Unassigned',
-        description: incident.description || 'No description available'
+        ...incident,
+        time: new Date(incident.timestamp || incident.createdAt).toLocaleString(),
+        assignee: incident.assignedTo || 'Unassigned'
       }));
   };
 
-  // Get current on-call schedule
-  const getCurrentOnCallSchedule = () => {
-    const schedule = [];
+  const getCurrentOnCallMembers = () => {
+    const members = [];
+    const { currentOnCall } = onCallData;
     
-    onCallTeams.forEach(team => {
-      if (team.members && team.members.length > 0) {
-        team.members.forEach(member => {
-          schedule.push({
-            name: `${member.firstName || ''} ${member.lastName || ''}`.trim() || 'Unnamed',
-            role: member.role === 'primary' ? 'Primary' : member.role === 'backup' ? 'Backup' : 'Member',
-            team: team.name,
-            time: 'Active',
-            avatar: `${member.firstName?.charAt(0) || ''}${member.lastName?.charAt(0) || ''}` || 'U',
-            status: member.role === 'primary' ? 'active' : 'standby'
-          });
+    if (!currentOnCall) return [];
+
+    if (currentOnCall.primary) {
+      members.push({
+        ...currentOnCall.primary,
+        name: `${currentOnCall.primary.firstName} ${currentOnCall.primary.lastName}`,
+        team: onCallData.teams[0]?.name || 'Unknown Team',
+        status: 'active',
+        avatar: currentOnCall.primary.firstName?.charAt(0).toUpperCase() || '?',
+        role: 'Primary'
+      });
+    }
+
+    if (currentOnCall.backup) {
+      members.push({
+        ...currentOnCall.backup,
+        name: `${currentOnCall.backup.firstName} ${currentOnCall.backup.lastName}`,
+        team: onCallData.teams[0]?.name || 'Unknown Team',
+        status: 'active',
+        avatar: currentOnCall.backup.firstName?.charAt(0).toUpperCase() || '?',
+        role: 'Backup'
+      });
+    }
+
+    if (currentOnCall.escalation && Array.isArray(currentOnCall.escalation)) {
+      currentOnCall.escalation.forEach((member, index) => {
+        members.push({
+          ...member,
+          name: `${member.firstName} ${member.lastName}`,
+          team: onCallData.teams[0]?.name || 'Unknown Team',
+          status: 'active',
+          avatar: member.firstName?.charAt(0).toUpperCase() || '?',
+          role: `Escalation ${index + 1}`
         });
-      }
-    });
-
-    return schedule.slice(0, 6); // Show top 6
-  };
-
-  // Helper function to calculate time ago
-  const getTimeAgo = (dateString) => {
-    if (!dateString) return 'Unknown';
-    const now = new Date();
-    const date = new Date(dateString);
-    const diffMs = now - date;
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMins / 60);
-    const diffDays = Math.floor(diffHours / 24);
-
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`;
-    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
-    return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
-  };
-
-  // Utility functions
-  const getColorClasses = (color) => {
-    const colors = {
-      red: 'bg-red-50 border-red-200 text-red-700',
-      green: 'bg-green-50 border-green-200 text-green-700',
-      blue: 'bg-blue-50 border-blue-200 text-blue-700',
-      purple: 'bg-purple-50 border-purple-200 text-purple-700',
-      yellow: 'bg-yellow-50 border-yellow-200 text-yellow-700'
-    };
-    return colors[color] || colors.blue;
-  };
-
-  const getIconBgColor = (color) => {
-    const colors = {
-      red: 'bg-red-100',
-      green: 'bg-green-100',
-      blue: 'bg-blue-100',
-      purple: 'bg-purple-100',
-      yellow: 'bg-yellow-100'
-    };
-    return colors[color] || colors.blue;
-  };
-
-  const getSeverityColor = (severity) => {
-    const severityLower = severity?.toLowerCase();
-    switch (severityLower) {
-      case 'critical': return 'bg-red-500 text-white border-red-500';
-      case 'high': return 'bg-red-400 text-white border-red-400';
-      case 'medium': return 'bg-yellow-500 text-white border-yellow-500';
-      case 'low': return 'bg-green-500 text-white border-green-500';
-      default: return 'bg-gray-400 text-white border-gray-400';
+      });
     }
+
+    return members.slice(0, 6);
   };
 
-  const getStatusIcon = (status) => {
-    switch (status) {
-      case 'Open':
-        return <AlertTriangle className="w-4 h-4 text-red-500" />;
-      case 'Investigating':
-        return <Activity className="w-4 h-4 text-orange-500" />;
-      case 'Resolved':
-        return <CheckCircle className="w-4 h-4 text-green-500" />;
-      default:
-        return <AlertCircle className="w-4 h-4 text-gray-500" />;
-    }
-  };
-
-  const stats = calculateStats();
+  const displayStats = getDisplayStats();
   const recentIncidents = getRecentIncidents();
-  const onCallSchedule = getCurrentOnCallSchedule();
+  const onCallMembers = getCurrentOnCallMembers();
 
   if (isLoading) {
     return (
-      <div className="p-6 space-y-6">
-        <div className="animate-pulse">
-          <div className="h-8 bg-gray-200 rounded w-64 mb-4"></div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <div className="p-6 bg-gray-50 min-h-screen">
+        <div className="space-y-6">
+          {/* Header skeleton */}
+          <div className="flex items-center justify-between">
+            <div className="space-y-3">
+              <div className="h-10 bg-gradient-to-r from-gray-200 to-gray-300 rounded-lg w-64 animate-pulse"></div>
+              <div className="h-4 bg-gray-200 rounded w-96 animate-pulse"></div>
+            </div>
+            <div className="h-11 bg-gray-200 rounded-lg w-40 animate-pulse"></div>
+          </div>
+
+          {/* Stats skeleton */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {[...Array(4)].map((_, i) => (
-              <div key={i} className="bg-white rounded-xl p-6 border border-gray-200">
-                <div className="h-12 bg-gray-200 rounded mb-4"></div>
-                <div className="h-8 bg-gray-200 rounded mb-2"></div>
-                <div className="h-4 bg-gray-200 rounded"></div>
+              <div key={i} className="bg-white rounded-xl p-6 h-32 border border-gray-200 animate-pulse">
+                <div className="flex justify-between items-start">
+                  <div className="space-y-3 flex-1">
+                    <div className="h-4 bg-gray-200 rounded w-24"></div>
+                    <div className="h-8 bg-gradient-to-r from-gray-200 to-gray-300 rounded w-16"></div>
+                  </div>
+                  <div className="w-12 h-12 bg-gray-200 rounded-xl"></div>
+                </div>
               </div>
             ))}
+          </div>
+
+          {/* Content skeleton */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 bg-white rounded-xl p-6 h-96 border border-gray-200 animate-pulse"></div>
+            <div className="space-y-6">
+              <div className="bg-white rounded-xl p-6 h-64 border border-gray-200 animate-pulse"></div>
+              <div className="bg-white rounded-xl p-6 h-64 border border-gray-200 animate-pulse"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -328,255 +206,142 @@ const DashboardPage = ({ onNavigate }) => {
 
   if (error) {
     return (
-      <div className="p-6">
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <div className="flex items-center">
-            <AlertCircle className="w-5 h-5 text-red-500 mr-2" />
-            <span className="text-red-700">Error loading dashboard: {error}</span>
+      <div className="p-6 bg-gray-50 min-h-screen">
+        <div className="max-w-2xl mx-auto mt-16">
+          <div className="bg-white border border-red-200 rounded-xl p-8 shadow-lg">
+            <div className="flex items-start gap-4 mb-6">
+              <div className="p-3 bg-red-100 rounded-xl">
+                <AlertTriangle className="w-6 h-6 text-red-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900 mb-1">Error Loading Dashboard</h3>
+                <p className="text-red-700 font-medium">{error}</p>
+              </div>
+            </div>
+            <button 
+              onClick={() => loadDashboardData()}
+              className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-semibold shadow-md hover:shadow-lg"
+            >
+              Retry Loading
+            </button>
           </div>
-          <button 
-            onClick={() => loadDashboardData()}
-            className="mt-3 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
-          >
-            Retry
-          </button>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
-            <div className="w-8 h-8 bg-gradient-to-r from-orange-500 to-red-500 rounded-lg flex items-center justify-center">
-              <Flame className="w-5 h-5 text-white" />
-            </div>
-            FireForce Dashboard
-          </h1>
-          <p className="text-gray-600 mt-1">Real-time emergency response monitoring</p>
-          {lastUpdated && (
-            <p className="text-xs text-gray-500 mt-1">
-              Last updated: {lastUpdated.toLocaleTimeString()}
-            </p>
-          )}
-        </div>
-        
-        <div className="flex items-center space-x-3 mt-4 sm:mt-0">
-          <select
-            value={timeRange}
-            onChange={(e) => setTimeRange(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-          >
-            <option value="1h">Last Hour</option>
-            <option value="24h">Last 24 Hours</option>
-            <option value="7d">Last 7 Days</option>
-            <option value="30d">Last 30 Days</option>
-          </select>
-          
-          {/* Auto-refresh indicator with countdown */}
-          <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg">
-            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-            <span className="text-sm text-green-700 font-medium">
-              Next refresh: {nextRefresh}s
-            </span>
-          </div>
-          
-          <button 
-            onClick={() => loadDashboardData(true)}
-            disabled={refreshing}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-2"
-          >
-            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-            {refreshing ? 'Refreshing...' : 'Manual Refresh'}
-          </button>
-        </div>
-      </div>
+    <div className="p-6 bg-gray-50 min-h-screen">
+      <div className="space-y-6">
+        {/* Header */}
+        <DashboardHeader onRefresh={() => loadDashboardData()} isRefreshing={isRefreshing} />
 
-      {/* Statistics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((stat, index) => {
-          const Icon = stat.icon;
-          return (
-            <div key={index} className="bg-white rounded-xl p-6 border border-gray-200 hover:shadow-lg transition-shadow">
-              <div className="flex items-center justify-between mb-4">
-                <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${getIconBgColor(stat.color)}`}>
-                  <Icon className={`w-6 h-6 text-${stat.color}-600`} />
-                </div>
-                <div className={`px-2 py-1 rounded-full text-xs font-medium ${getColorClasses(stat.color)}`}>
-                  {stat.changeType === 'increase' && <TrendingUp className="w-3 h-3 inline mr-1" />}
-                  {stat.changeType === 'decrease' && <TrendingDown className="w-3 h-3 inline mr-1" />}
-                  {stat.change}
-                </div>
-              </div>
+        {/* Statistics Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <StatCard 
+            label="Total Incidents" 
+            value={displayStats.total} 
+            icon={Activity} 
+            color="text-blue-600" 
+            bgColor="bg-blue-50"
+            trend={displayStats.trends.total.trend}
+            trendValue={displayStats.trends.total.value}
+          />
+          <StatCard 
+            label="Active" 
+            value={displayStats.active} 
+            icon={AlertTriangle} 
+            color="text-orange-600" 
+            bgColor="bg-orange-50"
+            trend={displayStats.trends.active.trend}
+            trendValue={displayStats.trends.active.value}
+          />
+          <StatCard 
+            label="Resolved Today" 
+            value={displayStats.resolved} 
+            icon={CheckCircle} 
+            color="text-green-600" 
+            bgColor="bg-green-50"
+            trend={displayStats.trends.resolved.trend}
+            trendValue={displayStats.trends.resolved.value}
+          />
+          <StatCard 
+            label="On-Call Staff" 
+            value={displayStats.onCall} 
+            icon={Users} 
+            color="text-purple-600" 
+            bgColor="bg-purple-50"
+            trend={displayStats.trends.onCall.trend}
+            trendValue={displayStats.trends.onCall.value}
+          />
+        </div>
+
+        {/* Main Content */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Recent Incidents */}
+          <div className="lg:col-span-2 bg-white rounded-xl p-6 border border-gray-200 shadow-sm">
+            <div className="flex items-center justify-between mb-6">
               <div>
-                <h3 className="text-2xl font-bold text-gray-900 mb-1">{stat.value}</h3>
-                <p className="text-sm font-medium text-gray-900">{stat.title}</p>
-                <p className="text-xs text-gray-500 mt-1">{stat.description}</p>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-
-
-      {/* Main Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Recent Incidents */}
-        <div className="lg:col-span-2 bg-white rounded-xl p-6 border border-gray-200">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h2 className="text-xl font-bold text-gray-900">Recent Incidents</h2>
-              <p className="text-sm text-gray-500">Latest emergency response activities</p>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="flex items-center text-sm text-gray-500">
-                <Activity className="w-4 h-4 mr-1" />
-                {incidents.length} total
+                <h2 className="text-xl font-bold text-gray-900">Recent Incidents</h2>
+                <p className="text-sm text-gray-500 mt-0.5">Latest emergency alerts and responses</p>
               </div>
               <button 
                 onClick={() => onNavigate && onNavigate('incidents')}
-                className="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg text-sm hover:bg-blue-100 transition-colors"
+                className="text-blue-600 text-sm hover:text-blue-700 font-semibold hover:underline transition-colors"
               >
-                View All
+                View All →
               </button>
             </div>
-          </div>
-          
-          <div className="space-y-4">
-            {recentIncidents.length > 0 ? recentIncidents.map((incident) => {
-              const getIncidentBorderColor = (severity) => {
-                const severityLower = severity?.toLowerCase();
-                switch (severityLower) {
-                  case 'critical': return 'border-l-red-500 bg-red-50';
-                  case 'high': return 'border-l-red-400 bg-red-50';
-                  case 'medium': return 'border-l-yellow-500 bg-yellow-50';
-                  case 'low': return 'border-l-green-500 bg-green-50';
-                  default: return 'border-l-gray-400 bg-gray-50';
-                }
-              };
-              
-              return (
-              <div key={incident.id} className={`border border-gray-200 border-l-4 ${getIncidentBorderColor(incident.severity)} rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer`}>
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      {getStatusIcon(incident.status)}
-                      <h3 className="font-semibold text-gray-900">{incident.title}</h3>
-                      <span className={`px-2 py-1 rounded text-xs font-medium border ${getSeverityColor(incident.severity)} flex items-center gap-1`}>
-                        {incident.severity?.toLowerCase() === 'critical' && <AlertTriangle className="w-3 h-3" />}
-                        {incident.severity}
-                      </span>
-                    </div>
-                    <p className="text-sm text-gray-600 mb-2">{incident.description}</p>
-                    <div className="flex items-center gap-4 text-xs text-gray-500">
-                      <span className="flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        {incident.time}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Users className="w-3 h-3" />
-                        {incident.assignee}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              );
-            }) : (
-              <div className="text-center py-8">
-                <AlertCircle className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-                <p className="text-gray-900 font-medium">No recent incidents</p>
-                <p className="text-gray-600 text-sm mt-1">All systems are currently stable</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* On-Call Schedule & System Status */}
-        <div className="space-y-6">
-          {/* System Status */}
-          <div className="bg-white rounded-xl p-6 border border-gray-200">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-bold text-gray-900">System Status</h3>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
-                <span className="text-sm text-green-600 font-medium">All Systems Operational</span>
-              </div>
-            </div>
+            
             <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600">Response Time</span>
-                <span className="text-sm font-medium text-green-600">Normal</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600">Alert System</span>
-                <span className="text-sm font-medium text-green-600">Active</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600">Communication</span>
-                <span className="text-sm font-medium text-green-600">Online</span>
-              </div>
+              {recentIncidents.length > 0 ? (
+                recentIncidents.map((incident) => (
+                  <IncidentCard 
+                    key={incident.id} 
+                    incident={incident}
+                    onClick={() => console.log('View incident:', incident.id)}
+                  />
+                ))
+              ) : (
+                <EmptyState type="incidents" />
+              )}
             </div>
           </div>
 
-          {/* On-Call Schedule */}
-          <div className="bg-white rounded-xl p-6 border border-gray-200">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h2 className="text-xl font-bold text-gray-900">On-Call Team</h2>
-                <p className="text-sm text-gray-500">Current emergency responders</p>
-              </div>
-              <div className="flex items-center gap-3">
+          {/* Sidebar */}
+          <div className="space-y-6">
+            {/* On-Call Team */}
+            <div className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">On-Call Team</h2>
+                  <p className="text-sm text-gray-500 mt-0.5">{onCallMembers.length} members active</p>
+                </div>
                 <button 
                   onClick={() => onNavigate && onNavigate('oncall-schedule')}
-                  className="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg text-sm hover:bg-blue-100 transition-colors"
+                  className="text-blue-600 text-sm hover:text-blue-700 font-semibold hover:underline transition-colors"
                 >
-                  View All
+                  View All →
                 </button>
-                <Shield className="w-5 h-5 text-blue-600" />
+              </div>
+          
+              <div className="space-y-1">
+                {onCallMembers.length > 0 ? (
+                  onCallMembers.map((member, index) => (
+                    <OnCallMember key={member.id || index} member={member} />
+                  ))
+                ) : (
+                  <EmptyState type="oncall" />
+                )}
               </div>
             </div>
-          
-          <div className="space-y-4">
-            {onCallSchedule.length > 0 ? onCallSchedule.map((member, index) => (
-              <div key={index} className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                  <span className="text-sm font-medium text-blue-600">{member.avatar}</span>
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="font-medium text-gray-900">{member.name}</p>
-                    <span className={`px-2 py-1 rounded-full text-xs ${
-                      member.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
-                    }`}>
-                      {member.role}
-                    </span>
-                  </div>
-                  <p className="text-sm text-gray-600">{member.team}</p>
-                  <p className="text-xs text-gray-500">{member.time}</p>
-                </div>
-                <div className={`w-3 h-3 rounded-full ${
-                  member.status === 'active' ? 'bg-green-500' : 'bg-gray-300'
-                }`}></div>
-              </div>
-            )) : (
-              <div className="text-center py-8">
-                <Users className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-                <p className="text-gray-900 font-medium">No on-call schedule available</p>
-                <p className="text-gray-600 text-sm mt-1">Team schedules will appear here</p>
-              </div>
-            )}
-          </div>
+
+            {/* System Status */}
+            <SystemStatus />
           </div>
         </div>
       </div>
-
     </div>
   );
-};
+}
 
-export default DashboardPage;

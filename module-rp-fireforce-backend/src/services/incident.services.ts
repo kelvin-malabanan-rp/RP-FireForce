@@ -10,6 +10,8 @@ import {
 } from '../types';
 import {DatabaseService} from './database.service';
 import {PushNotificationService} from './push-notification.service';
+import {EmailService} from "./email.service";
+import {OnCallService} from "./oncall.service";
 
 export class IncidentService {
 	private env: Env;
@@ -166,7 +168,6 @@ export class IncidentService {
 		return `https://console.aws.amazon.com/cloudwatch/home?region=${region}#alarmsV2:alarm/${encodeURIComponent(alarm.AlarmName)}`;
 	}
 
-	// Updated createIncident method to handle async operations and return the created incident
 	public async createIncident(data: CreateIncidentTypes) {
 		await this.validateUserByEmail(data.reportedBy);
 
@@ -180,16 +181,77 @@ export class IncidentService {
 			timestamp: new Date().toISOString()
 		};
 
-		return await this.dbService.insertIncident(incidentData);
+		const result = await this.dbService.insertIncident(incidentData);
+
+		// Handle notifications based on whether it's an override or normal rotation
+		if (data.notify_users && Array.isArray(data.notify_users) && data.notify_users.length > 0) {
+			// Emergency override - notify specific users
+			await this.notifySpecificUsers(result.id, data.notify_users);
+		} else {
+			// Normal rotation - notify current on-call
+			await this.notifyCurrentOnCall(result.id);
+		}
+
+		return result;
 	}
 
-	private validateUserByEmail(email: string){
-		try {
-			this.dbService.getUserByEmail(email);
+	private async notifySpecificUsers(incidentId: string, userIds: string[]): Promise<void> {
+		const incident = await this.dbService.getIncidentBy(incidentId);
+		const emailService = new EmailService(this.env);
+
+		for (const userId of userIds) {
+			const user = await this.dbService.getUserById(userId);
+			if (user) {
+				try {
+					await emailService.sendIncidentAlert(incident, user.email);
+					await this.trackNotification(incidentId, userId, 'initial');
+				} catch (error) {
+					console.error(`Failed to notify user ${userId}:`, error);
+				}
+			}
 		}
-		catch (error) {
-			console.error(error);
+	}
+
+	private async notifyCurrentOnCall(incidentId: string): Promise<void> {
+		const incident = await this.dbService.getIncidentBy(incidentId);
+		const emailService = new EmailService(this.env);
+
+		// Get all teams and their current on-call members
+		const oncallService = new OnCallService(this.env);
+		const teams = await oncallService.getOnCallTeams();
+
+		for (const team of teams) {
+			const currentOnCall = await oncallService.getCurrentOnCall(team.id);
+
+			if (currentOnCall) {
+				// Notify primary
+				if (currentOnCall.primary) {
+					try {
+						await emailService.sendIncidentAlert(incident, currentOnCall.primary.email);
+						await this.trackNotification(incidentId, currentOnCall.primary.id, 'initial');
+					} catch (error) {
+						console.error(`Failed to notify primary:`, error);
+					}
+				}
+
+				// Notify backup
+				if (currentOnCall.backup) {
+					try {
+						await emailService.sendIncidentAlert(incident, currentOnCall.backup.email);
+						await this.trackNotification(incidentId, currentOnCall.backup.id, 'initial');
+					} catch (error) {
+						console.error(`Failed to notify backup:`, error);
+					}
+				}
+			}
 		}
+	}
+
+	private async trackNotification(incidentId: string, userId: string, type: string): Promise<void> {
+		await this.dbService.db.prepare(`
+        INSERT INTO incident_notifications (id, incident_id, user_id, notification_type, sent_at)
+        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `).bind(crypto.randomUUID(), incidentId, userId, type).run();
 	}
 
 	private validateUserById(userId: string){
@@ -198,6 +260,15 @@ export class IncidentService {
 		} catch (error) {
 			console.error(error);
 			throw error; // Re-throw so the calling function knows validation failed
+		}
+	}
+
+	private async validateUserByEmail(email: string): Promise<void> {
+		try {
+			await this.dbService.getUserByEmail(email);
+		} catch (error) {
+			console.error(error);
+			throw error;
 		}
 	}
 

@@ -14,47 +14,37 @@ import {
   ChevronDown,
   Activity,
   Zap,
-  Globe
+  Globe,
+  Volume2,
+  Monitor
 } from 'lucide-react';
+import useEnhancedNotifications from '../../hooks/useEnhancedNotifications';
+import NotificationSettings from '../NotificationSettings';
 
-const TopNavigation = ({ user, onLogout, toggleSidebar, collapsed }) => {
+const TopNavigation = ({ user, onLogout, toggleSidebar, collapsed, onNavigateToSettings, onNavigateToIncident }) => {
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showNotificationSettings, setShowNotificationSettings] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [darkMode, setDarkMode] = useState(false);
   
   const userDropdownRef = useRef(null);
   const notificationRef = useRef(null);
 
-  // Mock notifications
-  const notifications = [
-    {
-      id: 1,
-      title: 'Critical Alert',
-      message: 'Server outage detected in production environment',
-      time: '2 min ago',
-      type: 'critical',
-      unread: true
-    },
-    {
-      id: 2,
-      title: 'Schedule Update',
-      message: 'Your on-call shift has been modified for next week',
-      time: '15 min ago',
-      type: 'info',
-      unread: true
-    },
-    {
-      id: 3,
-      title: 'Incident Resolved',
-      message: 'Database connection issue has been successfully fixed',
-      time: '1 hour ago',
-      type: 'success',
-      unread: false
-    }
-  ];
-
-  const unreadCount = notifications.filter(n => n.unread).length;
+  // Use enhanced notifications hook with browser notifications and sounds
+  const userId = user?.id || localStorage.getItem('userId') || 'user-1';
+  const { 
+    notifications, 
+    unreadCount, 
+    markAsRead, 
+    markAllAsRead, 
+    refresh,
+    isBrowserNotificationSupported,
+    browserPermission,
+    requestBrowserPermission,
+    soundEnabled,
+    toggleSound
+  } = useEnhancedNotifications(userId);
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -70,6 +60,19 @@ const TopNavigation = ({ user, onLogout, toggleSidebar, collapsed }) => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Listen for notification clicks from browser notifications
+  useEffect(() => {
+    const handleNotificationClick = (event) => {
+      const { incidentId } = event.detail;
+      if (incidentId && onNavigateToIncident) {
+        onNavigateToIncident(incidentId);
+      }
+    };
+
+    window.addEventListener('notificationClick', handleNotificationClick);
+    return () => window.removeEventListener('notificationClick', handleNotificationClick);
+  }, [onNavigateToIncident]);
 
   const getNotificationIcon = (type) => {
     switch (type) {
@@ -87,6 +90,29 @@ const TopNavigation = ({ user, onLogout, toggleSidebar, collapsed }) => {
   const handleLogout = () => {
     setShowUserDropdown(false);
     onLogout();
+  };
+
+  const handleAccountSettings = () => {
+    setShowUserDropdown(false);
+    if (onNavigateToSettings) {
+      onNavigateToSettings();
+    }
+  };
+
+  // Handle notification click - navigate to incident
+  const handleNotificationClick = (notification) => {
+    markAsRead(notification.id);
+    setShowNotifications(false);
+    
+    // Navigate to the incident details page
+    if (onNavigateToIncident && notification.incidentId) {
+      onNavigateToIncident(notification.incidentId);
+    }
+  };
+
+  // Handle mark all as read
+  const handleMarkAllRead = () => {
+    markAllAsRead();
   };
 
   return (
@@ -125,51 +151,10 @@ const TopNavigation = ({ user, onLogout, toggleSidebar, collapsed }) => {
             )}
           </div>
 
-          {/* System Status */}
-          <div className="hidden xl:flex items-center space-x-3 px-3 py-2 bg-green-50 rounded-lg border border-green-200">
-            <div className="flex items-center space-x-2">
-              <Activity className="w-4 h-4 text-green-600" />
-              <span className="text-sm font-medium text-green-700">All Systems Operational</span>
-            </div>
-            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-          </div>
         </div>
 
         {/* Right Section */}
         <div className="flex items-center space-x-3">
-          {/* Quick Actions */}
-          <div className="hidden lg:flex items-center space-x-2">
-            {/* Performance Indicator */}
-            <button className="flex items-center space-x-2 px-3 py-2 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors duration-200 border border-blue-200">
-              <Zap className="w-4 h-4 text-blue-600" />
-              <span className="text-sm font-medium text-blue-700">99.9%</span>
-            </button>
-
-            {/* Globe Status */}
-            <button className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors duration-200 text-gray-600 hover:text-gray-800">
-              <Globe className="w-5 h-5" />
-            </button>
-          </div>
-
-          {/* Divider */}
-          <div className="w-px h-6 bg-gray-300"></div>
-
-          {/* Theme Toggle */}
-          <button
-            onClick={() => setDarkMode(!darkMode)}
-            className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors duration-200 text-gray-600 hover:text-gray-800"
-          >
-            {darkMode ? (
-              <Sun className="w-5 h-5 text-amber-500" />
-            ) : (
-              <Moon className="w-5 h-5" />
-            )}
-          </button>
-
-          {/* Help Button */}
-          <button className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors duration-200 text-gray-600 hover:text-gray-800">
-            <HelpCircle className="w-5 h-5" />
-          </button>
 
           {/* Notifications */}
           <div className="relative" ref={notificationRef}>
@@ -189,50 +174,109 @@ const TopNavigation = ({ user, onLogout, toggleSidebar, collapsed }) => {
             {showNotifications && (
               <div className="absolute right-0 mt-2 w-96 bg-white border border-gray-200 rounded-lg shadow-xl z-50">
                 <div className="p-4 border-b border-gray-200">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between mb-3">
                     <h3 className="text-lg font-bold text-gray-900">Notifications</h3>
-                    <button className="text-sm text-blue-600 hover:text-blue-700 font-medium px-3 py-1 rounded-lg hover:bg-blue-50 transition-colors duration-200">
-                      Mark all read
+                    {unreadCount > 0 && (
+                      <button 
+                        onClick={handleMarkAllRead}
+                        className="text-sm text-blue-600 hover:text-blue-700 font-medium px-3 py-1 rounded-lg hover:bg-blue-50 transition-colors duration-200"
+                      >
+                        Mark all read
+                      </button>
+                    )}
+                  </div>
+                  {/* Notification Status Indicators */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {/* Browser Notification Status */}
+                    {isBrowserNotificationSupported && (
+                      <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
+                        browserPermission === 'granted' 
+                          ? 'bg-green-100 text-green-700' 
+                          : 'bg-gray-100 text-gray-600'
+                      }`}>
+                        <Monitor className="w-3 h-3" />
+                        {browserPermission === 'granted' ? 'Desktop On' : 'Desktop Off'}
+                      </div>
+                    )}
+                    {/* Sound Status */}
+                    <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
+                      soundEnabled 
+                        ? 'bg-blue-100 text-blue-700' 
+                        : 'bg-gray-100 text-gray-600'
+                    }`}>
+                      <Volume2 className="w-3 h-3" />
+                      {soundEnabled ? 'Sound On' : 'Sound Off'}
+                    </div>
+                    {/* Settings Button */}
+                    <button
+                      onClick={() => {
+                        setShowNotifications(false);
+                        setShowNotificationSettings(true);
+                      }}
+                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
+                    >
+                      <Settings className="w-3 h-3" />
+                      Settings
                     </button>
                   </div>
                 </div>
                 
                 <div className="max-h-96 overflow-y-auto">
-                  {notifications.map((notification) => (
-                    <div
-                      key={notification.id}
-                      className={`p-4 border-b border-gray-100 hover:bg-gray-50 transition-colors duration-200 ${
-                        notification.unread ? 'bg-blue-50/50' : ''
-                      }`}
-                    >
-                      <div className="flex items-start space-x-3">
-                        <div className="mt-1">
-                          {getNotificationIcon(notification.type)}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-900">
-                            {notification.title}
-                          </p>
-                          <p className="text-sm text-gray-600 mt-1 leading-relaxed">
-                            {notification.message}
-                          </p>
-                          <p className="text-xs text-gray-400 mt-2">
-                            {notification.time}
-                          </p>
-                        </div>
-                        {notification.unread && (
-                          <div className="w-2 h-2 bg-blue-500 rounded-full mt-2"></div>
-                        )}
-                      </div>
+                  {notifications.length === 0 ? (
+                    <div className="p-8 text-center">
+                      <Bell className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                      <p className="text-gray-500 text-sm">No notifications yet</p>
+                      <p className="text-gray-400 text-xs mt-1">You'll be notified of new incidents and comments</p>
                     </div>
-                  ))}
+                  ) : (
+                    notifications.map((notification) => (
+                      <div
+                        key={notification.id}
+                        onClick={() => handleNotificationClick(notification)}
+                        className={`p-4 border-b border-gray-100 hover:bg-gray-50 transition-colors duration-200 cursor-pointer ${
+                          notification.unread ? 'bg-blue-50/50' : ''
+                        }`}
+                      >
+                        <div className="flex items-start space-x-3">
+                          <div className="mt-1">
+                            {getNotificationIcon(notification.type)}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-medium text-gray-900">
+                                {notification.title}
+                              </p>
+                              {notification.category === 'comment' && (
+                                <MessageSquare className="w-3 h-3 text-blue-500" />
+                              )}
+                            </div>
+                            <p className="text-sm text-gray-600 mt-1 leading-relaxed line-clamp-2">
+                              {notification.message}
+                            </p>
+                            <p className="text-xs text-gray-400 mt-2">
+                              {notification.time}
+                            </p>
+                          </div>
+                          {notification.unread && (
+                            <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0"></div>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
                 
-                <div className="p-4 border-t border-gray-200">
-                  <button className="w-full text-center text-sm text-blue-600 hover:text-blue-700 font-medium py-2 rounded-lg hover:bg-blue-50 transition-colors duration-200">
-                    View all notifications
-                  </button>
-                </div>
+                {notifications.length > 0 && (
+                  <div className="p-4 border-t border-gray-200">
+                    <button 
+                      onClick={refresh}
+                      className="w-full text-center text-sm text-blue-600 hover:text-blue-700 font-medium py-2 rounded-lg hover:bg-blue-50 transition-colors duration-200 flex items-center justify-center gap-2"
+                    >
+                      <Activity className="w-4 h-4" />
+                      Refresh Notifications
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -250,12 +294,14 @@ const TopNavigation = ({ user, onLogout, toggleSidebar, collapsed }) => {
                 <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>
               </div>
               {!collapsed && (
-                <div className="text-left">
-                  <p className="text-sm font-medium text-gray-900">
-                    {user?.name || 'Administrator'}
+                <div className="text-left min-w-0 flex-1">
+                  <p className="text-sm font-medium text-gray-900 truncate">
+                    {user?.firstName && user?.lastName 
+                      ? `${user.firstName} ${user.lastName}` 
+                      : user?.name || 'Administrator'}
                   </p>
-                  <p className="text-xs text-gray-500">
-                    {user?.role || 'System Admin'}
+                  <p className="text-xs text-gray-500 truncate" title={user?.role}>
+                    {user?.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : 'User'}
                   </p>
                 </div>
               )}
@@ -264,24 +310,28 @@ const TopNavigation = ({ user, onLogout, toggleSidebar, collapsed }) => {
 
             {/* User Dropdown */}
             {showUserDropdown && (
-              <div className="absolute right-0 mt-2 w-64 bg-white border border-gray-200 rounded-lg shadow-xl z-50">
+              <div className="absolute right-0 mt-2 w-96 bg-white border border-gray-200 rounded-lg shadow-xl z-50">
                 <div className="p-4 border-b border-gray-200">
                   <div className="flex items-center space-x-3">
-                    <div className="relative">
+                    <div className="relative flex-shrink-0">
                       <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center shadow-md">
                         <User className="w-5 h-5 text-white" />
                       </div>
                       <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>
                     </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">
-                        {user?.name || 'Administrator'}
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-gray-900 truncate">
+                        {user?.firstName && user?.lastName 
+                          ? `${user.firstName} ${user.lastName}` 
+                          : user?.name || 'Administrator'}
                       </p>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-xs text-gray-500 break-all" title={user?.email || 'admin@fireforce.com'}>
                         {user?.email || 'admin@fireforce.com'}
                       </p>
+                      <p className="text-xs text-blue-600 font-medium mt-1">
+                        {user?.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : 'User'}
+                      </p>
                       <div className="flex items-center mt-1">
-                        <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
                         <span className="text-xs text-green-600">Online</span>
                       </div>
                     </div>
@@ -289,17 +339,12 @@ const TopNavigation = ({ user, onLogout, toggleSidebar, collapsed }) => {
                 </div>
 
                 <div className="py-1">
-                  <button className="w-full flex items-center px-4 py-3 text-sm text-gray-700 hover:text-gray-900 hover:bg-gray-50 transition-colors duration-200">
-                    <User className="w-4 h-4 mr-3" />
-                    My Profile
-                  </button>
-                  <button className="w-full flex items-center px-4 py-3 text-sm text-gray-700 hover:text-gray-900 hover:bg-gray-50 transition-colors duration-200">
+                  <button 
+                    onClick={handleAccountSettings}
+                    className="w-full flex items-center px-4 py-3 text-sm text-gray-700 hover:text-gray-900 hover:bg-gray-50 transition-colors duration-200"
+                  >
                     <Settings className="w-4 h-4 mr-3" />
                     Account Settings
-                  </button>
-                  <button className="w-full flex items-center px-4 py-3 text-sm text-gray-700 hover:text-gray-900 hover:bg-gray-50 transition-colors duration-200">
-                    <MessageSquare className="w-4 h-4 mr-3" />
-                    Support Center
                   </button>
                 </div>
 
@@ -317,8 +362,21 @@ const TopNavigation = ({ user, onLogout, toggleSidebar, collapsed }) => {
           </div>
         </div>
       </div>
+
+      {/* Notification Settings Modal */}
+      {showNotificationSettings && (
+        <NotificationSettings
+          isBrowserNotificationSupported={isBrowserNotificationSupported}
+          browserPermission={browserPermission}
+          requestBrowserPermission={requestBrowserPermission}
+          soundEnabled={soundEnabled}
+          toggleSound={toggleSound}
+          onClose={() => setShowNotificationSettings(false)}
+        />
+      )}
     </header>
   );
 };
 
 export default TopNavigation;
+  
