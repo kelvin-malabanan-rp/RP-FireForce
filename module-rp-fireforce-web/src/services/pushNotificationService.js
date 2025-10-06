@@ -161,6 +161,26 @@ export async function sendTestAlert(token, alertType = 'high') {
 }
 
 /**
+ * Check alert system health
+ * @returns {Promise<Object>} Health status
+ */
+export async function checkAlertSystemHealth() {
+  try {
+    const response = await fetch(`${BASE_URL}/api/health`);
+    
+    if (!response.ok) {
+      return { status: 'error', message: 'Backend unreachable' };
+    }
+
+    const data = await response.json();
+    return { status: 'operational', ...data };
+  } catch (error) {
+    console.error('Error checking backend health:', error);
+    return { status: 'error', message: error.message };
+  }
+}
+
+/**
  * Request browser notification permission
  * @returns {Promise<string>} Permission status
  */
@@ -284,6 +304,7 @@ export default {
   getDeviceAlertStatus,
   unregisterDevice,
   sendTestAlert,
+  checkAlertSystemHealth,
   requestNotificationPermission,
   generateWebDeviceToken,
   initializeWebPushNotifications,

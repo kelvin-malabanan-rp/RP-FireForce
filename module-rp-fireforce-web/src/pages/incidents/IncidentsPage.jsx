@@ -48,6 +48,7 @@ import {
   X
 } from 'lucide-react';
 import IncidentsModal from './incidents_modal';
+import CreateIncidentModal from './components/CreateIncidentModal';
 import Pagination from '../../components/Pagination';
 
 const IncidentsPage = ({ onViewIncident }) => {
@@ -968,6 +969,16 @@ const IncidentsPage = ({ onViewIncident }) => {
           </div>
         </div>
       )}
+
+      {/* New Create Incident Modal with Team Alerting */}
+      <CreateIncidentModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onIncidentCreated={(newIncident) => {
+          // Refresh incidents list
+          window.location.reload(); // Simple refresh, or you can fetch incidents again
+        }}
+      />
     </div>
   );
 };

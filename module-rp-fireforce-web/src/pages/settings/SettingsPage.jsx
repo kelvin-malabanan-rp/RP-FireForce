@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import AlertManager from '../../components/AlertManager';
 import { 
   Settings, 
   Shield, 
@@ -567,42 +568,24 @@ const SettingsPage = () => {
 
   const renderNotificationSettings = () => (
     <div className="space-y-6">
-      <div>
-        <h3 className="text-lg font-semibold text-black mb-4">Alert Notifications</h3>
+      {/* Alert Manager Component - Mobile-style comprehensive alert management */}
+      <div className="mb-6">
+        <AlertManager 
+          userId={accountData.id} 
+          userEmail={accountData.email} 
+        />
+      </div>
+
+      {/* Legacy Notification Settings - Keep for backward compatibility */}
+      <div className="border-t border-gray-200 pt-6">
+        <h3 className="text-lg font-semibold text-black mb-4">Additional Notification Preferences</h3>
         <div className="space-y-4">
           {[
             { key: 'emailAlerts', label: 'Email Alerts', desc: 'Receive alerts via email' },
             { key: 'smsAlerts', label: 'SMS Alerts', desc: 'Receive critical alerts via SMS' },
-            { key: 'pushNotifications', label: 'Push Notifications', desc: 'Browser and mobile push notifications' },
             { key: 'weekendAlerts', label: 'Weekend Alerts', desc: 'Receive alerts during weekends' },
             { key: 'escalationAlerts', label: 'Escalation Alerts', desc: 'Notify when incidents are escalated' },
             { key: 'maintenanceAlerts', label: 'Maintenance Alerts', desc: 'System maintenance notifications' }
-          ].map(({ key, label, desc }) => (
-            <div key={key} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
-              <div>
-                <h4 className="font-medium text-black">{label}</h4>
-                <p className="text-sm text-gray-700">{desc}</p>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={notifications[key]}
-                  onChange={() => handleNotificationChange(key)}
-                  className="sr-only peer"
-                />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-              </label>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="border-t border-gray-200 pt-6">
-        <h3 className="text-lg font-semibold text-black mb-4">Sound & Desktop</h3>
-        <div className="space-y-4">
-          {[
-            { key: 'soundEnabled', label: 'Sound Notifications', desc: 'Play sound for new alerts' },
-            { key: 'desktopNotifications', label: 'Desktop Notifications', desc: 'Show desktop popup notifications' }
           ].map(({ key, label, desc }) => (
             <div key={key} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
               <div>
