@@ -57,6 +57,7 @@ CREATE TABLE incidents (
 						   aws_console_url  TEXT,
 						   resolved_at      DATETIME,
 						   assigned_to      TEXT,
+						   team_id 			TEXT,
 						   resolved_by      TEXT,
 						   created_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
 						   updated_at       DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -69,6 +70,7 @@ CREATE INDEX idx_timestamp     ON incidents(timestamp);
 CREATE INDEX idx_aws_alarm     ON incidents(aws_alarm_name);
 CREATE INDEX idx_assigned_to   ON incidents(assigned_to);
 CREATE INDEX idx_resolved_by   ON incidents(resolved_by);
+CREATE INDEX idx_incidents_team_id ON incidents(team_id);
 
 CREATE TABLE user_sessions (
 							   id         TEXT PRIMARY KEY,
@@ -330,3 +332,4 @@ VALUES
 ('escalation-1','team-1','Platform Escalation','[{"step":1,"notify":["primary"],"wait_minutes":5},{"step":2,"notify":["backup"],"wait_minutes":10},{"step":3,"notify":["primary","backup"],"wait_minutes":15}]',15,1),
 ('escalation-2','team-2','App Support Escalation','[{"step":1,"notify":["primary"],"wait_minutes":3},{"step":2,"notify":["backup"],"wait_minutes":7},{"step":3,"notify":["escalation"],"wait_minutes":10}]',10,1),
 ('escalation-3','team-3','Database Ops Escalation','[{"step":1,"notify":["primary"],"wait_minutes":5},{"step":2,"notify":["backup"],"wait_minutes":10},{"step":3,"notify":["escalation"],"wait_minutes":15}]',15,1);
+

@@ -221,7 +221,7 @@ export class IncidentService {
 		const teams = await oncallService.getOnCallTeams();
 
 		for (const team of teams) {
-			const currentOnCall = await oncallService.getCurrentOnCall(team.id);
+			const currentOnCall = await oncallService.getAllCurrentOnCall(team.id);
 
 			if (currentOnCall) {
 				// Notify primary
