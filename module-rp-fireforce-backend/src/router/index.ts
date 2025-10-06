@@ -36,7 +36,7 @@ import {
 	getAuditStatsHandler,
 	exportAuditTrailAsCSVHandler,
 	getAuditLogsHandler
-} from "../handlers/auditHandler";
+} from "../handlers/audit.handlers";
 
 export class Router {
 	private env: Env;
