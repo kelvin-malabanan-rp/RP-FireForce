@@ -266,7 +266,10 @@ export default function IncidentsScreen() {
                         activeOpacity={1}
                         onPress={(e) => e.stopPropagation()}
                     >
-                        <ScrollView showsVerticalScrollIndicator={false}>
+                        <ScrollView
+                            showsVerticalScrollIndicator={false}
+                            contentContainerStyle={{ paddingBottom: 20 }}
+                        >
                             <View style={styles.modalHeader}>
                                 <Text style={styles.modalTitle}>Report New Incident</Text>
                                 <TouchableOpacity onPress={() => setModalVisible(false)}>
@@ -418,23 +421,48 @@ export default function IncidentsScreen() {
                                 )}
                             </View>
 
-                            <TouchableOpacity
-                                style={[styles.createButton, creating && styles.createButtonDisabled]}
-                                onPress={createNewIncident}
-                                disabled={creating}
-                            >
-                                {creating ? (
-                                    <ActivityIndicator color="#FFFFFF" />
-                                ) : (
-                                    <>
-                                        <Ionicons name="send" size={18} color="#FFFFFF" />
-                                        <Text style={styles.createButtonText}>
-                                            {newIncident.bypassRotation ? 'Create & Notify' : 'Create Incident'}
-                                        </Text>
-                                    </>
-                                )}
-                            </TouchableOpacity>
+                            {/* Only show button here if bypass is OFF */}
+                            {!newIncident.bypassRotation && (
+                                <TouchableOpacity
+                                    style={[styles.createButton, creating && styles.createButtonDisabled]}
+                                    onPress={createNewIncident}
+                                    disabled={creating}
+                                >
+                                    {creating ? (
+                                        <ActivityIndicator color="#FFFFFF" />
+                                    ) : (
+                                        <>
+                                            <Ionicons name="send" size={18} color="#FFFFFF" />
+                                            <Text style={styles.createButtonText}>
+                                                Create Incident
+                                            </Text>
+                                        </>
+                                    )}
+                                </TouchableOpacity>
+                            )}
                         </ScrollView>
+
+                        {/* Fixed button at bottom when bypass is ON */}
+                        {newIncident.bypassRotation && (
+                            <View style={styles.fixedButtonContainer}>
+                                <TouchableOpacity
+                                    style={[styles.createButton, creating && styles.createButtonDisabled]}
+                                    onPress={createNewIncident}
+                                    disabled={creating}
+                                >
+                                    {creating ? (
+                                        <ActivityIndicator color="#FFFFFF" />
+                                    ) : (
+                                        <>
+                                            <Ionicons name="send" size={18} color="#FFFFFF" />
+                                            <Text style={styles.createButtonText}>
+                                                Create & Notify
+                                            </Text>
+                                        </>
+                                    )}
+                                </TouchableOpacity>
+                            </View>
+                        )}
                     </TouchableOpacity>
                 </TouchableOpacity>
             </Modal>
@@ -610,7 +638,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#F9FAFB',
         borderRadius: 8,
         padding: 12,
-        maxHeight: 200,
+        marginBottom: 0,
     },
     userSelectionTitle: {
         fontSize: 13,
@@ -655,6 +683,13 @@ const styles = StyleSheet.create({
         marginTop: 2,
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
+    fixedButtonContainer: {
+        padding: 16,
+        paddingBottom: 20,
+        backgroundColor: '#FFFFFF',
+        borderTopWidth: 1,
+        borderTopColor: '#E5E7EB',
+    },
     emptyUsersContainer: {
         alignItems: 'center',
         justifyContent: 'center',
@@ -687,7 +722,8 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'center',
         gap: 8,
-        marginTop: 8,
+        marginTop: 20, // Add top margin
+        marginBottom: 20, // Add bottom margin for safety
     },
     createButtonDisabled: {
         backgroundColor: "#9CA3AF",
