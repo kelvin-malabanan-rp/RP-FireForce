@@ -16,6 +16,7 @@ export const usePushNotifications = () => {
     const [registrationStatus, setRegistrationStatus] = useState<'pending' | 'registered' | 'failed'>('pending');
     const [id, setId] = useState<string | null>(null);
 
+    // ──────────────────────────────────────────────
     // Load user session on mount
     useEffect(() => {
         const loadUserSession = async () => {
@@ -31,7 +32,7 @@ export const usePushNotifications = () => {
     }, []);
 
     // ──────────────────────────────────────────────
-    // Navigation on notification tap
+    // Navigation on notification tap (basic)
     useEffect(() => {
         const sub = Notifications.addNotificationResponseReceivedListener((response) => {
             const data = response.notification.request.content.data as any;
@@ -46,25 +47,11 @@ export const usePushNotifications = () => {
     }, []);
 
     // ──────────────────────────────────────────────
-    // Action buttons listener (acknowledge / decline)
-    // ► Unified response listener for both navigation and action buttons
+    // Unified listener for both action buttons and default taps
     useEffect(() => {
         const sub = Notifications.addNotificationResponseReceivedListener(async (response) => {
             const { actionIdentifier } = response;
-            const data = response.notification.request.content.data as { incidentId?: string } | undefined;
-            const incidentId = data?.incidentId;
-            if (!incidentId) return;
             const data = response.notification.request.content.data as any;
-
-            console.log('[push] Notification response:', actionIdentifier, data);
-
-            if (actionIdentifier === 'ACKNOWLEDGE') {
-                console.log('[push] User acknowledged incident', incidentId);
-                if (id) respondToIncident(incidentId, 'acknowledge', id);
-            } else if (actionIdentifier === 'DECLINE') {
-                console.log('[push] User declined incident', incidentId);
-                if (id) respondToIncident(incidentId, 'decline', id);
-            // Extract incidentId from different possible data structures
             const incidentId = data?.incidentId || data?.data?.incidentId;
 
             if (!incidentId) {
@@ -72,10 +59,11 @@ export const usePushNotifications = () => {
                 return;
             }
 
-            // Retrieve user session for actions
+            console.log('[push] Notification response:', actionIdentifier, data);
+
             const session = await retrieveUserSession();
 
-            if (actionIdentifier === "ACKNOWLEDGE") {
+            if (actionIdentifier === 'ACKNOWLEDGE') {
                 console.log('[push] User acknowledged incident', incidentId);
 
                 if (!session?.id) {
@@ -84,16 +72,14 @@ export const usePushNotifications = () => {
                 }
 
                 try {
-                    await respondToIncident(incidentId, "acknowledge", session.id);
+                    await respondToIncident(incidentId, 'acknowledge', session.id);
                     console.log('[push] Successfully acknowledged incident');
-
-                    // Dismiss the notification and its reminder
                     await Notifications.dismissNotificationAsync(`incident-${incidentId}`);
                     await Notifications.dismissNotificationAsync(`incident-${incidentId}-reminder`);
                 } catch (error) {
                     console.error('[push] Error acknowledging:', error);
                 }
-            } else if (actionIdentifier === "DECLINE") {
+            } else if (actionIdentifier === 'DECLINE') {
                 console.log('[push] User declined incident', incidentId);
 
                 if (!session?.id) {
@@ -102,24 +88,18 @@ export const usePushNotifications = () => {
                 }
 
                 try {
-                    await respondToIncident(incidentId, "decline", session.id);
+                    await respondToIncident(incidentId, 'decline', session.id);
                     console.log('[push] Successfully declined incident');
-
-                    // Dismiss the notification and its reminder
                     await Notifications.dismissNotificationAsync(`incident-${incidentId}`);
                     await Notifications.dismissNotificationAsync(`incident-${incidentId}-reminder`);
                 } catch (error) {
                     console.error('[push] Error declining:', error);
                 }
             } else {
+                // Default tap (no action button)
                 router.push({
                     pathname: '/inner-incident-page',
                     params: { incidentId },
-                });
-                // Default tap (no action button) → navigate to incident detail
-                router.push({
-                    pathname: "/inner-incident-page",
-                    params: { incidentId }
                 });
             }
         });
@@ -212,7 +192,7 @@ export const usePushNotifications = () => {
             importance: Notifications.AndroidImportance.HIGH,
             sound: 'alarm_sound',
             enableVibrate: true,
-            vibrationPattern: [0,250,250,250],
+            vibrationPattern: [0, 250, 250, 250],
         });
         await Notifications.setNotificationChannelAsync(CHANNELS.medium, {
             name: 'Medium Priority',

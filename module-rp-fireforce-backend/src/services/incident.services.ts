@@ -8,22 +8,27 @@ import {
 	IncidentFilters,
 	IncidentStats,
 } from '../types';
-import {DatabaseService} from './database.service';
-import {PushNotificationService} from './push-notification.service';
-import {EmailService} from "./email.service";
-import {OnCallService} from "./oncall.service";
+import { DatabaseService } from './database.service';
+import { PushNotificationService } from './push-notification.service';
+import { EmailService } from "./email.service";
+import { OnCallService } from "./oncall.service";
 
 export class IncidentService {
 	private env: Env;
 	private dbService: DatabaseService;
 	private pushService: PushNotificationService;
+	private emailService: EmailService;
+	private oncallService: OnCallService;
 
 	constructor(env: Env) {
 		this.env = env;
 		this.dbService = new DatabaseService(env);
 		this.pushService = new PushNotificationService(env);
+		this.emailService = new EmailService(env);
+		this.oncallService = new OnCallService(env);
 	}
 
+	// ──────────────────────────────────────────────
 	async getIncidents(params: IncidentFilters): Promise<Incident[]> {
 		return this.dbService.getIncidents(params);
 	}
@@ -32,7 +37,7 @@ export class IncidentService {
 		try {
 			const incidents = await this.dbService.getIncidents({ timeframe });
 
-			const stats: IncidentStats = {
+			return {
 				total: incidents.length,
 				open: incidents.filter(i => i.status === 'open').length,
 				investigating: incidents.filter(i => i.status === 'investigating').length,
@@ -44,14 +49,13 @@ export class IncidentService {
 					low: incidents.filter(i => i.severity === 'low').length,
 				}
 			};
-
-			return stats;
 		} catch (error) {
 			console.error('Error calculating stats:', error);
 			throw error;
 		}
 	}
 
+	// ──────────────────────────────────────────────
 	createTestAlarm() {
 		return {
 			AlarmName: `TEST-Manual-${Date.now()}`,
@@ -65,7 +69,8 @@ export class IncidentService {
 		};
 	}
 
-	async processCloudWatchAlarm(alarm: any): Promise<{ action: string; changes?: number; incident?: Incident; reason?: string }> {
+	// ──────────────────────────────────────────────
+	async processCloudWatchAlarm(alarm: any) {
 		const isAlarmState = alarm.NewStateValue === 'ALARM';
 		const isResolved = alarm.NewStateValue === 'OK';
 
@@ -87,7 +92,7 @@ export class IncidentService {
 			return { action: 'ignored', reason: 'Not an ALARM state' };
 		}
 
-		// Create new incident with proper null handling
+		// Create new incident
 		const incident: Partial<Incident> = {
 			id: `aws-${alarm.AlarmName}-${Date.now()}`,
 			title: alarm.AlarmName || 'Unknown Alarm',
@@ -104,25 +109,23 @@ export class IncidentService {
 			aws_console_url: alarm.AlarmName ? this.generateAwsConsoleUrl(alarm) : null
 		};
 
-		// Insert incident using DatabaseService
 		const result = await this.dbService.insertIncident(incident);
 		console.log('New incident created:', result.id);
 
-		// Send push notifications using PushNotificationService instance
 		try {
 			await this.pushService.sendIncidentAlert({
 				...incident,
 				id: result.id
 			} as Incident);
-			console.log('Push notifications sent for incident:', incident);
+			console.log('Push notifications sent for incident:', incident.title);
 		} catch (error) {
 			console.error('Failed to send push notifications:', error);
-			// Don't fail the entire operation if push notifications fail
 		}
 
 		return { action: 'created', incident: incident as Incident };
 	}
 
+	// ──────────────────────────────────────────────
 	async resolveIncident(incidentId: string, resolvedBy?: string) {
 		if (!this.dbService.db) throw new Error('DB not available');
 
@@ -136,7 +139,6 @@ export class IncidentService {
 		`;
 		await this.dbService.db.prepare(sql).bind(resolvedBy ?? null, incidentId).run();
 
-		// Fire all clear after successful resolve and capture the result
 		const notificationResult = await this.pushService.sendAllClear(incidentId);
 
 		return {
@@ -147,19 +149,13 @@ export class IncidentService {
 		};
 	}
 
-
+	// ──────────────────────────────────────────────
 	private mapAlarmToSeverity(alarm: any): 'low' | 'medium' | 'high' | 'critical' {
-		const alarmName = (alarm.AlarmName || '').toLowerCase();
+		const name = (alarm.AlarmName || '').toLowerCase();
 
-		if (alarmName.includes('critical') || alarmName.includes('outage') || alarmName.includes('down')) {
-			return 'critical';
-		}
-		if (alarmName.includes('high') || alarmName.includes('cpu') || alarmName.includes('error')) {
-			return 'high';
-		}
-		if (alarmName.includes('medium') || alarmName.includes('memory')) {
-			return 'medium';
-		}
+		if (name.includes('critical') || name.includes('outage') || name.includes('down')) return 'critical';
+		if (name.includes('high') || name.includes('cpu') || name.includes('error')) return 'high';
+		if (name.includes('medium') || name.includes('memory')) return 'medium';
 		return 'low';
 	}
 
@@ -168,6 +164,7 @@ export class IncidentService {
 		return `https://console.aws.amazon.com/cloudwatch/home?region=${region}#alarmsV2:alarm/${encodeURIComponent(alarm.AlarmName)}`;
 	}
 
+	// ──────────────────────────────────────────────
 	public async createIncident(data: CreateIncidentTypes) {
 		await this.validateUserByEmail(data.reportedBy);
 
@@ -183,27 +180,24 @@ export class IncidentService {
 
 		const result = await this.dbService.insertIncident(incidentData);
 
-		// Handle notifications based on whether it's an override or normal rotation
 		if (data.notify_users && Array.isArray(data.notify_users) && data.notify_users.length > 0) {
-			// Emergency override - notify specific users
 			await this.notifySpecificUsers(result.id, data.notify_users);
 		} else {
-			// Normal rotation - notify current on-call
 			await this.notifyCurrentOnCall(result.id);
 		}
 
 		return result;
 	}
 
+	// ──────────────────────────────────────────────
 	private async notifySpecificUsers(incidentId: string, userIds: string[]): Promise<void> {
 		const incident = await this.dbService.getIncidentById(incidentId);
-		const emailService = new EmailService(this.env);
 
 		for (const userId of userIds) {
 			const user = await this.dbService.getUserById(userId);
 			if (user) {
 				try {
-					await emailService.sendIncidentAlert(incident, user.email);
+					await this.emailService.sendIncidentAlert(incident, user.email);
 					await this.trackNotification(incidentId, userId, 'initial');
 				} catch (error) {
 					console.error(`Failed to notify user ${userId}:`, error);
@@ -212,6 +206,7 @@ export class IncidentService {
 		}
 	}
 
+	// ──────────────────────────────────────────────
 	private async notifyCurrentOnCall(incidentId: string): Promise<void> {
 		const incident = await this.dbService.getIncidentById(incidentId);
 		if (!incident) {
@@ -219,54 +214,52 @@ export class IncidentService {
 			return;
 		}
 
-		const pushService = new PushNotificationService(this.env);
+		try {
+			const teams = await this.oncallService.getTeams();
+			for (const team of teams) {
+				const current = await this.oncallService.getAllCurrentOnCall(team.id);
 
-		for (const team of teams) {
-			const currentOnCall = await oncallService.getAllCurrentOnCall(team.id);
-
-			if (currentOnCall) {
-				// Notify primary
-				if (currentOnCall.primary) {
+				if (current?.primary) {
 					try {
-						await emailService.sendIncidentAlert(incident, currentOnCall.primary.email);
-						await this.trackNotification(incidentId, currentOnCall.primary.id, 'initial');
-					} catch (error) {
-						console.error(`Failed to notify primary:`, error);
+						await this.emailService.sendIncidentAlert(incident, current.primary.email);
+						await this.trackNotification(incidentId, current.primary.id, 'initial');
+					} catch (err) {
+						console.error(`Failed to notify primary:`, err);
 					}
 				}
 
-				// Notify backup
-				if (currentOnCall.backup) {
+				if (current?.backup) {
 					try {
-						await emailService.sendIncidentAlert(incident, currentOnCall.backup.email);
-						await this.trackNotification(incidentId, currentOnCall.backup.id, 'initial');
-					} catch (error) {
-						console.error(`Failed to notify backup:`, error);
+						await this.emailService.sendIncidentAlert(incident, current.backup.email);
+						await this.trackNotification(incidentId, current.backup.id, 'initial');
+					} catch (err) {
+						console.error(`Failed to notify backup:`, err);
 					}
 				}
 			}
-		// Send to current on-call team
-		try {
-			await pushService.sendIncidentAlert(incident);
+
+			await this.pushService.sendIncidentAlert(incident);
 			console.log('Push notifications sent for incident:', incidentId);
 		} catch (error) {
-			console.error('Failed to send push notifications:', error);
+			console.error('Failed to send on-call notifications:', error);
 		}
 	}
 
+	// ──────────────────────────────────────────────
 	private async trackNotification(incidentId: string, userId: string, type: string): Promise<void> {
 		await this.dbService.db.prepare(`
-        INSERT INTO incident_notifications (id, incident_id, user_id, notification_type, sent_at)
-        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-    `).bind(crypto.randomUUID(), incidentId, userId, type).run();
+			INSERT INTO incident_notifications (id, incident_id, user_id, notification_type, sent_at)
+			VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+		`).bind(crypto.randomUUID(), incidentId, userId, type).run();
 	}
 
-	private validateUserById(userId: string){
+	// ──────────────────────────────────────────────
+	private async validateUserById(userId: string): Promise<void> {
 		try {
-			this.dbService.getUserById(userId);
+			await this.dbService.getUserById(userId);
 		} catch (error) {
 			console.error(error);
-			throw error; // Re-throw so the calling function knows validation failed
+			throw error;
 		}
 	}
 
@@ -279,23 +272,17 @@ export class IncidentService {
 		}
 	}
 
+	// ──────────────────────────────────────────────
 	public async selectIncidentById(incidentId: string): Promise<Incident> {
 		const incident = await this.dbService.getIncidentById(incidentId);
-
-		if (!incident) {
-			throw new Error(`Incident with ID ${incidentId} not found`);
-		}
-
+		if (!incident) throw new Error(`Incident with ID ${incidentId} not found`);
 		return incident;
 	}
 
 	async submitIncidentComment(data: IncidentCommentPayload): Promise<IncidentCommentResponse> {
-		this.validateUserById(data.userId);
+		await this.validateUserById(data.userId);
 		const result = await this.dbService.postIncidentComment(data);
-
-		if (!result) {
-			throw new Error('Failed to post incident comment');
-		}
+		if (!result) throw new Error('Failed to post incident comment');
 		return result;
 	}
 
@@ -307,13 +294,7 @@ export class IncidentService {
 		id: string,
 		status: string,
 		resolvedBy?: string
-	): Promise<{
-		id: string;
-		status: string;
-		updatedAt: string;
-		notifiedCount?: number;
-		users?: Array<{ name: string; email: string }>;
-	}> {
+	) {
 		return await this.dbService.updateSpecificIncidentStatus(id, status, resolvedBy);
 	}
 }
