@@ -16,7 +16,6 @@ export const usePushNotifications = () => {
     const [registrationStatus, setRegistrationStatus] = useState<'pending' | 'registered' | 'failed'>('pending');
     const [id, setId] = useState<string | null>(null);
 
-    // ──────────────────────────────────────────────
     // Load user session on mount
     useEffect(() => {
         const loadUserSession = async () => {
@@ -48,12 +47,16 @@ export const usePushNotifications = () => {
 
     // ──────────────────────────────────────────────
     // Action buttons listener (acknowledge / decline)
+    // ► Unified response listener for both navigation and action buttons
     useEffect(() => {
-        const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+        const sub = Notifications.addNotificationResponseReceivedListener(async (response) => {
             const { actionIdentifier } = response;
             const data = response.notification.request.content.data as { incidentId?: string } | undefined;
             const incidentId = data?.incidentId;
             if (!incidentId) return;
+            const data = response.notification.request.content.data as any;
+
+            console.log('[push] Notification response:', actionIdentifier, data);
 
             if (actionIdentifier === 'ACKNOWLEDGE') {
                 console.log('[push] User acknowledged incident', incidentId);
@@ -61,18 +64,72 @@ export const usePushNotifications = () => {
             } else if (actionIdentifier === 'DECLINE') {
                 console.log('[push] User declined incident', incidentId);
                 if (id) respondToIncident(incidentId, 'decline', id);
+            // Extract incidentId from different possible data structures
+            const incidentId = data?.incidentId || data?.data?.incidentId;
+
+            if (!incidentId) {
+                console.error('[push] No incident ID in notification data');
+                return;
+            }
+
+            // Retrieve user session for actions
+            const session = await retrieveUserSession();
+
+            if (actionIdentifier === "ACKNOWLEDGE") {
+                console.log('[push] User acknowledged incident', incidentId);
+
+                if (!session?.id) {
+                    console.error('[push] Cannot acknowledge - user not logged in');
+                    return;
+                }
+
+                try {
+                    await respondToIncident(incidentId, "acknowledge", session.id);
+                    console.log('[push] Successfully acknowledged incident');
+
+                    // Dismiss the notification and its reminder
+                    await Notifications.dismissNotificationAsync(`incident-${incidentId}`);
+                    await Notifications.dismissNotificationAsync(`incident-${incidentId}-reminder`);
+                } catch (error) {
+                    console.error('[push] Error acknowledging:', error);
+                }
+            } else if (actionIdentifier === "DECLINE") {
+                console.log('[push] User declined incident', incidentId);
+
+                if (!session?.id) {
+                    console.error('[push] Cannot decline - user not logged in');
+                    return;
+                }
+
+                try {
+                    await respondToIncident(incidentId, "decline", session.id);
+                    console.log('[push] Successfully declined incident');
+
+                    // Dismiss the notification and its reminder
+                    await Notifications.dismissNotificationAsync(`incident-${incidentId}`);
+                    await Notifications.dismissNotificationAsync(`incident-${incidentId}-reminder`);
+                } catch (error) {
+                    console.error('[push] Error declining:', error);
+                }
             } else {
                 router.push({
                     pathname: '/inner-incident-page',
                     params: { incidentId },
                 });
+                // Default tap (no action button) → navigate to incident detail
+                router.push({
+                    pathname: "/inner-incident-page",
+                    params: { incidentId }
+                });
             }
         });
+
         return () => sub.remove();
-    }, [id]);
+    }, []); // No dependencies needed
 
     // ──────────────────────────────────────────────
     useEffect(() => {
+        console.log('[push] useEffect start');
         setupNotifications();
     }, []);
 
@@ -155,6 +212,7 @@ export const usePushNotifications = () => {
             importance: Notifications.AndroidImportance.HIGH,
             sound: 'alarm_sound',
             enableVibrate: true,
+            vibrationPattern: [0,250,250,250],
         });
         await Notifications.setNotificationChannelAsync(CHANNELS.medium, {
             name: 'Medium Priority',

@@ -8,6 +8,7 @@ import {
 	User
 } from '../types';
 import {PushNotificationService} from "./push-notification.service";
+import {OnCallService} from "./oncall.service";
 
 export class DatabaseService {
 	private env: Env;
@@ -347,12 +348,13 @@ export class DatabaseService {
 
 	async updateSpecificIncidentStatus(
 		incidentId: string,
-		newStatus: string,
-		resolvedBy?: string
+		action: string,  // Changed from newStatus to action
+		userId?: string
 	): Promise<{
 		id: string;
 		status: string;
 		updatedAt: string;
+		escalated?: boolean;
 		notifiedCount?: number;
 		users?: Array<{ name: string; email: string }>;
 	}> {
@@ -362,42 +364,54 @@ export class DatabaseService {
 
 		// 1) Verify incident exists
 		const incident = await this.db
-			.prepare("SELECT id, status FROM incidents WHERE id = ?")
+			.prepare("SELECT id, status, team_id FROM incidents WHERE id = ?")
 			.bind(incidentId)
-			.first<{ id: string; status: string }>();
+			.first<{ id: string; status: string; team_id: string }>();
 
 		if (!incident) {
 			throw new Error(`Incident not found: ${incidentId}`);
 		}
 
-		// 2) If resolvedBy is provided, look up the user ID from email
-		let resolvedByUserId: string | null = null;
-		if (resolvedBy) {
-			const user = await this.db
-				.prepare("SELECT id FROM users WHERE email = ?")
-				.bind(resolvedBy)
-				.first<{ id: string }>();
+		let actualStatus: string;
+		let assignedToUserId: string | null = null;
+		let shouldEscalate = false;
 
-			if (user) {
-				resolvedByUserId = user.id;
-			} else {
-				console.warn(`User with email ${resolvedBy} not found, setting resolved_by to NULL`);
+		// 2) Map action to status and behavior
+		if (action === 'acknowledge') {
+			// Acknowledge = investigating + assign to user
+			actualStatus = 'investigating';
+			assignedToUserId = userId || null;
+		} else if (action === 'decline') {
+			// Decline = stay open + escalate to next person
+			actualStatus = 'open';
+			assignedToUserId = null; // Unassign
+			shouldEscalate = true;
+		} else {
+			// Direct status update (resolved, etc.)
+			actualStatus = action;
+			if (userId) {
+				const user = await this.db
+					.prepare("SELECT id FROM users WHERE id = ?")
+					.bind(userId)
+					.first<{ id: string }>();
+				assignedToUserId = user?.id || null;
 			}
 		}
 
-		// 3) Update incident status
+		// 3) Update incident
 		const updateQuery = `
-        UPDATE incidents
-        SET status = ?,
-            resolved_by = ?,
-            resolved_at = CASE WHEN ? = 'resolved' THEN CURRENT_TIMESTAMP ELSE resolved_at END,
-            updated_at = CURRENT_TIMESTAMP
-        WHERE id = ?
-        RETURNING id, status, updated_at as updatedAt
-    `;
+			UPDATE incidents
+			SET status = ?,
+				assigned_to = ?,
+				resolved_by = CASE WHEN ? = 'resolved' THEN ? ELSE resolved_by END,
+				resolved_at = CASE WHEN ? = 'resolved' THEN CURRENT_TIMESTAMP ELSE resolved_at END,
+				updated_at = CURRENT_TIMESTAMP
+			WHERE id = ?
+				RETURNING id, status, updated_at as updatedAt
+		`;
 
 		const result = await this.db.prepare(updateQuery)
-			.bind(newStatus, resolvedByUserId, newStatus, incidentId)
+			.bind(actualStatus, assignedToUserId, actualStatus, userId, actualStatus, incidentId)
 			.first();
 
 		if (!result) {
@@ -408,6 +422,7 @@ export class DatabaseService {
 			id: string;
 			status: string;
 			updatedAt: string;
+			escalated?: boolean;
 			notifiedCount?: number;
 			users?: Array<{ name: string; email: string }>;
 		} = {
@@ -416,8 +431,26 @@ export class DatabaseService {
 			updatedAt: result.updatedAt as string
 		};
 
-		// 4) If status is being set to 'resolved', send all-clear notifications
-		if (newStatus === 'resolved' && this.pushService) {
+		// 4) Handle escalation if declined
+		if (shouldEscalate && incident.team_id) {
+			try {
+				const oncallService = new OnCallService(this.env);
+				const escalationResult = await oncallService.escalateIncident({
+					teamId: incident.team_id,
+					incidentId,
+					reason: 'Declined by on-call responder',
+					priority: 'medium',
+					currentLevel: 0
+				});
+				response.escalated = true;
+				console.log(`Incident ${incidentId} escalated to ${escalationResult.escalatedTo.name}`);
+			} catch (error) {
+				console.error('Failed to escalate incident:', error);
+			}
+		}
+
+		// 5) If status is being set to 'resolved', send all-clear notifications
+		if (actualStatus === 'resolved' && this.pushService) {
 			try {
 				const notificationResult = await this.pushService.sendAllClear(incidentId);
 				response.notifiedCount = notificationResult.notifiedCount;

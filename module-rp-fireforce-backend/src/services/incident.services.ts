@@ -221,6 +221,30 @@ export class IncidentService {
 
 		const pushService = new PushNotificationService(this.env);
 
+		for (const team of teams) {
+			const currentOnCall = await oncallService.getAllCurrentOnCall(team.id);
+
+			if (currentOnCall) {
+				// Notify primary
+				if (currentOnCall.primary) {
+					try {
+						await emailService.sendIncidentAlert(incident, currentOnCall.primary.email);
+						await this.trackNotification(incidentId, currentOnCall.primary.id, 'initial');
+					} catch (error) {
+						console.error(`Failed to notify primary:`, error);
+					}
+				}
+
+				// Notify backup
+				if (currentOnCall.backup) {
+					try {
+						await emailService.sendIncidentAlert(incident, currentOnCall.backup.email);
+						await this.trackNotification(incidentId, currentOnCall.backup.id, 'initial');
+					} catch (error) {
+						console.error(`Failed to notify backup:`, error);
+					}
+				}
+			}
 		// Send to current on-call team
 		try {
 			await pushService.sendIncidentAlert(incident);
