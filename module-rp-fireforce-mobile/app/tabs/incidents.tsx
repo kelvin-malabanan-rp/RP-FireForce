@@ -24,6 +24,7 @@ import { FONT_FAMILY } from '@/constants/fonts';
 import {Ionicons} from "@expo/vector-icons";
 import IncidentList from "@/components/incident-list";
 import {usePushNotifications} from "@/hooks/use-push-notifications";
+import {retrieveUserSession} from "@/constants/local-storage";
 
 type TeamMember = {
     id: string;
@@ -65,19 +66,20 @@ export default function IncidentsScreen() {
         return new Date(dateTimeString);
     };
 
-    const transformApiIncident = (apiIncident: Incident): IncidentUI => ({
+    // utils/incident-transform.ts (or wherever transformApiIncident is)
+    const transformApiIncident = (apiIncident: any): IncidentUI => ({
         id: apiIncident.id,
         title: apiIncident.title,
         description: apiIncident.description,
         severity: apiIncident.severity,
         status: apiIncident.status,
-        timestamp: parseApiDateTime(apiIncident.timestamp),
-        reportedBy: apiIncident.reportedBy,
-        location: apiIncident.location || undefined,
-        assignedTo: apiIncident.assignedTo || undefined,
-        resolvedBy: apiIncident.resolvedBy || undefined,
-        resolvedAt: apiIncident.resolvedAt ? parseApiDateTime(apiIncident.resolvedAt) : undefined,
-        awsAlarmName: apiIncident.awsAlarmName || undefined,
+        timestamp: new Date(apiIncident.timestamp),
+        reportedBy: apiIncident.reported_by, // 👈 snake → camel
+        location: apiIncident.location ?? undefined,
+        assignedTo: apiIncident.assigned_to ?? undefined,
+        resolvedBy: apiIncident.resolved_by ?? undefined,
+        resolvedAt: apiIncident.resolved_at ? new Date(apiIncident.resolved_at) : undefined,
+        awsAlarmName: apiIncident.aws_alarm_name ?? undefined,
     });
 
     const fetchAllIncidents = async () => {
@@ -163,29 +165,31 @@ export default function IncidentsScreen() {
 
         setCreating(true);
         try {
+            const session = await retrieveUserSession();
+            const reportedByEmail = session?.email || "Unknown User";
+
             const incidentData: CreateIncidentData = {
                 title: newIncident.title,
                 description: newIncident.description,
                 severity: newIncident.severity,
                 location: newIncident.location || null,
-                reportedBy: "Mobile App User",
+                reportedBy: reportedByEmail,
             };
 
-            // Add selected users if bypassing rotation
             if (newIncident.bypassRotation) {
-                incidentData.notify_users = selectedUsers;
+                incidentData.notifyUsers = selectedUsers;
             }
 
             const response = await createIncident(incidentData);
 
             if (response.httpStatus === "OK" && response.data) {
-                const transformedIncident = transformApiIncident(response.data);
-                setIncidents((prev) => [transformedIncident, ...prev]);
+                // ✅ instead of manually updating state, just re-fetch
+                await fetchAllIncidents();
 
-                // Show local notification immediately (for testing/current user)
-                await sendIncidentNotification(transformedIncident);
+                // local notification
+                await sendIncidentNotification(response.data);
 
-                // Prepare emergency override info (only if bypass is ON)
+                // optional: send remote notifications
                 const isBypassing = newIncident.bypassRotation;
                 const selectedEmails = isBypassing
                     ? availableUsers
@@ -193,36 +197,30 @@ export default function IncidentsScreen() {
                         .map(u => u.email)
                     : [];
 
-                // Send remote notifications via usePushNotifications()
                 try {
-                    const notificationResult = await sendNotificationToOnCallTeam({
+                    await sendNotificationToOnCallTeam({
                         id: response.data.id,
                         title: response.data.title,
                         description: response.data.description,
                         severity: response.data.severity,
-                        teamId: response.data.teamId, // Optional if you have this in your backend
                         emergencyOverride: {
                             enabled: isBypassing,
                             userEmails: selectedEmails,
                         },
                     });
-
-                    console.log(
-                        `[incident] Notified ${notificationResult.sent} members, ${notificationResult.skipped} skipped`
-                    );
                 } catch (error) {
-                    console.error('[incident] Remote notification failed, but local notification sent', error);
+                    console.error('[incident] Remote notification failed', error);
                 }
 
-                // Reset form
                 resetIncidentForm();
-                setSelectedUsers([]);
                 setModalVisible(false);
 
-                const notifyMsg = newIncident.bypassRotation
-                    ? `Incident created and ${selectedUsers.length} people notified immediately`
-                    : "Incident created successfully";
-                Alert.alert("Success", notifyMsg);
+                Alert.alert(
+                    "Success",
+                    newIncident.bypassRotation
+                        ? `Incident created and ${selectedUsers.length} people notified immediately`
+                        : "Incident created successfully"
+                );
             } else {
                 throw new Error(response.message || "Failed to create incident");
             }
@@ -233,7 +231,6 @@ export default function IncidentsScreen() {
             setCreating(false);
         }
     };
-
 
     if (loading) {
         return (

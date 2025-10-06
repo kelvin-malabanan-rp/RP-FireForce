@@ -16,7 +16,6 @@ export const usePushNotifications = () => {
     const [registrationStatus, setRegistrationStatus] = useState<'pending' | 'registered' | 'failed'>('pending');
     const [id, setId] = useState<string | null>(null);
 
-    // ──────────────────────────────────────────────
     // Load user session on mount
     useEffect(() => {
         const loadUserSession = async () => {
@@ -31,7 +30,6 @@ export const usePushNotifications = () => {
         loadUserSession();
     }, []);
 
-    // ──────────────────────────────────────────────
     // Navigation on notification tap (basic)
     useEffect(() => {
         const sub = Notifications.addNotificationResponseReceivedListener((response) => {
@@ -46,7 +44,6 @@ export const usePushNotifications = () => {
         return () => sub.remove();
     }, []);
 
-    // ──────────────────────────────────────────────
     // Unified listener for both action buttons and default taps
     useEffect(() => {
         const sub = Notifications.addNotificationResponseReceivedListener(async (response) => {
@@ -107,13 +104,11 @@ export const usePushNotifications = () => {
         return () => sub.remove();
     }, []); // No dependencies needed
 
-    // ──────────────────────────────────────────────
     useEffect(() => {
         console.log('[push] useEffect start');
         setupNotifications();
     }, []);
 
-    // ──────────────────────────────────────────────
     // Register action categories
     const ensureCategoriesAsync = async () => {
         await Notifications.setNotificationCategoryAsync('incident-actions', [
@@ -130,16 +125,17 @@ export const usePushNotifications = () => {
         ]);
     };
 
-    // ──────────────────────────────────────────────
     const setupNotifications = async () => {
         try {
             await Notifications.setNotificationHandler({
-                handleNotification: async () => ({
-                    shouldShowAlert: true,
-                    shouldPlaySound: true,
-                    shouldSetBadge: true,
-                }),
+                handleNotification: async () =>
+                    ({
+                        shouldShowAlert: true,
+                        shouldPlaySound: true,
+                        shouldSetBadge: true,
+                    } as Notifications.NotificationBehavior),
             });
+
 
             const { status } = await Notifications.requestPermissionsAsync({
                 ios: {
@@ -164,7 +160,6 @@ export const usePushNotifications = () => {
         }
     };
 
-    // ──────────────────────────────────────────────
     // Notification channels
     const CHANNELS = {
         critical: 'critical-alerts-v4',
@@ -216,7 +211,6 @@ export const usePushNotifications = () => {
                     ? CHANNELS.medium
                     : CHANNELS.default;
 
-    // ──────────────────────────────────────────────
     // Device registration
     const registerDevice = async () => {
         if (!Device.isDevice) {
@@ -250,7 +244,7 @@ export const usePushNotifications = () => {
                 fcmToken: Platform.OS === 'android' ? (platformTok as any).data : undefined,
             });
 
-            if (response?.httpStatus === 'OK' || response?.success) {
+            if (response?.httpStatus === 'OK') {
                 setRegistrationStatus('registered');
                 console.log('[push] device registered for user:', userSession.id);
             } else {
@@ -265,30 +259,32 @@ export const usePushNotifications = () => {
         }
     };
 
-    // ──────────────────────────────────────────────
     // ✅ Corrected: Normal rotation + emergency override logic
     const sendNotificationToOnCallTeam = async (incident: {
         id: string;
         title: string;
         description: string;
         severity: 'low' | 'medium' | 'high' | 'critical';
-        teamId?: string;
+        teamId?: string | null;
         emergencyOverride?: { enabled: boolean; userEmails?: string[] };
     }) => {
         try {
             console.log('[push] Preparing to send notifications for incident:', incident.title);
 
-            // Determine notification mode
+            // Determine notification mode safely
+            const emergency = incident.emergencyOverride;
             const isEmergency =
-                incident.emergencyOverride?.enabled === true &&
-                Array.isArray(incident.emergencyOverride.userEmails) &&
-                incident.emergencyOverride.userEmails.length > 0;
+                !!emergency &&
+                emergency.enabled === true &&
+                Array.isArray(emergency.userEmails) &&
+                emergency.userEmails.length > 0;
 
             let membersToNotify: any[] = [];
 
-            if (isEmergency) {
-                console.log('[push] Emergency override active:', incident.emergencyOverride.userEmails);
-                const response = await getUsersForEmergencyOverride(incident.emergencyOverride.userEmails!);
+            if (isEmergency && emergency.userEmails) {
+                console.log('[push] Emergency override active:', emergency.userEmails);
+
+                const response = await getUsersForEmergencyOverride(emergency.userEmails);
                 if (response.httpStatus === 'OK' && response.data) {
                     membersToNotify = response.data;
                 } else {
@@ -361,7 +357,7 @@ export const usePushNotifications = () => {
         }
     };
 
-    // ──────────────────────────────────────────────
+
     // Local notification helper
     const sendIncidentNotification = async (incident: any) => {
         const channelId = getChannelBySeverity(incident.severity);
@@ -378,7 +374,6 @@ export const usePushNotifications = () => {
         });
     };
 
-    // ──────────────────────────────────────────────
     const clearIncidentNotifications = async (incidentId: string) => {
         await Notifications.dismissNotificationAsync(`incident-${incidentId}`);
         await Notifications.dismissNotificationAsync(`incident-${incidentId}-reminder`);
@@ -390,7 +385,6 @@ export const usePushNotifications = () => {
         return Promise.all(ids.map((id) => Notifications.getNotificationChannelAsync(id)));
     };
 
-    // ──────────────────────────────────────────────
     return {
         expoPushToken,
         fcmToken,

@@ -45,7 +45,6 @@ export class OnCallController {
     }
 
     // --- internal helpers ------------------------------------------------------
-
     private async json<T = any>(res: Response): Promise<T> {
         let data: any = null;
         try { data = await res.json(); } catch {}

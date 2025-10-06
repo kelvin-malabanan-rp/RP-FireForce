@@ -3,7 +3,7 @@ export interface IncidentUI {
     title: string;
     description: string;
     severity: "low" | "medium" | "high" | "critical";
-    status: "open" | "investigating" | "resolved";
+    status: "open" | "investigating" | "resolved" | "acknowledge"; // ✅ optional extra status
     timestamp: Date;
     reportedBy: string;
     location?: string;
@@ -11,6 +11,10 @@ export interface IncidentUI {
     resolvedBy?: string;
     resolvedAt?: Date;
     awsAlarmName?: string;
+    priority?: string;
+    teamId?: string;
+    createdAt?: string;
+    updatedAt?: string;
 }
 
 export interface API_RESPONSE<T = any> {
@@ -73,6 +77,7 @@ export interface CreateIncidentData {
     severity: "low" | "medium" | "high" | "critical";
     location?: string | null;
     reportedBy: string;
+    notifyUsers?: string[] | null; // optional array of user IDs or emails
 }
 
 // Response types for created incident
@@ -85,6 +90,7 @@ export interface CreatedIncidentData {
     severity: "low" | "medium" | "high" | "critical";
     status: "open" | "investigating" | "resolved";
     timestamp: string;
+    teamId: string | null;
 }
 
 // Incident Comments

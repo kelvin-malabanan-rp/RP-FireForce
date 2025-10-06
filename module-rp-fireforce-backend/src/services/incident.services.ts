@@ -206,7 +206,6 @@ export class IncidentService {
 		}
 	}
 
-	// ──────────────────────────────────────────────
 	private async notifyCurrentOnCall(incidentId: string): Promise<void> {
 		const incident = await this.dbService.getIncidentById(incidentId);
 		if (!incident) {
@@ -215,7 +214,7 @@ export class IncidentService {
 		}
 
 		try {
-			const teams = await this.oncallService.getTeams();
+			const teams = await this.oncallService.getUserTeam(incident.reportedBy);
 			for (const team of teams) {
 				const current = await this.oncallService.getAllCurrentOnCall(team.id);
 
