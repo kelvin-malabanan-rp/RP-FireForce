@@ -107,6 +107,7 @@ const DashboardLayout = ({ user, onLogout }) => {
           toggleSidebar={toggleSidebar}
           collapsed={sidebarCollapsed}
           onNavigateToSettings={() => handleSetActiveTab('settings')}
+          onNavigateToIncident={(incidentId) => handleSetActiveTab('incident-details', incidentId)}
         />
 
         {/* Page Content */}

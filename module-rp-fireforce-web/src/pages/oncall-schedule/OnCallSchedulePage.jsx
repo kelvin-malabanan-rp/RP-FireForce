@@ -5,11 +5,15 @@ import TeamSelector from './TeamSelector';
 import { LoadingState, ErrorState } from './LoadingAndError';
 import ScheduleCalendar from './ScheduleCalendar';
 import CreateOverrideModal from './CreateOverrideModal';
+import ScheduleDayModal from './ScheduleDayModal';
 
 const OnCallSchedulePage = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedTeam, setSelectedTeam] = useState('');
   const [isOverrideModalOpen, setIsOverrideModalOpen] = useState(false);
+  const [selectedDay, setSelectedDay] = useState(null);
+  const [selectedDaySchedule, setSelectedDaySchedule] = useState(null);
+  const [isDayModalOpen, setIsDayModalOpen] = useState(false);
 
   // API state management
   const [teams, setTeams] = useState([]);
@@ -39,11 +43,21 @@ const OnCallSchedulePage = () => {
   const fetchCurrentOnCall = async (teamId) => {
     try {
       const response = await fetch(`${BASE_URL}/api/oncall/current?teamId=${teamId}`);
+      
+      // Handle 404 gracefully - team may not have current on-call data
+      if (response.status === 404) {
+        console.log(`No current on-call data for team ${teamId}`);
+        setCurrentOnCall(null);
+        return;
+      }
+      
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       
       const data = await response.json();
       if (data.success && data.object) {
         setCurrentOnCall(data.object);
+      } else {
+        setCurrentOnCall(null);
       }
     } catch (err) {
       console.error('Error fetching current on-call:', err);
@@ -54,11 +68,21 @@ const OnCallSchedulePage = () => {
   const fetchSchedule = async (teamId, days = 30) => {
     try {
       const response = await fetch(`${BASE_URL}/api/oncall/schedule?teamId=${teamId}&days=${days}`);
+      
+      // Handle 404 gracefully - team may not have schedule data
+      if (response.status === 404) {
+        console.log(`No schedule data for team ${teamId}`);
+        setScheduleData([]);
+        return;
+      }
+      
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       
       const data = await response.json();
       if (data.success && data.object && data.object.schedule) {
         setScheduleData(data.object.schedule);
+      } else {
+        setScheduleData([]);
       }
     } catch (err) {
       console.error('Error fetching schedule:', err);
@@ -118,6 +142,109 @@ const OnCallSchedulePage = () => {
     setCurrentDate(newDate);
   };
 
+  const handleDayClick = (date, schedule) => {
+    setSelectedDay(date);
+    setSelectedDaySchedule(schedule);
+    setIsDayModalOpen(true);
+  };
+
+  const handleSaveSchedule = async (newSchedule) => {
+    try {
+      // Save to backend via override API
+      // Convert single day schedule to 24-hour override
+      const startTime = new Date(newSchedule.date);
+      startTime.setHours(0, 0, 0, 0);
+      
+      const endTime = new Date(newSchedule.date);
+      endTime.setHours(23, 59, 59, 999);
+
+      // Create overrides for each role that has a user assigned
+      const overrides = [];
+      
+      if (newSchedule.assignment?.primary) {
+        overrides.push({
+          teamId: selectedTeam,
+          startTime: startTime.toISOString(),
+          endTime: endTime.toISOString(),
+          userId: newSchedule.assignment.primary.id,
+          role: 'primary',
+          reason: `Schedule assignment for ${newSchedule.date}`
+        });
+      }
+      
+      if (newSchedule.assignment?.backup) {
+        overrides.push({
+          teamId: selectedTeam,
+          startTime: startTime.toISOString(),
+          endTime: endTime.toISOString(),
+          userId: newSchedule.assignment.backup.id,
+          role: 'backup',
+          reason: `Schedule assignment for ${newSchedule.date}`
+        });
+      }
+      
+      if (newSchedule.assignment?.escalation?.length > 0) {
+        newSchedule.assignment.escalation.forEach(member => {
+          overrides.push({
+            teamId: selectedTeam,
+            startTime: startTime.toISOString(),
+            endTime: endTime.toISOString(),
+            userId: member.id,
+            role: 'escalation',
+            reason: `Schedule assignment for ${newSchedule.date}`
+          });
+        });
+      }
+
+      // Send all overrides to backend
+      for (const override of overrides) {
+        const response = await fetch(`${BASE_URL}/api/oncall/override`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(override)
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Failed to save ${override.role} assignment`);
+        }
+      }
+
+      // Update local state only after successful save
+      const updatedScheduleData = [...scheduleData];
+      const existingIndex = updatedScheduleData.findIndex(s => s.date === newSchedule.date);
+      
+      if (existingIndex >= 0) {
+        updatedScheduleData[existingIndex] = newSchedule;
+      } else {
+        updatedScheduleData.push(newSchedule);
+      }
+      
+      setScheduleData(updatedScheduleData);
+      
+      // Refresh schedule from backend
+      await fetchSchedule(selectedTeam);
+      
+      alert('Schedule saved successfully!');
+    } catch (error) {
+      console.error('Error saving schedule:', error);
+      alert('Failed to save schedule: ' + error.message);
+    }
+  };
+
+  const handleDeleteSchedule = (date) => {
+    // Update local state
+    const newScheduleData = scheduleData.filter(s => s.date !== date);
+    setScheduleData(newScheduleData);
+    console.log('Schedule deleted for date:', date);
+    // TODO: Add API call to delete from backend
+  };
+
+  const getTeamMembers = () => {
+    if (!selectedTeam || !teams.length) return [];
+    const team = teams.find(t => t.id === selectedTeam);
+    return team?.members || [];
+  };
+
   const handleCreateOverride = async (overrideData) => {
     try {
       // Format dates to ISO string
@@ -170,7 +297,7 @@ const OnCallSchedulePage = () => {
               </div>
               <div>
                 <h1 className="text-3xl font-bold text-gray-900">On-Call Schedule</h1>
-                <p className="text-gray-600">Manage team schedules and on-call rotations</p>
+                <p className="text-gray-900 font-semibold">Manage team schedules and on-call rotations</p>
               </div>
             </div>
             
@@ -195,6 +322,7 @@ const OnCallSchedulePage = () => {
               scheduleData={scheduleData}
               currentDate={currentDate}
               onNavigateMonth={handleNavigateMonth}
+              onDayClick={handleDayClick}
             />
 
             {/* Quick Actions */}
@@ -222,16 +350,16 @@ const OnCallSchedulePage = () => {
                   <h3 className="font-semibold text-gray-900 mb-2">Team Information</h3>
                   <div className="space-y-2 text-sm">
                     <div>
-                      <span className="text-gray-600">Name:</span>{' '}
-                      <span className="font-medium">{teams.find(t => t.id === selectedTeam)?.name}</span>
+                      <span className="text-gray-900 font-semibold">Name:</span>{' '}
+                      <span className="font-bold text-gray-900">{teams.find(t => t.id === selectedTeam)?.name}</span>
                     </div>
                     <div>
-                      <span className="text-gray-600">Timezone:</span>{' '}
-                      <span className="font-medium">{teams.find(t => t.id === selectedTeam)?.timezone}</span>
+                      <span className="text-gray-900 font-semibold">Timezone:</span>{' '}
+                      <span className="font-bold text-gray-900">{teams.find(t => t.id === selectedTeam)?.timezone}</span>
                     </div>
                     <div>
-                      <span className="text-gray-600">Members:</span>{' '}
-                      <span className="font-medium">{teams.find(t => t.id === selectedTeam)?.members?.length || 0}</span>
+                      <span className="text-gray-900 font-semibold">Members:</span>{' '}
+                      <span className="font-bold text-gray-900">{teams.find(t => t.id === selectedTeam)?.members?.length || 0}</span>
                     </div>
                   </div>
                 </div>
@@ -248,6 +376,22 @@ const OnCallSchedulePage = () => {
         teams={teams}
         onSubmit={handleCreateOverride}
       />
+
+      {/* Schedule Day Modal */}
+      {isDayModalOpen && selectedDay && (
+        <ScheduleDayModal
+          date={selectedDay}
+          schedule={selectedDaySchedule}
+          onClose={() => {
+            setIsDayModalOpen(false);
+            setSelectedDay(null);
+            setSelectedDaySchedule(null);
+          }}
+          onSave={handleSaveSchedule}
+          onDelete={handleDeleteSchedule}
+          teamMembers={getTeamMembers()}
+        />
+      )}
     </div>
   );
 };
