@@ -43,14 +43,23 @@ export default function IncidentsScreen() {
     const { sendNotificationToOnCallTeam, sendIncidentNotification } = usePushNotifications();
     const [availableUsers, setAvailableUsers] = useState<TeamMember[]>([]);
     const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
-    const [showUserSelector, setShowUserSelector] = useState(false);
     const [newIncident, setNewIncident] = useState({
         title: "",
         description: "",
-        severity: "medium" as "low" | "medium" | "high" | "critical",
+        severity: "" as "low" | "medium" | "high" | "critical",
         location: "",
         bypassRotation: false,
     });
+    const resetIncidentForm = () => {
+        setNewIncident({
+            title: "",
+            description: "",
+            severity: "" as "low" | "medium" | "high" | "critical",
+            location: "",
+            bypassRotation: false,
+        });
+        setSelectedUsers([]);
+    };
 
     const parseApiDateTime = (dateTimeString: string): Date => {
         return new Date(dateTimeString);
@@ -176,28 +185,37 @@ export default function IncidentsScreen() {
                 // Show local notification immediately (for testing/current user)
                 await sendIncidentNotification(transformedIncident);
 
-                // Also send remote notifications to on-call team
+                // Prepare emergency override info (only if bypass is ON)
+                const isBypassing = newIncident.bypassRotation;
+                const selectedEmails = isBypassing
+                    ? availableUsers
+                        .filter(u => selectedUsers.includes(u.id))
+                        .map(u => u.email)
+                    : [];
+
+                // Send remote notifications via usePushNotifications()
                 try {
                     const notificationResult = await sendNotificationToOnCallTeam({
                         id: response.data.id,
                         title: response.data.title,
                         description: response.data.description,
                         severity: response.data.severity,
+                        teamId: response.data.teamId, // Optional if you have this in your backend
+                        emergencyOverride: {
+                            enabled: isBypassing,
+                            userEmails: selectedEmails,
+                        },
                     });
-                    console.log(`[incident] Remote: ${notificationResult.sent} sent, ${notificationResult.skipped} skipped`);
+
+                    console.log(
+                        `[incident] Notified ${notificationResult.sent} members, ${notificationResult.skipped} skipped`
+                    );
                 } catch (error) {
-                    console.error('[incident] Remote notification failed, but local notification sent');
+                    console.error('[incident] Remote notification failed, but local notification sent', error);
                 }
 
-
                 // Reset form
-                setNewIncident({
-                    title: "",
-                    description: "",
-                    severity: "medium",
-                    location: "",
-                    bypassRotation: false,
-                });
+                resetIncidentForm();
                 setSelectedUsers([]);
                 setModalVisible(false);
 
@@ -205,7 +223,6 @@ export default function IncidentsScreen() {
                     ? `Incident created and ${selectedUsers.length} people notified immediately`
                     : "Incident created successfully";
                 Alert.alert("Success", notifyMsg);
-                Alert.alert("Success", "Incident created successfully");
             } else {
                 throw new Error(response.message || "Failed to create incident");
             }
@@ -216,6 +233,7 @@ export default function IncidentsScreen() {
             setCreating(false);
         }
     };
+
 
     if (loading) {
         return (
@@ -254,7 +272,10 @@ export default function IncidentsScreen() {
                 animationType="slide"
                 transparent={true}
                 visible={modalVisible}
-                onRequestClose={() => setModalVisible(false)}
+                onRequestClose={() => {
+                    resetIncidentForm();
+                    setModalVisible(false);
+                }}
             >
                 <TouchableOpacity
                     style={styles.modalOverlay}
@@ -272,7 +293,10 @@ export default function IncidentsScreen() {
                         >
                             <View style={styles.modalHeader}>
                                 <Text style={styles.modalTitle}>Report New Incident</Text>
-                                <TouchableOpacity onPress={() => setModalVisible(false)}>
+                                <TouchableOpacity onPress={() => {
+                                    resetIncidentForm();
+                                    setModalVisible(false);
+                                }}>
                                     <Ionicons name="close" size={24} color="#6B7280" />
                                 </TouchableOpacity>
                             </View>
@@ -313,8 +337,10 @@ export default function IncidentsScreen() {
                                         key={sev}
                                         style={[
                                             styles.severityOption,
-                                            newIncident.severity === sev && styles.severityOptionActive,
                                             { borderColor: getSeverityColor(sev) },
+                                            newIncident.severity === sev && {
+                                                backgroundColor: getSeverityColor(sev)
+                                            },
                                         ]}
                                         onPress={() =>
                                             setNewIncident((prev) => ({
@@ -327,7 +353,7 @@ export default function IncidentsScreen() {
                                             style={[
                                                 styles.severityOptionText,
                                                 newIncident.severity === sev && {
-                                                    color: getSeverityColor(sev),
+                                                    color: '#FFFFFF', // White text when selected
                                                 },
                                             ]}
                                         >
@@ -565,14 +591,15 @@ const styles = StyleSheet.create({
         paddingVertical: 10,
         paddingHorizontal: 16,
         marginBottom: 8,
+        backgroundColor: '#FFFFFF', // Default white background
     },
-    severityOptionActive: {
-        backgroundColor: "#F9FAFB",
-    },
+    // severityOptionActive: {
+    //     backgroundColor: "#F9FAFB",
+    // },
     severityOptionText: {
         fontSize: 13,
         fontWeight: "500",
-        color: "#6B7280",
+        color: "#6B7280", // Default gray text
         fontFamily: FONT_FAMILY.POPPINS_MEDIUM,
     },
     emergencySection: {

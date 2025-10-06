@@ -5,7 +5,7 @@ import {
     OnCallScheduleResponse,
     OnCallTeamOfUser,
     ApiResponse,
-    AllCurrentOnCallResponse
+    AllCurrentOnCallResponse, EmergencyOverrideUser
 } from '@/types/oncall-types';
 import { BASE_URL_DEV } from "@/utils/backend-url";
 import {API_RESPONSE} from "@/types/incident-types";
@@ -185,7 +185,7 @@ export class OnCallController {
     }
 }
 
-// In your api/alert-controller.ts or api/oncall-schedule-controller.ts
+//THIS API CALL IS RESPONSIBLE FOR SETTING A NOTIF TO ALL USERS ON CALL AND BY TEAM
 export const getAllCurrentOnCall = async (
     teamId?: string
 ): Promise<API_RESPONSE<AllCurrentOnCallResponse>> => {
@@ -198,6 +198,22 @@ export const getAllCurrentOnCall = async (
         return response.data;
     } catch (error) {
         console.error("Error fetching current on-call:", error);
+        throw error;
+    }
+};
+
+//EMEGENCY OVERRIDE
+export const getUsersForEmergencyOverride = async (
+    emails: string[]
+): Promise<API_RESPONSE<EmergencyOverrideUser[]>> => {
+    try {
+        const response = await apiManager.post<API_RESPONSE<EmergencyOverrideUser[]>>(
+            `${BASE_URL_DEV}/api/users/emergency-override`,
+            { emails }
+        );
+        return response.data;
+    } catch (error) {
+        console.error("Error fetching users for emergency override:", error);
         throw error;
     }
 };

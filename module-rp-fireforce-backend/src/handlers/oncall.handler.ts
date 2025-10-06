@@ -288,3 +288,48 @@ export async function handleUpdateScheduleConfig(request: Request, env: Env, hea
 		return json({ success: false, error: 'Failed to update schedule config', message: (err as Error).message }, { status: 500, headers });
 	}
 }
+
+
+// USER EMAIL FOR EMERGENCY OVERRIDE!!!
+export async function handleGetUsersForEmergencyOverride(
+	request: Request,
+	env: Env,
+	headers: HeadersInit
+): Promise<Response> {
+	try {
+		const body = await request.json() as { emails: string[] };
+
+		if (!body.emails || !Array.isArray(body.emails) || body.emails.length === 0) {
+			return json({
+				httpStatus: "BAD_REQUEST",
+				message: "emails array is required",
+				data: null
+			}, {
+				status: 400,
+				headers
+			});
+		}
+
+		const svc = new OnCallService(env);
+		const users = await svc.usersForEmergencyOverride(body.emails);
+
+		return json({
+			httpStatus: "OK",
+			message: `Retrieved ${users.length} users with push token data`,
+			data: users
+		}, {
+			headers
+		});
+
+	} catch (err) {
+		console.error('Error getting users for emergency override:', err);
+		return json({
+			httpStatus: "INTERNAL_SERVER_ERROR",
+			message: "Failed to get users for emergency override",
+			data: null
+		}, {
+			status: 500,
+			headers
+		});
+	}
+}

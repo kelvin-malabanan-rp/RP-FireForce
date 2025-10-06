@@ -143,3 +143,16 @@ export interface OnCallTeamCurrent {
 }
 
 export type AllCurrentOnCallResponse = OnCallTeamCurrent[];
+
+export interface EmergencyOverrideUser {
+    id: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+    fullname: string;
+    role: string;
+    pushTokenId: string | null;
+    pushToken: string | null;
+    fcmToken: string | null;
+    deviceType: string | null;
+}

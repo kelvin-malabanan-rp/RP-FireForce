@@ -122,6 +122,55 @@ export class OnCallService {
 		}
 	}
 
+	async usersForEmergencyOverride(emails: string[]): Promise<any[]> {
+		try {
+			if (!emails || emails.length === 0) {
+				return [];
+			}
+
+			// Build placeholders dynamically
+			const placeholders = emails.map(() => '?').join(', ');
+
+			const sql = `
+            SELECT
+                u.id,
+                u.email,
+                u.first_name,
+                u.last_name,
+                u.first_name || ' ' || u.last_name as fullname,
+                u.role,
+                pt.id as push_token_id,
+                pt.token as push_token,
+                pt.fcm_token as fcm_token,
+                pt.device_type as device_type
+            FROM users u
+            LEFT JOIN push_token_user_assoc ptua ON ptua.user_id = u.id
+            LEFT JOIN push_tokens pt ON pt.id = ptua.push_token_id AND pt.is_active = 1
+            WHERE u.email IN (${placeholders})
+            AND u.is_active = 1
+            ORDER BY u.first_name, u.last_name
+        `;
+
+			const { results } = await this.dbService.db.prepare(sql).bind(...emails).all();
+
+			return (results || []).map((row: any) => ({
+				id: row.id,
+				email: row.email,
+				firstName: row.first_name,
+				lastName: row.last_name,
+				fullname: row.fullname,
+				role: row.role,
+				pushTokenId: row.push_token_id || null,
+				pushToken: row.push_token || null,
+				fcmToken: row.fcm_token || null,
+				deviceType: row.device_type || null,
+			}));
+		} catch (error) {
+			console.error('Error fetching users with push tokens:', error);
+			throw error;
+		}
+	}
+
 	async getUserTeam(userId: string): Promise<OnCallTeamOfUser | null> {
 		try {
 			console.log('Fetching team for user:', userId);

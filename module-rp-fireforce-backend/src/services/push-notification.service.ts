@@ -88,6 +88,55 @@ export class PushNotificationService {
 		}
 	}
 
+
+	// EMERGENCY OVERRIDE
+	async sendEmergencyOverrideAlert(incident: Incident, userEmails: string[]): Promise<void> {
+		try {
+			if (!userEmails || userEmails.length === 0) {
+				console.log('No users specified for emergency override');
+				return;
+			}
+
+			// Get users with their push tokens using the existing service method
+			const usersWithTokens = await this.oncallService.usersForEmergencyOverride(userEmails);
+
+			if (!usersWithTokens || usersWithTokens.length === 0) {
+				console.log('No users found for emergency override');
+				return;
+			}
+
+			const message = this.createNotificationMessage(incident);
+			let sentCount = 0;
+			let skippedCount = 0;
+
+			// Send to each selected user
+			for (const user of usersWithTokens) {
+				if (user.pushToken) {
+					const success = await this.sendPushNotification(user.pushToken, message);
+					if (success) {
+						sentCount++;
+						await this.logDelivery(
+							incident.id,
+							'alert',
+							user.pushToken,
+							user.fcmToken
+						);
+						console.log(`✓ EMERGENCY: Sent to ${user.fullname}`);
+					} else {
+						console.error(`✗ EMERGENCY: Failed to send to ${user.fullname}`);
+					}
+				} else {
+					skippedCount++;
+					console.log(`⊘ EMERGENCY: No token for ${user.fullname}`);
+				}
+			}
+
+			console.log(`Emergency override: ${sentCount} notified, ${skippedCount} skipped (no token)`);
+		} catch (error) {
+			console.error('Error sending emergency override alerts:', error);
+		}
+	}
+
 	async sendAllClear(incidentId: string): Promise<{
 		notifiedCount: number;
 		users: Array<{ name: string; email: string }>;

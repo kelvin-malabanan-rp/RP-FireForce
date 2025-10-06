@@ -196,7 +196,7 @@ export class IncidentService {
 	}
 
 	private async notifySpecificUsers(incidentId: string, userIds: string[]): Promise<void> {
-		const incident = await this.dbService.getIncidentBy(incidentId);
+		const incident = await this.dbService.getIncidentById(incidentId);
 		const emailService = new EmailService(this.env);
 
 		for (const userId of userIds) {
@@ -213,37 +213,20 @@ export class IncidentService {
 	}
 
 	private async notifyCurrentOnCall(incidentId: string): Promise<void> {
-		const incident = await this.dbService.getIncidentBy(incidentId);
-		const emailService = new EmailService(this.env);
+		const incident = await this.dbService.getIncidentById(incidentId);
+		if (!incident) {
+			console.error('Incident not found:', incidentId);
+			return;
+		}
 
-		// Get all teams and their current on-call members
-		const oncallService = new OnCallService(this.env);
-		const teams = await oncallService.getOnCallTeams();
+		const pushService = new PushNotificationService(this.env);
 
-		for (const team of teams) {
-			const currentOnCall = await oncallService.getCurrentOnCall(team.id);
-
-			if (currentOnCall) {
-				// Notify primary
-				if (currentOnCall.primary) {
-					try {
-						await emailService.sendIncidentAlert(incident, currentOnCall.primary.email);
-						await this.trackNotification(incidentId, currentOnCall.primary.id, 'initial');
-					} catch (error) {
-						console.error(`Failed to notify primary:`, error);
-					}
-				}
-
-				// Notify backup
-				if (currentOnCall.backup) {
-					try {
-						await emailService.sendIncidentAlert(incident, currentOnCall.backup.email);
-						await this.trackNotification(incidentId, currentOnCall.backup.id, 'initial');
-					} catch (error) {
-						console.error(`Failed to notify backup:`, error);
-					}
-				}
-			}
+		// Send to current on-call team
+		try {
+			await pushService.sendIncidentAlert(incident);
+			console.log('Push notifications sent for incident:', incidentId);
+		} catch (error) {
+			console.error('Failed to send push notifications:', error);
 		}
 	}
 
@@ -273,7 +256,7 @@ export class IncidentService {
 	}
 
 	public async selectIncidentById(incidentId: string): Promise<Incident> {
-		const incident = await this.dbService.getIncidentBy(incidentId);
+		const incident = await this.dbService.getIncidentById(incidentId);
 
 		if (!incident) {
 			throw new Error(`Incident with ID ${incidentId} not found`);

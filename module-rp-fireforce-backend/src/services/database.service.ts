@@ -226,7 +226,7 @@ export class DatabaseService {
 	}
 
 	// Validate Incident if exists and GET its DATA!
-	async getIncidentBy(incidentId: string): Promise<Incident | null> {
+	async getIncidentById(incidentId: string): Promise<Incident | null> {
 		const query = `
 			SELECT
 				id,

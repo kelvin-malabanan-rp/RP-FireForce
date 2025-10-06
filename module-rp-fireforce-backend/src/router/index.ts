@@ -15,10 +15,16 @@ import {handleLogin, handleLogout} from "../handlers/auth.handlers";
 import {handleRegisterPushToken, handleSendTestAlert} from "../handlers/push-notification.handlers";
 import {handleFetchIncidentComment} from "../handlers/incident-comment.handlers";
 import {
-	handleCreateOverride, handleEscalateIncident, handleGetAllCurrentOnCall,
+	handleCreateOverride,
+	handleEscalateIncident,
+	handleGetAllCurrentOnCall,
 	handleGetCurrentOnCall,
 	handleGetOnCallSchedule,
-	handleGetOnCallTeams, handleGetScheduleConfig, handleGetUserTeam, handleUpdateScheduleConfig
+	handleGetOnCallTeams,
+	handleGetScheduleConfig,
+	handleGetUsersForEmergencyOverride,
+	handleGetUserTeam,
+	handleUpdateScheduleConfig
 } from "../handlers/oncall.handler";
 import {handleGetAllUsers, handleGetUserById} from "../handlers/user-handlers";
 
@@ -150,6 +156,10 @@ export class Router {
 
 			if (path === '/api/oncall/user/team' && method === 'GET') {
 				return handleGetUserTeam(request, this.env, CORS_HEADERS);
+			}
+
+			if (path === '/api/users/emergency-override' && method === 'POST') {
+				return handleGetUsersForEmergencyOverride(request, this.env, CORS_HEADERS);
 			}
 
 			// router/index.ts (add alongside your other oncall routes)
