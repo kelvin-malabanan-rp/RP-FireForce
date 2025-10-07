@@ -7,7 +7,6 @@ import {
 	IncidentCommentPayload, IncidentCommentResponse,
 	IncidentFilters,
 	IncidentStats,
-	IncidentStatus
 } from '../types';
 import {IncidentService} from "../services/incident.services";
 

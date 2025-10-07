@@ -29,6 +29,7 @@ import { FONT_FAMILY } from '@/constants/fonts';
 import { UserSession } from "@/types";
 import { retrieveUserSession } from "@/constants/local-storage";
 import {Ionicons} from "@expo/vector-icons";
+import {createAuditLog} from "@/api/audit-trail";
 
 export default function InnerIncidentPage() {
     const router = useRouter();
@@ -137,6 +138,7 @@ export default function InnerIncidentPage() {
                     onPress: async () => {
                         setProcessingAction(true);
                         try {
+                            // 1️⃣ Update incident status
                             const result = await updateIncidentStatus({
                                 incidentId: incident.id,
                                 newStatus: isInvestigating ? "resolved" : "investigating",
@@ -145,6 +147,47 @@ export default function InnerIncidentPage() {
 
                             if (result.data || result.object) {
                                 const resultData = result.data || result.object!;
+
+                                // 2️⃣ Build audit log payload
+                                const auditPayload = {
+                                    action: isInvestigating ? "RESOLVE_INCIDENT" : "ACCEPT_INCIDENT",
+                                    incidentId: incident.id,
+                                    userId: userSession.id,
+                                    description: isInvestigating
+                                        ? `User ${userSession.firstName} ${userSession.lastName} resolved incident "${incident.title}"`
+                                        : `User ${userSession.firstName} ${userSession.lastName} accepted and is investigating incident "${incident.title}"`,
+                                    details: {
+                                        title: incident.title,
+                                        previousStatus: incident.status,
+                                        newStatus: resultData.status,
+                                        severity: incident.severity,
+                                        actionFrom: "mobile_app",
+                                    },
+                                    oldValue: {
+                                        status: incident.status,
+                                    },
+                                    newValue: {
+                                        status: resultData.status,
+                                        ...(isInvestigating && { resolvedBy: userSession.email }),
+                                    },
+                                    metadata: {
+                                        device: Platform.OS,
+                                        timestamp: new Date().toISOString(),
+                                        userEmail: userSession.email,
+                                        notifiedCount: resultData.notifiedCount || 0,
+                                    },
+                                };
+
+                                // 3️⃣ Send to audit log API
+                                try {
+                                    const auditResponse = await createAuditLog(auditPayload);
+                                    console.log("✅ Audit log created:", auditResponse);
+                                } catch (auditError) {
+                                    console.warn("⚠️ Failed to create audit log:", auditError);
+                                    // Don't fail the whole operation if audit logging fails
+                                }
+
+                                // 4️⃣ Show success alerts
                                 if (isInvestigating && resultData.notifiedCount) {
                                     Alert.alert(
                                         'Success',
@@ -155,6 +198,7 @@ export default function InnerIncidentPage() {
                                     Alert.alert("Success", "Incident accepted successfully. Now investigating.");
                                 }
 
+                                // 5️⃣ Update local state
                                 setIncident(prev => prev ? {
                                     ...prev,
                                     status: resultData.status as IncidentUI['status']
@@ -222,6 +266,37 @@ export default function InnerIncidentPage() {
             const response = await postIncidentComment(commentData);
 
             if (response.httpStatus === "OK") {
+                // ✅ Create audit log for comment
+                const auditPayload = {
+                    action: "ADD_INCIDENT_COMMENT",
+                    incidentId: incident.id,
+                    userId: userSession.id,
+                    description: `${userSession.firstName} ${userSession.lastName} added a comment to incident "${incident.title}"`,
+                    details: {
+                        incidentTitle: incident.title,
+                        commentLength: comment.trim().length,
+                        commentPreview: comment.trim().substring(0, 100), // First 100 chars
+                        severity: incident.severity,
+                        incidentStatus: incident.status,
+                        actionFrom: "mobile_app"
+                    },
+                    metadata: {
+                        device: Platform.OS,
+                        timestamp: new Date().toISOString(),
+                        userEmail: userSession.email,
+                        commentId: response.data?.id // If the API returns the comment ID
+                    }
+                };
+
+                // Send to audit log API
+                try {
+                    const auditResponse = await createAuditLog(auditPayload);
+                    console.log("✅ Comment audit log created:", auditResponse);
+                } catch (auditError) {
+                    console.warn("⚠️ Failed to create comment audit log:", auditError);
+                    // Don't fail the whole operation if audit logging fails
+                }
+
                 Alert.alert("Success", "Comment added successfully");
                 setComment('');
                 await fetchComments();
@@ -234,17 +309,6 @@ export default function InnerIncidentPage() {
         } finally {
             setSubmittingComment(false);
         }
-    };
-
-    const formatTimestamp = (timestamp: Date) => {
-        return timestamp.toLocaleString([], {
-            weekday: 'short',
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-        });
     };
 
     const getStatusIcon = (status: string) => {
@@ -331,7 +395,7 @@ export default function InnerIncidentPage() {
                             <IconSymbol name="clock" size={16} color="#6B7280" />
                             <Text style={styles.metadataLabel}>Reported:</Text>
                             <Text style={styles.metadataValue}>
-                                {formatTimestamp(incident.timestamp)}
+                                (incident.timestamp)
                             </Text>
                         </View>
 
@@ -370,7 +434,7 @@ export default function InnerIncidentPage() {
                                 <IconSymbol name="checkmark.circle" size={16} color="#10B981" />
                                 <Text style={styles.metadataLabel}>Resolved:</Text>
                                 <Text style={styles.metadataValue}>
-                                    {formatTimestamp(incident.resolvedAt)}
+                                    (incident.resolvedAt)r
                                 </Text>
                             </View>
                         )}

@@ -1,4 +1,9 @@
 // types/index.ts
+
+// ========================================
+// ENVIRONMENT & CONFIGURATION
+// ========================================
+
 export interface Env {
 	FIREBASE_PROJECT_ID: string;
 	FIREBASE_CLIENT_EMAIL: string;
@@ -8,6 +13,9 @@ export interface Env {
 	AWS_REGION: string;
 }
 
+// ========================================
+// INCIDENT MANAGEMENT
+// ========================================
 
 export interface Incident {
 	id: string;
@@ -82,6 +90,32 @@ export interface IncidentStats {
 	};
 }
 
+export interface IncidentCommentPayload {
+	incidentId: string;
+	userId: string;
+	comment: string;
+	createdAt: Date;
+}
+
+export interface IncidentCommentResponse {
+	id: string;
+	incidentId: string;
+	userEmail: string;
+	userFullname: string | "Full Name Not Found" | null;
+	comment: string;
+	createdAt: Date;
+}
+
+export interface IncidentStatus {
+	id: string;
+	status: string;
+	updatedAt: string | null;
+}
+
+// ========================================
+// AUTHENTICATION & USERS
+// ========================================
+
 export interface LoginResponse {
 	id: string;
 	email: string;
@@ -110,7 +144,6 @@ export interface JWTPayload {
 	exp: number;
 }
 
-// User interface for database.service.ts
 export interface User {
 	id: string;
 	email: string;
@@ -126,28 +159,9 @@ export interface User {
 	lastLogin?: string;
 }
 
-// POST Incident Comment Payload
-export interface IncidentCommentPayload {
-	incidentId: string;
-	userId: string;
-	comment: string;
-	createdAt: Date;
-}
-
-export interface IncidentCommentResponse {
-	id: string;
-	incidentId: string;
-	userEmail: string;
-	userFullname: string | "Full Name Not Found" | null;
-	comment: string;
-	createdAt: Date;
-}
-
-export interface IncidentStatus {
-	id: string;
-	status: string;
-	updatedAt: string | null;
-}
+// ========================================
+// ON-CALL MANAGEMENT
+// ========================================
 
 export interface OnCallUser {
 	id: string;
@@ -191,8 +205,9 @@ export interface CurrentOnCall {
 	startTime: Date;
 	endTime: Date;
 }
+
 // ========================================
-// TYPE DEFINITIONS
+// AUDIT TRAIL & LOGGING SYSTEM
 // ========================================
 
 export interface DatabaseConnection {
@@ -217,10 +232,6 @@ export interface AuditRequest {
 	connection?: RequestConnection;
 }
 
-export interface AuditLogDetails {
-	[key: string]: any;
-}
-
 export interface NotificationRecord {
 	delivered_at: string;
 }
@@ -230,6 +241,9 @@ export interface ResponseResult {
 	responseTime: number | null;
 }
 
+/**
+ * Audit log entry representing a single action/event
+ */
 export interface AuditLog {
 	id: string;
 	incident_id: string | null;
@@ -244,6 +258,9 @@ export interface AuditLog {
 	email?: string;
 }
 
+/**
+ * Notification record for incident alerts
+ */
 export interface Notification {
 	id: string;
 	incident_id: string;
@@ -260,6 +277,9 @@ export interface Notification {
 	responded_at?: string | null;
 }
 
+/**
+ * Comment on an incident
+ */
 export interface Comment {
 	id: string;
 	incident_id: string;
@@ -272,6 +292,9 @@ export interface Comment {
 	email?: string;
 }
 
+/**
+ * Escalation record for incident escalations
+ */
 export interface Escalation {
 	id: string;
 	incident_id: string;
@@ -291,6 +314,9 @@ export interface Escalation {
 	escalated_from_last_name?: string;
 }
 
+/**
+ * Summary statistics for incident audit
+ */
 export interface AuditSummary {
 	total_notifications: number;
 	users_notified: number;
@@ -305,6 +331,9 @@ export interface AuditSummary {
 	avg_response_time: number;
 }
 
+/**
+ * Complete audit trail for an incident including all related records
+ */
 export interface FullIncidentAudit {
 	incident: Incident;
 	audit_logs: AuditLog[];
@@ -314,6 +343,9 @@ export interface FullIncidentAudit {
 	summary: AuditSummary;
 }
 
+/**
+ * Statistics about notifications
+ */
 export interface NotificationStats {
 	total_notifications: number;
 	acknowledged_count: number;
@@ -325,6 +357,9 @@ export interface NotificationStats {
 	max_response_time: number | null;
 }
 
+/**
+ * Statistics about incidents (used in audit stats)
+ */
 export interface IncidentStats {
 	total_incidents: number;
 	open_incidents: number;
@@ -333,6 +368,9 @@ export interface IncidentStats {
 	avg_resolution_time_seconds: number | null;
 }
 
+/**
+ * Top responder information
+ */
 export interface TopResponder {
 	id: string;
 	first_name: string;
@@ -342,6 +380,9 @@ export interface TopResponder {
 	avg_response_time: number | null;
 }
 
+/**
+ * Comprehensive audit statistics
+ */
 export interface AuditStats {
 	notification_stats: NotificationStats;
 	incident_stats: IncidentStats;
@@ -352,9 +393,67 @@ export interface AuditStats {
 	};
 }
 
+/**
+ * Data structure for CSV export
+ */
 export interface AuditDataForCSV {
 	audit_logs: AuditLog[];
 	notifications: Notification[];
 	comments: Comment[];
 	escalations: Escalation[];
+}
+
+/**
+ * Flexible JSON structure for audit log details
+ */
+export interface AuditLogDetails {
+	[key: string]: any;
+}
+
+/**
+ * Payload for creating a new audit log
+ */
+export interface AuditLogPayload {
+	action: string;
+	incidentId?: string | null;
+	userId?: string | null;
+	description?: string | null;
+	details?: AuditLogDetails;
+	oldValue?: Record<string, any> | null;
+	newValue?: Record<string, any> | null;
+	metadata?: Record<string, any> | null;
+}
+
+/**
+ * Response structure for audit log operations
+ */
+export interface AuditLogResponse {
+	id: string;
+	incident_id?: string | null;
+	user_id?: string | null;
+	action: string;
+	description?: string | null;
+	details?: AuditLogDetails;
+	old_value?: Record<string, any> | null;
+	new_value?: Record<string, any> | null;
+	metadata?: Record<string, any> | null;
+	ip_address?: string | null;
+	user_agent?: string | null;
+	created_at: string;
+	first_name?: string;
+	last_name?: string;
+	email?: string;
+}
+
+/**
+ * Filters for querying audit logs
+ */
+export interface AuditFilters {
+	incidentId?: string;
+	userId?: string;
+	action?: string;
+	startDate?: string;
+	endDate?: string;
+	limit?: number;
+	offset?: number;
 }

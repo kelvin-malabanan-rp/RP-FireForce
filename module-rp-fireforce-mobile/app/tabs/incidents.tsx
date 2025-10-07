@@ -9,7 +9,7 @@ import {
     TextInput,
     TouchableOpacity,
     View,
-    ActivityIndicator,
+    ActivityIndicator, Platform,
 } from "react-native";
 import {
     createIncident,
@@ -25,6 +25,7 @@ import {Ionicons} from "@expo/vector-icons";
 import IncidentList from "@/components/incident-list";
 import {usePushNotifications} from "@/hooks/use-push-notifications";
 import {retrieveUserSession} from "@/constants/local-storage";
+import {createAuditLog} from "@/api/audit-trail";
 
 type TeamMember = {
     id: string;
@@ -167,6 +168,8 @@ export default function IncidentsScreen() {
         try {
             const session = await retrieveUserSession();
             const reportedByEmail = session?.email || "Unknown User";
+            const userId = session?.id || "usr_unknown";
+            const userName = session?.firstName + " " + session?.lastName || "Unknown User";
 
             const incidentData: CreateIncidentData = {
                 title: newIncident.title,
@@ -180,16 +183,45 @@ export default function IncidentsScreen() {
                 incidentData.notifyUsers = selectedUsers;
             }
 
+            // 1️⃣ Create the incident
             const response = await createIncident(incidentData);
 
             if (response.httpStatus === "OK" && response.data) {
-                // ✅ instead of manually updating state, just re-fetch
+                const incident = response.data;
+
+                // 2️⃣ Build full audit log payload
+                const auditPayload = {
+                    action: "CREATE_INCIDENT",
+                    incidentId: incident.id,
+                    userId: userId,
+                    description: `User ${userName} created incident "${incident.title}"`,
+                    details: {
+                        title: incident.title,
+                        severity: incident.severity,
+                        location: incident.location,
+                        createdFrom: "mobile_app",
+                    },
+                    metadata: {
+                        device: Platform.OS,
+                        timestamp: new Date().toISOString(),
+                    },
+                };
+
+                // 3️⃣ Send to audit log API
+                try {
+                    const auditResponse = await createAuditLog(auditPayload);
+                    console.log("✅ Audit log created:", auditResponse);
+                } catch (auditError) {
+                    console.warn("⚠️ Failed to create audit log:", auditError);
+                }
+
+                // 4️⃣ Refresh incidents list
                 await fetchAllIncidents();
 
-                // local notification
-                await sendIncidentNotification(response.data);
+                // 5️⃣ Local notification
+                await sendIncidentNotification(incident);
 
-                // optional: send remote notifications
+                // 6️⃣ Remote notification logic
                 const isBypassing = newIncident.bypassRotation;
                 const selectedEmails = isBypassing
                     ? availableUsers
@@ -199,19 +231,20 @@ export default function IncidentsScreen() {
 
                 try {
                     await sendNotificationToOnCallTeam({
-                        id: response.data.id,
-                        title: response.data.title,
-                        description: response.data.description,
-                        severity: response.data.severity,
+                        id: incident.id,
+                        title: incident.title,
+                        description: incident.description,
+                        severity: incident.severity,
                         emergencyOverride: {
                             enabled: isBypassing,
                             userEmails: selectedEmails,
                         },
                     });
                 } catch (error) {
-                    console.error('[incident] Remote notification failed', error);
+                    console.error("[incident] Remote notification failed", error);
                 }
 
+                // 7️⃣ Cleanup & UI feedback
                 resetIncidentForm();
                 setModalVisible(false);
 
@@ -225,7 +258,7 @@ export default function IncidentsScreen() {
                 throw new Error(response.message || "Failed to create incident");
             }
         } catch (error) {
-            console.error('Failed to create incident:', error);
+            console.error("Failed to create incident:", error);
             Alert.alert("Error", "Failed to create incident");
         } finally {
             setCreating(false);

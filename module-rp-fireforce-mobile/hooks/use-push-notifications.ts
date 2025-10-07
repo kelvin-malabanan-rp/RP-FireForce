@@ -8,6 +8,7 @@ import { registerPushToken, respondToIncident } from '@/api/alert-controller';
 import { router } from 'expo-router';
 import { retrieveUserSession } from '@/constants/local-storage';
 import { getAllCurrentOnCall, getUsersForEmergencyOverride } from '@/api/oncall-schedule-controller';
+import {createAuditLog} from "@/api/audit-trail";
 
 export const usePushNotifications = () => {
     const [expoPushToken, setExpoPushToken] = useState<string | null>(null);
@@ -260,18 +261,30 @@ export const usePushNotifications = () => {
     };
 
     // ✅ Corrected: Normal rotation + emergency override logic
-    const sendNotificationToOnCallTeam = async (incident: {
-        id: string;
-        title: string;
-        description: string;
-        severity: 'low' | 'medium' | 'high' | 'critical';
-        teamId?: string | null;
-        emergencyOverride?: { enabled: boolean; userEmails?: string[] };
-    }) => {
+    const sendNotificationToOnCallTeam = async (
+        incident: {
+            id: string;
+            title: string;
+            description: string;
+            severity: 'low' | 'medium' | 'high' | 'critical';
+            teamId?: string | null;
+            emergencyOverride?: { enabled: boolean; userEmails?: string[] };
+        },
+        currentUserId?: string | null
+    ) => {
         try {
-            console.log('[push] Preparing to send notifications for incident:', incident.title);
+            // ✅ Use the passed userId OR fallback to the hook's id state
+            const userId = currentUserId || id;
 
-            // Determine notification mode safely
+            // ✅ Validate userId before proceeding
+            if (!userId) {
+                console.error('[push] ❌ Cannot create audit log: User session not loaded');
+                console.warn('[push] ⚠️ Sending notifications anyway, but audit log will be skipped');
+            }
+
+            console.log('[push] Preparing to send notifications for incident:', incident.title);
+            console.log('[push] Using userId for audit:', userId);
+
             const emergency = incident.emergencyOverride;
             const isEmergency =
                 !!emergency &&
@@ -283,7 +296,6 @@ export const usePushNotifications = () => {
 
             if (isEmergency && emergency.userEmails) {
                 console.log('[push] Emergency override active:', emergency.userEmails);
-
                 const response = await getUsersForEmergencyOverride(emergency.userEmails);
                 if (response.httpStatus === 'OK' && response.data) {
                     membersToNotify = response.data;
@@ -318,10 +330,19 @@ export const usePushNotifications = () => {
             let sentCount = 0,
                 failedCount = 0,
                 skippedCount = 0;
+            const notificationResults: any[] = [];
 
             for (const member of membersToNotify) {
                 if (!member.pushToken) {
                     skippedCount++;
+                    notificationResults.push({
+                        userId: member.userId,
+                        fullname: member.fullname,
+                        email: member.email,
+                        role: member.role,
+                        status: 'skipped',
+                        reason: 'No push token'
+                    });
                     continue;
                 }
                 try {
@@ -342,21 +363,104 @@ export const usePushNotifications = () => {
                         body: JSON.stringify(message),
                     });
 
-                    if (pushResponse.ok) sentCount++;
-                    else failedCount++;
+                    if (pushResponse.ok) {
+                        sentCount++;
+                        notificationResults.push({
+                            userId: member.userId,
+                            fullname: member.fullname,
+                            email: member.email,
+                            role: member.role,
+                            status: 'sent',
+                            pushToken: member.pushToken
+                        });
+                    } else {
+                        failedCount++;
+                        const errorText = await pushResponse.text();
+                        notificationResults.push({
+                            userId: member.userId,
+                            fullname: member.fullname,
+                            email: member.email,
+                            role: member.role,
+                            status: 'failed',
+                            error: errorText
+                        });
+                    }
                 } catch (err) {
                     failedCount++;
+                    notificationResults.push({
+                        userId: member.userId,
+                        fullname: member.fullname,
+                        email: member.email,
+                        role: member.role,
+                        status: 'failed',
+                        error: String(err)
+                    });
                 }
             }
 
             console.log(`[push] Sent: ${sentCount}, Failed: ${failedCount}, Skipped: ${skippedCount}`);
+
+            // 🔔 Create audit log ONLY if we have a valid userId
+            if (userId && incident.id) {
+                const notificationMode = isEmergency ? 'Emergency Override' : 'On-Call Rotation';
+                const totalTargeted = membersToNotify.length;
+
+                const auditPayload = {
+                    action: "SEND_PUSH_NOTIFICATION",
+                    incidentId: incident.id,
+                    userId: userId, // ✅ Now guaranteed to have a value
+                    description: isEmergency
+                        ? `Push notifications sent via Emergency Override to ${totalTargeted} selected users (${sentCount} sent, ${failedCount} failed, ${skippedCount} skipped)`
+                        : `Push notifications sent to On-Call Team (${totalTargeted} users: ${sentCount} sent, ${failedCount} failed, ${skippedCount} skipped)`,
+                    details: {
+                        incidentTitle: incident.title,
+                        severity: incident.severity,
+                        notificationMode: notificationMode,
+                        teamId: incident.teamId || 'global',
+                        emergencyOverride: isEmergency,
+                        targetedUsers: totalTargeted,
+                        sentCount: sentCount,
+                        failedCount: failedCount,
+                        skippedCount: skippedCount,
+                        recipients: notificationResults.map(r => ({
+                            userId: r.userId,
+                            fullname: r.fullname,
+                            email: r.email,
+                            role: r.role,
+                            status: r.status
+                        }))
+                    },
+                    metadata: {
+                        device: Platform.OS,
+                        timestamp: new Date().toISOString(),
+                        notificationType: 'push',
+                        channelId: getChannelBySeverity(incident.severity),
+                        ...(isEmergency && {
+                            emergencyEmails: emergency.userEmails
+                        })
+                    }
+                };
+
+                try {
+                    console.log("🔍 Audit payload being sent:", JSON.stringify(auditPayload, null, 2));
+                    const auditResponse = await createAuditLog(auditPayload);
+                    console.log("✅ Notification audit log created:", auditResponse);
+                } catch (auditError: any) {
+                    console.error("⚠️ Failed to create notification audit log:", auditError);
+                    console.error("⚠️ Error response data:", auditError?.response?.data);
+                    console.error("⚠️ Error response status:", auditError?.response?.status);
+                }
+            } else {
+                console.warn('⚠️ Skipping audit log creation - missing userId or incidentId');
+                console.log('[push] userId:', userId, 'incidentId:', incident.id);
+            }
+
             return { sent: sentCount, failed: failedCount, skipped: skippedCount };
         } catch (err) {
             console.error('[push] Error sending notifications:', err);
             return { sent: 0, failed: 0, skipped: 0 };
         }
     };
-
 
     // Local notification helper
     const sendIncidentNotification = async (incident: any) => {
