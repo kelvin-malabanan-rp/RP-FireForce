@@ -42,6 +42,7 @@ export interface Incident {
     aws_console_url?: string | null;
     createdAt?: string;  // Make optional
     updatedAt?: string;  // Make optional
+    teamId?: string | null;
 }
 
 // AllIncidentApiResponse
