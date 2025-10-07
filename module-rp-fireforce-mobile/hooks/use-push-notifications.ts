@@ -8,6 +8,7 @@ import { registerPushToken, respondToIncident } from '@/api/alert-controller';
 import { router } from 'expo-router';
 import { retrieveUserSession } from '@/constants/local-storage';
 import { getAllCurrentOnCall, getUsersForEmergencyOverride } from '@/api/oncall-schedule-controller';
+import {getIncidentById} from "@/api/incident-controller";
 
 export const usePushNotifications = () => {
     const [expoPushToken, setExpoPushToken] = useState<string | null>(null);
@@ -96,7 +97,22 @@ export const usePushNotifications = () => {
 
                     // Use the ACTUAL notification identifier, not your custom one
                     await Notifications.dismissNotificationAsync(notificationId);
-
+                    // ✅ Fetch incident and send status notification
+                    try {
+                        const incidentResponse = await getIncidentById(incidentId);
+                        if (incidentResponse.httpStatus === 'OK' && incidentResponse.data) {
+                            await sendStatusChangeNotification({
+                                id: incidentId,
+                                title: incidentResponse.data.title,
+                                status: 'investigating',
+                                investigatedBy: session.email,
+                                excludeUserId: session.id,
+                                teamId: incidentResponse.data.teamId
+                            });
+                        }
+                    } catch (error) {
+                        console.error('[push] Error sending status notification:', error);
+                    }
                 } catch (error) {
                     console.error('[push] Error acknowledging:', error);
                 }
