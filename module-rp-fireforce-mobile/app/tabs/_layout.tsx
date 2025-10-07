@@ -1,26 +1,55 @@
 // app/(tabs)/_layout.tsx
 import { Tabs } from "expo-router";
 import { useState } from "react";
-import {Platform, TouchableOpacity, useColorScheme} from "react-native";
+import { Platform, TouchableOpacity } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { BlurView } from 'expo-blur';
 
-import {SlideMenu} from "@/components/navigation-menu";
-import {Colors} from "@/constants/theme";
-import {HapticTab} from "@/components/haptic-tab";
-import {IconSymbol} from "@/components/ui/icon-symbol";
+import { SlideMenu } from "@/components/navigation-menu";
+import { HapticTab } from "@/components/haptic-tab";
+import { IconSymbol } from "@/components/ui/icon-symbol";
 
 export default function TabLayout() {
-    const colorScheme = useColorScheme();
     const [menuOpen, setMenuOpen] = useState(false);
 
     return (
         <>
             <Tabs
                 screenOptions={{
-                    tabBarActiveTintColor: Colors[colorScheme ?? "light"].tint,
+                    tabBarActiveTintColor: '#F97316', // orange-500
+                    tabBarInactiveTintColor: '#64748B', // slate-500
                     headerShown: true,
                     headerTitle: "",
                     tabBarButton: HapticTab,
+                    headerTransparent: true,
+                    headerBackground: () => (
+                        <BlurView
+                            intensity={80}
+                            tint="dark"
+                            style={{ flex: 1 }}
+                        />
+                    ),
+                    tabBarStyle: {
+                        position: 'absolute',
+                        backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                        borderTopWidth: 1,
+                        borderTopColor: '#334155',
+                        elevation: 0,
+                        shadowOpacity: 0,
+                    },
+                    tabBarBackground: () => (
+                        <BlurView
+                            intensity={80}
+                            tint="dark"
+                            style={{
+                                position: 'absolute',
+                                top: 0,
+                                left: 0,
+                                right: 0,
+                                bottom: 0,
+                            }}
+                        />
+                    ),
                     headerLeft: () => (
                         <TouchableOpacity
                             onPress={() => setMenuOpen(true)}
@@ -29,7 +58,7 @@ export default function TabLayout() {
                             <Ionicons
                                 name="menu"
                                 size={28}
-                                color={Colors[colorScheme ?? "light"].text}
+                                color="#FFFFFF"
                             />
                         </TouchableOpacity>
                     ),

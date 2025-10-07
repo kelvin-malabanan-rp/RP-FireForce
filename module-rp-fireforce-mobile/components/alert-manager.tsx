@@ -292,7 +292,7 @@ const AlertManager: React.FC<AlertManagerProps> = ({ style }) => {
 
     const getPermissionStatusColor = (status: string): string => {
         switch (status) {
-            case 'granted': return '#10B981';
+            case 'granted': return '#F97316';
             case 'denied': return '#EF4444';
             default: return '#F59E0B';
         }
@@ -314,7 +314,7 @@ const AlertManager: React.FC<AlertManagerProps> = ({ style }) => {
                     <IconSymbol
                         name={settings.enableAlerts ? "bell.fill" : "bell.slash"}
                         size={20}
-                        color={settings.enableAlerts ? "#10B981" : "#EF4444"}
+                        color={settings.enableAlerts ? "#F97316" : "#EF4444"}
                     />
                     <Text style={styles.title}>Alert Manager</Text>
                     <TouchableOpacity
@@ -322,9 +322,9 @@ const AlertManager: React.FC<AlertManagerProps> = ({ style }) => {
                         onPress={() => setShowSettings(true)}
                     >
                         {Platform.OS === 'ios' ? (
-                            <IconSymbol name="gearshape" size={20} color="#6B7280" />
+                            <IconSymbol name="gearshape" size={20} color="#F97316" />
                         ) : (
-                            <Ionicons name="settings-sharp" size={20} color="#6B7280" />
+                            <Ionicons name="settings-sharp" size={20} color="#F97316" />
                         )}
                     </TouchableOpacity>
                 </View>
@@ -345,13 +345,13 @@ const AlertManager: React.FC<AlertManagerProps> = ({ style }) => {
                             style={styles.settingsButton}
                             onPress={() => setShowSettings(true)}
                         >
-                            <Ionicons name="settings-outline" size={20} color="#6B7280" />
+                            <Ionicons name="settings-outline" size={20} color="#F97316" />
                         </TouchableOpacity>
                     )}
                 </View>
 
                 <View style={styles.statusRow}>
-                    <View style={[styles.statusIndicator, { backgroundColor: backendStatus === 'healthy' ? '#10B981' : '#EF4444' }]} />
+                    <View style={[styles.statusIndicator, { backgroundColor: backendStatus === 'healthy' ? '#F97316' : '#EF4444' }]} />
                     <Text style={styles.statusText}>
                         Backend: {backendStatus}
                     </Text>
@@ -362,7 +362,7 @@ const AlertManager: React.FC<AlertManagerProps> = ({ style }) => {
 
                 <View style={styles.statusRow}>
                     <View style={[styles.statusIndicator, {
-                        backgroundColor: registrationStatus === 'registered' ? '#10B981' :
+                        backgroundColor: registrationStatus === 'registered' ? '#F97316' :
                             registrationStatus === 'failed' ? '#EF4444' : '#F59E0B'
                     }]} />
                     <Text style={styles.statusText}>
@@ -386,7 +386,7 @@ const AlertManager: React.FC<AlertManagerProps> = ({ style }) => {
                     <Switch
                         value={settings.enableAlerts}
                         onValueChange={(value) => updateSettings({ enableAlerts: value })}
-                        trackColor={{ false: '#D1D5DB', true: '#3B82F6' }}
+                         trackColor={{ false: '#475569', true: '#F97316' }}
                         thumbColor="#FFFFFF"
                     />
                 </View>
@@ -398,7 +398,7 @@ const AlertManager: React.FC<AlertManagerProps> = ({ style }) => {
                             <Switch
                                 value={settings.criticalOnly}
                                 onValueChange={(value) => updateSettings({ criticalOnly: value })}
-                                trackColor={{ false: '#D1D5DB', true: '#3B82F6' }}
+                                 trackColor={{ false: '#475569', true: '#F97316' }}
                                 thumbColor="#FFFFFF"
                             />
                         </View>
@@ -408,7 +408,7 @@ const AlertManager: React.FC<AlertManagerProps> = ({ style }) => {
                             <Switch
                                 value={settings.soundEnabled}
                                 onValueChange={(value) => updateSettings({ soundEnabled: value })}
-                                trackColor={{ false: '#D1D5DB', true: '#3B82F6' }}
+                                 trackColor={{ false: '#475569', true: '#F97316' }}
                                 thumbColor="#FFFFFF"
                             />
                         </View>
@@ -418,7 +418,7 @@ const AlertManager: React.FC<AlertManagerProps> = ({ style }) => {
                             <Switch
                                 value={settings.vibrationEnabled}
                                 onValueChange={(value) => updateSettings({ vibrationEnabled: value })}
-                                trackColor={{ false: '#D1D5DB', true: '#3B82F6' }}
+                                 trackColor={{ false: '#475569', true: '#F97316' }}
                                 thumbColor="#FFFFFF"
                             />
                         </View>
@@ -504,13 +504,15 @@ const AlertManager: React.FC<AlertManagerProps> = ({ style }) => {
 
 const styles = StyleSheet.create({
     container: {
-        backgroundColor: '#FFFFFF',
-        borderRadius: 12,
+        backgroundColor: 'rgba(30, 41, 59, 0.8)',
+        borderRadius: 16,
         padding: 16,
         margin: 16,
+        borderWidth: 1,
+        borderColor: '#334155',
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
+        shadowOpacity: 0.3,
         shadowRadius: 4,
         elevation: 2,
     },
@@ -524,7 +526,7 @@ const styles = StyleSheet.create({
     },
     title: {
         fontSize: 18,
-        color: '#111827',
+        color: '#FFFFFF',
         marginLeft: 8,
         flex: 1,
         fontFamily: FONT_FAMILY.POPPINS_BOLD,
@@ -534,7 +536,7 @@ const styles = StyleSheet.create({
     },
     subtitle: {
         fontSize: 14,
-        color: '#6B7280',
+        color: '#94A3B8',
         marginLeft: 28,
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
@@ -545,10 +547,12 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         paddingHorizontal: 12,
-        paddingVertical: 8,
-        backgroundColor: '#F9FAFB',
+        paddingVertical: 10,
+        backgroundColor: 'rgba(15, 23, 42, 0.6)',
         borderRadius: 8,
         marginBottom: 8,
+        borderWidth: 1,
+        borderColor: '#334155',
     },
     statusIndicator: {
         width: 8,
@@ -558,13 +562,16 @@ const styles = StyleSheet.create({
     },
     statusText: {
         fontSize: 12,
-        color: '#6B7280',
+        color: '#CBD5E1',
         fontWeight: '500',
         flex: 1,
         fontFamily: FONT_FAMILY.POPPINS_MEDIUM,
     },
+    enableButtonWrapper: {
+        borderRadius: 6,
+        overflow: 'hidden',
+    },
     enableButton: {
-        backgroundColor: '#3B82F6',
         paddingHorizontal: 12,
         paddingVertical: 4,
         borderRadius: 6,
@@ -579,8 +586,11 @@ const styles = StyleSheet.create({
         padding: 4,
         marginLeft: 8,
     },
+    retryButtonWrapper: {
+        borderRadius: 4,
+        overflow: 'hidden',
+    },
     retryButton: {
-        backgroundColor: '#F59E0B',
         paddingHorizontal: 8,
         paddingVertical: 4,
         borderRadius: 4,
@@ -600,45 +610,75 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingVertical: 12,
         borderBottomWidth: 1,
-        borderBottomColor: '#F3F4F6',
+        borderBottomColor: '#334155',
     },
     switchLabel: {
         fontSize: 16,
-        color: '#374151',
+        color: '#FFFFFF',
         fontWeight: '500',
         fontFamily: FONT_FAMILY.POPPINS_MEDIUM,
     },
+    testButtonWrapper: {
+        borderRadius: 8,
+        overflow: 'hidden',
+        marginTop: 8,
+    },
+    testButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        borderRadius: 8,
+        gap: 8,
+    },
+    testButtonText: {
+        color: '#FFFFFF',
+        fontSize: 14,
+        fontWeight: '600',
+        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
+    },
     modalOverlay: {
         flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        backgroundColor: 'rgba(0, 0, 0, 0.7)',
         justifyContent: 'flex-end',
     },
     modalContent: {
-        backgroundColor: '#FFFFFF',
+        backgroundColor: '#1E293B',
         borderTopLeftRadius: 20,
         borderTopRightRadius: 20,
         paddingHorizontal: 20,
         paddingTop: 20,
         paddingBottom: 40,
         maxHeight: '80%',
+        borderWidth: 1,
+        borderColor: '#334155',
     },
     modalHeader: {
         marginBottom: 24,
+        borderBottomWidth: 1,
+        borderBottomColor: '#334155',
+        paddingBottom: 16,
     },
     modalTitle: {
         fontSize: 20,
         fontWeight: '700',
-        color: '#111827',
+        color: '#FFFFFF',
         fontFamily: FONT_FAMILY.POPPINS_BOLD,
     },
     settingSection: {
         marginBottom: 24,
+        backgroundColor: 'rgba(15, 23, 42, 0.6)',
+        borderRadius: 12,
+        padding: 16,
+        borderWidth: 1,
+        borderColor: '#334155',
     },
     sectionTitle: {
         fontSize: 16,
         fontWeight: '600',
-        color: '#111827',
-        marginBottom: 8,
+        color: '#FFFFFF',
+        marginBottom: 12,
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
     infoRow: {
@@ -647,23 +687,23 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingVertical: 8,
         borderBottomWidth: 1,
-        borderBottomColor: '#F3F4F6',
+        borderBottomColor: '#334155',
     },
     infoLabel: {
         fontSize: 14,
-        color: '#6B7280',
+        color: '#94A3B8',
         fontWeight: '500',
         fontFamily: FONT_FAMILY.POPPINS_MEDIUM,
     },
     infoValue: {
         fontSize: 14,
-        color: '#111827',
+        color: '#FFFFFF',
         fontWeight: '600',
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
     helpText: {
         fontSize: 14,
-        color: '#6B7280',
+        color: '#CBD5E1',
         lineHeight: 20,
         marginBottom: 8,
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,

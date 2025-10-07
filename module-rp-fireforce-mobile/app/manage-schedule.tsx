@@ -9,6 +9,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { oncallController } from '@/api/oncall-schedule-controller';
 import { SafeAreaView } from "react-native-safe-area-context";
 import DateTimePickerModal from "react-native-modal-datetime-picker";
+import {LinearGradient} from "expo-linear-gradient";
+import {FONT_FAMILY} from "@/constants/fonts";
 
 // Simple Toggle Switch Component
 function ToggleSwitch({ isActive, onToggle }: { isActive: boolean; onToggle: () => void }) {
@@ -87,7 +89,7 @@ function DatePickerField({
                 style={styles.dateDisplay}
                 onPress={() => setIsVisible(true)}
             >
-                <Ionicons name="calendar-outline" size={20} color="#2563EB" />
+                <Ionicons name="calendar-outline" size={20} color="#F97316" />
                 <Text style={styles.dateDisplayText}>
                     {formatUTC(value)}
                 </Text>
@@ -107,7 +109,7 @@ function DatePickerField({
                     onPress={() => onChange(new Date().toISOString())}
                     style={styles.dateBtn}
                 >
-                    <Ionicons name="time" size={16} color="#2563EB" />
+                    <Ionicons name="time" size={16} color="#F97316" />
                     <Text style={styles.dateBtnText}>Set to now</Text>
                 </TouchableOpacity>
 
@@ -120,7 +122,7 @@ function DatePickerField({
                     }}
                     style={styles.dateBtn}
                 >
-                    <Ionicons name="calendar" size={16} color="#2563EB" />
+                    <Ionicons name="calendar" size={16} color="#F97316" />
                     <Text style={styles.dateBtnText}>Tomorrow</Text>
                 </TouchableOpacity>
 
@@ -135,7 +137,7 @@ function DatePickerField({
                     }}
                     style={styles.dateBtn}
                 >
-                    <Ionicons name="calendar-outline" size={16} color="#2563EB" />
+                    <Ionicons name="calendar-outline" size={16} color="#F97316" />
                     <Text style={styles.dateBtnText}>Next Monday</Text>
                 </TouchableOpacity>
             </View>
@@ -188,7 +190,7 @@ function CalendarPreview({
     return (
         <View style={styles.calendarContainer}>
             <View style={styles.calendarHeader}>
-                <Ionicons name="calendar" size={20} color="#2563EB" />
+                <Ionicons name="calendar" size={20} color="#F97316" />
                 <Text style={styles.calendarTitle}>14-Day Schedule Preview</Text>
             </View>
 
@@ -262,7 +264,7 @@ function MemberCard({
                     disabled={isFirst}
                     style={styles.arrowBtn}
                 >
-                    <Text style={[styles.arrowText, { color: isFirst ? '#D1D5DB' : '#2563EB' }]}>
+                    <Text style={[styles.arrowText, { color: isFirst ? '#64748B' : '#F97316' }]}>
                         ▲
                     </Text>
                 </TouchableOpacity>
@@ -271,7 +273,7 @@ function MemberCard({
                     disabled={isLast}
                     style={styles.arrowBtn}
                 >
-                    <Text style={[styles.arrowText, { color: isLast ? '#D1D5DB' : '#2563EB' }]}>
+                    <Text style={[styles.arrowText, { color: isLast ? '#D1D5DB' : '#F97316' }]}>
                         ▼
                     </Text>
                 </TouchableOpacity>
@@ -291,7 +293,7 @@ function MemberCard({
                     onPress={onCycleRole}
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
-                    <Ionicons name="swap-horizontal" size={18} color="#2563EB" />
+                    <Ionicons name="swap-horizontal" size={18} color="#F97316" />
                 </TouchableOpacity>
                 <ToggleSwitch isActive={member.isActive} onToggle={onToggleActive} />
             </View>
@@ -426,14 +428,19 @@ export default function ManageSchedule() {
 
     return (
         <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
-            <Stack.Screen options={{ title: 'Manage Schedule' }} />
-
+            <View style={styles.header}>
+                <TouchableOpacity onPress={() => router.back()}>
+                    <Ionicons name="arrow-back" size={24} color="#F97316" />
+                </TouchableOpacity>
+                <Text style={styles.title}>Manage Schedule</Text>
+                <View style={{ width: 24 }} />
+            </View>
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
                 {/* Rotation Type */}
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Rotation Schedule</Text>
                     <Text style={styles.sectionDesc}>How often should the on-call person change?</Text>
-                    <View style={styles.chipRow}>
+                    <View style={styles.chipGrid}>
                         {[
                             { value: 'daily', label: 'Daily', desc: '24 hours' },
                             { value: 'weekly', label: 'Weekly', desc: '7 days' },
@@ -442,15 +449,33 @@ export default function ManageSchedule() {
                         ].map(({ value, label, desc }) => (
                             <TouchableOpacity
                                 key={value}
-                                style={[styles.chip, cfg.rotationType === value && styles.chipActive]}
+                                style={styles.chipWrapper}
                                 onPress={() => setCfg({ ...cfg, rotationType: value as any })}
                             >
-                                <Text style={[styles.chipLabel, cfg.rotationType === value && styles.chipLabelActive]}>
-                                    {label}
-                                </Text>
-                                <Text style={[styles.chipDesc, cfg.rotationType === value && styles.chipDescActive]}>
-                                    {desc}
-                                </Text>
+                                {cfg.rotationType === value ? (
+                                    <LinearGradient
+                                        colors={['#F97316', '#DC2626']}
+                                        start={{ x: 0, y: 0 }}
+                                        end={{ x: 1, y: 0 }}
+                                        style={styles.chipActive}
+                                    >
+                                        <Text style={styles.chipLabelActive}>
+                                            {label}
+                                        </Text>
+                                        <Text style={styles.chipDescActive}>
+                                            {desc}
+                                        </Text>
+                                    </LinearGradient>
+                                ) : (
+                                    <View style={styles.chip}>
+                                        <Text style={styles.chipLabel}>
+                                            {label}
+                                        </Text>
+                                        <Text style={styles.chipDesc}>
+                                            {desc}
+                                        </Text>
+                                    </View>
+                                )}
                             </TouchableOpacity>
                         ))}
                     </View>
@@ -492,12 +517,19 @@ export default function ManageSchedule() {
                 </View>
 
                 <TouchableOpacity
-                    style={[styles.saveBtn, saving && { opacity: 0.6 }]}
+                    style={styles.saveBtnWrapper}
                     onPress={save}
                     disabled={saving}
                 >
-                    <Ionicons name="save" size={20} color="#FFFFFF" />
-                    <Text style={styles.saveText}>{saving ? 'Saving…' : 'Save changes'}</Text>
+                    <LinearGradient
+                        colors={['#F97316', '#DC2626']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                        style={[styles.saveBtn, saving && { opacity: 0.6 }]}
+                    >
+                        <Ionicons name="save" size={20} color="#FFFFFF" />
+                        <Text style={styles.saveText}>{saving ? 'Saving…' : 'Save changes'}</Text>
+                    </LinearGradient>
                 </TouchableOpacity>
             </ScrollView>
         </SafeAreaView>
@@ -505,84 +537,195 @@ export default function ManageSchedule() {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#F3F4F6' },
-    scrollContent: { padding: 16, paddingBottom: 32 },
-    center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-    muted: { color: '#6B7280', marginTop: 8, fontSize: 14, textAlign: 'center' },
-    section: { backgroundColor: '#FFFFFF', borderRadius: 12, padding: 16, marginBottom: 16 },
-    sectionTitle: { fontSize: 18, fontWeight: '600', color: '#111827', marginBottom: 4 },
-    sectionDesc: { fontSize: 14, color: '#6B7280', marginBottom: 12 },
-    chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    container: {
+        flex: 1,
+        backgroundColor: '#0F172A'
+    },
+    header: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: 16,
+        backgroundColor: 'rgba(30, 41, 59, 0.8)',
+        borderBottomWidth: 1,
+        borderBottomColor: '#334155',
+    },
+    title: {
+        fontSize: 20,
+        fontWeight: '700',
+        color: '#FFFFFF',
+        fontFamily: FONT_FAMILY.POPPINS_BOLD,
+    },
+    scrollContent: {
+        padding: 16,
+        paddingBottom: 32
+    },
+    center: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center'
+    },
+    muted: {
+        color: '#94A3B8',
+        marginTop: 8,
+        fontSize: 14,
+        textAlign: 'center'
+    },
+    section: {
+        backgroundColor: 'rgba(30, 41, 59, 0.6)',
+        borderRadius: 16,
+        padding: 16,
+        marginBottom: 16,
+        borderWidth: 1,
+        borderColor: '#334155',
+    },
+    sectionTitle: {
+        fontSize: 18,
+        fontWeight: '600',
+        color: '#FFFFFF',
+        marginBottom: 4
+    },
+    sectionDesc: {
+        fontSize: 14,
+        color: '#94A3B8',
+        marginBottom: 12
+    },
+    chipGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+        justifyContent: 'space-between',
+    },
+    chipWrapper: {
+        width: '48%',
+        borderRadius: 8,
+        overflow: 'hidden',
+    },
     chip: {
         paddingHorizontal: 16,
         paddingVertical: 12,
         borderRadius: 8,
-        backgroundColor: '#F3F4F6',
-        minWidth: 100,
-        alignItems: 'center'
+        backgroundColor: 'rgba(15, 23, 42, 0.6)',
+        borderWidth: 1,
+        borderColor: '#334155',
+        alignItems: 'center',
+        minHeight: 70,
+        justifyContent: 'center',
     },
-    chipActive: { backgroundColor: '#2563EB' },
-    chipLabel: { color: '#374151', fontWeight: '600', fontSize: 14 },
-    chipLabelActive: { color: '#FFFFFF' },
-    chipDesc: { fontSize: 12, color: '#6B7280', marginTop: 4, fontWeight: 'normal' },
-    chipDescActive: { color: '#E0E7FF' },
+    chipActive: {
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        borderRadius: 8,
+        alignItems: 'center',
+        minHeight: 70,
+        justifyContent: 'center',
+    },
+    chipLabel: {
+        color: '#CBD5E1',
+        fontWeight: '600',
+        fontSize: 14
+    },
+    chipLabelActive: {
+        color: '#FFFFFF'
+    },
+    chipDesc: {
+        fontSize: 12,
+        color: '#94A3B8',
+        marginTop: 4,
+        fontWeight: 'normal'
+    },
+    chipDescActive: {
+        color: 'rgba(255, 255, 255, 0.9)'
+    },
     dateDisplay: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#EFF6FF',
+        backgroundColor: 'rgba(249, 115, 22, 0.15)',
         padding: 16,
         borderRadius: 8,
         borderWidth: 2,
-        borderColor: '#2563EB',
+        borderColor: '#F97316',
         gap: 12,
         marginBottom: 12
     },
     dateDisplayText: {
         fontSize: 16,
-        color: '#1E40AF',
+        color: '#FB923C',
         fontWeight: '600',
         flex: 1
     },
     buttonRow: {
         flexDirection: 'row',
-        flexWrap: 'wrap',
         gap: 8,
     },
     dateBtn: {
+        flex: 1, // ✅ Equal width for all buttons
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 6,
-        backgroundColor: '#F3F4F6',
-        paddingHorizontal: 12,
+        justifyContent: 'center', // ✅ Center content
+        gap: 4, // ✅ Reduced gap
+        backgroundColor: 'rgba(15, 23, 42, 0.6)',
+        paddingHorizontal: 8, // ✅ Reduced padding
         paddingVertical: 8,
         borderRadius: 6,
         borderWidth: 1,
-        borderColor: '#E5E7EB'
+        borderColor: '#334155'
     },
     dateBtnText: {
-        color: '#2563EB',
+        color: '#FB923C',
         fontWeight: '600',
-        fontSize: 13
+        fontSize: 12, // ✅ Slightly smaller text
     },
     memberCard: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#F9FAFB',
+        backgroundColor: 'rgba(15, 23, 42, 0.6)',
         padding: 12,
         borderRadius: 8,
         borderWidth: 1,
-        borderColor: '#E5E7EB',
+        borderColor: '#334155',
         marginBottom: 12
     },
-    arrowContainer: { flexDirection: 'column', marginRight: 12 },
-    arrowBtn: { padding: 4 },
-    arrowText: { fontSize: 16, lineHeight: 16 },
-    memberName: { fontSize: 16, fontWeight: '600', color: '#111827' },
-    memberEmail: { fontSize: 12, color: '#6B7280' },
-    memberMeta: { fontSize: 12, color: '#6B7280', marginTop: 2 },
-    bold: { fontWeight: '700', color: '#111827' },
-    controls: { flexDirection: 'row', gap: 12, marginLeft: 12, alignItems: 'center' },
-    iconBtn: { padding: 8, alignItems: 'center', justifyContent: 'center' },
+    arrowContainer: {
+        flexDirection: 'column',
+        marginRight: 12
+    },
+    arrowBtn: {
+        padding: 4
+    },
+    arrowText: {
+        fontSize: 16,
+        lineHeight: 16
+    },
+    memberName: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#FFFFFF'
+    },
+    memberEmail: {
+        fontSize: 12,
+        color: '#94A3B8'
+    },
+    memberMeta: {
+        fontSize: 12,
+        color: '#94A3B8',
+        marginTop: 2
+    },
+    bold: {
+        fontWeight: '700',
+        color: '#CBD5E1'
+    },
+    controls: {
+        flexDirection: 'row',
+        gap: 12,
+        marginLeft: 12,
+        alignItems: 'center'
+    },
+    iconBtn: {
+        padding: 8,
+        alignItems: 'center',
+        justifyContent: 'center'
+    },
     toggleContainer: {
         width: 44,
         height: 24,
@@ -613,7 +756,7 @@ const styles = StyleSheet.create({
     calendarTitle: {
         fontSize: 16,
         fontWeight: '600',
-        color: '#111827'
+        color: '#FFFFFF'
     },
     calendarGrid: {
         flexDirection: 'row',
@@ -622,38 +765,38 @@ const styles = StyleSheet.create({
     dayCard: {
         width: 120,
         padding: 12,
-        backgroundColor: '#F9FAFB',
+        backgroundColor: 'rgba(15, 23, 42, 0.6)',
         borderRadius: 8,
         borderWidth: 1,
-        borderColor: '#E5E7EB',
+        borderColor: '#334155',
     },
     dayCardToday: {
-        backgroundColor: '#EFF6FF',
-        borderColor: '#2563EB',
+        backgroundColor: 'rgba(249, 115, 22, 0.2)',
+        borderColor: '#F97316',
         borderWidth: 2,
     },
     dayDate: {
         fontSize: 14,
         fontWeight: '600',
-        color: '#111827',
+        color: '#FFFFFF',
         marginBottom: 2,
     },
     dayDateToday: {
-        color: '#2563EB',
+        color: '#FB923C',
     },
     dayOfWeek: {
         fontSize: 12,
-        color: '#6B7280',
+        color: '#94A3B8',
         marginBottom: 8,
     },
     onCallName: {
         fontSize: 14,
         fontWeight: '500',
-        color: '#111827',
+        color: '#CBD5E1',
         marginBottom: 4,
     },
     roleBadge: {
-        backgroundColor: '#DBEAFE',
+        backgroundColor: 'rgba(249, 115, 22, 0.2)',
         paddingHorizontal: 8,
         paddingVertical: 4,
         borderRadius: 4,
@@ -662,21 +805,29 @@ const styles = StyleSheet.create({
     roleBadgeText: {
         fontSize: 10,
         fontWeight: '600',
-        color: '#2563EB',
+        color: '#FB923C',
     },
     noOnCall: {
         fontSize: 12,
-        color: '#9CA3AF',
+        color: '#64748B',
         fontStyle: 'italic',
+    },
+    saveBtnWrapper: {
+        borderRadius: 10,
+        overflow: 'hidden',
+        marginTop: 8,
     },
     saveBtn: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#10B981',
         borderRadius: 10,
         padding: 16,
-        marginTop: 8
     },
-    saveText: { color: '#FFF', fontWeight: '700', marginLeft: 8, fontSize: 16 },
+    saveText: {
+        color: '#FFF',
+        fontWeight: '700',
+        marginLeft: 8,
+        fontSize: 16
+    },
 });

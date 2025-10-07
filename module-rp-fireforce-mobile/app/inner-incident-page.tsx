@@ -31,6 +31,7 @@ import { retrieveUserSession } from "@/constants/local-storage";
 import {Ionicons} from "@expo/vector-icons";
 import {createAuditLog} from "@/api/audit-trail";
 import { usePushNotificationContext } from '@/context/push-notification-context';
+import { LinearGradient } from "expo-linear-gradient";
 
 export default function InnerIncidentPage() {
     const router = useRouter();
@@ -412,15 +413,22 @@ export default function InnerIncidentPage() {
                 <View style={styles.detailsCard}>
                     <View style={styles.titleSection}>
                         <Text style={styles.incidentTitle}>{incident.title}</Text>
-                        <View
-                            style={[
-                                styles.severityBadge,
-                                { backgroundColor: getSeverityColor(incident.severity) },
-                            ]}
-                        >
-                            <Text style={styles.severityText}>
-                                {incident.severity.toUpperCase()}
-                            </Text>
+                        <View style={styles.severityBadgeWrapper}>
+                            <LinearGradient
+                                colors={
+                                    incident.severity === 'low' ? ['#16A34A', '#15803D'] as const :
+                                        incident.severity === 'medium' ? ['#D97706', '#B45309'] as const :
+                                            incident.severity === 'high' ? ['#EA580C', '#C2410C'] as const :
+                                                ['#DC2626', '#B91C1C'] as const // critical
+                                }
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 0 }}
+                                style={styles.severityBadge}
+                            >
+                                <Text style={styles.severityText}>
+                                    {incident.severity.toUpperCase()}
+                                </Text>
+                            </LinearGradient>
                         </View>
                     </View>
 
@@ -484,54 +492,76 @@ export default function InnerIncidentPage() {
                         {incident.status === 'open' && (
                             <>
                                 <TouchableOpacity
-                                    style={[styles.actionButton, styles.acceptButton]}
+                                    style={styles.actionButtonWrapper}
                                     onPress={handleAccept}
                                     disabled={processingAction}
                                 >
-                                    {processingAction ? (
-                                        <ActivityIndicator color="#FFFFFF" size="small" />
-                                    ) : (
-                                        <>
-                                            <IconSymbol name="checkmark" size={20} color="#FFFFFF" />
-                                            <Text style={styles.actionButtonText}>Accept</Text>
-                                        </>
-                                    )}
+                                    <LinearGradient
+                                        colors={['#16A34A', '#15803D'] as const} // ✅ Low severity green
+                                        start={{ x: 0, y: 0 }}
+                                        end={{ x: 1, y: 0 }}
+                                        style={styles.acceptButton}
+                                    >
+                                        {processingAction ? (
+                                            <ActivityIndicator color="#FFFFFF" size="small" />
+                                        ) : (
+                                            <>
+                                                <IconSymbol name="checkmark" size={20} color="#FFFFFF" />
+                                                <Text style={styles.actionButtonText}>Acknowledge</Text>
+                                            </>
+                                        )}
+                                    </LinearGradient>
                                 </TouchableOpacity>
 
                                 <TouchableOpacity
-                                    style={[styles.actionButton, styles.ignoreButton]}
+                                    style={styles.actionButtonWrapper}
                                     onPress={handleIgnore}
                                     disabled={processingAction}
                                 >
-                                    {processingAction ? (
-                                        <ActivityIndicator color="#FFFFFF" size="small" />
-                                    ) : (
-                                        <>
-                                            <IconSymbol name="xmark" size={20} color="#FFFFFF" />
-                                            <Text style={styles.actionButtonText}>Ignore</Text>
-                                        </>
-                                    )}
+                                    <LinearGradient
+                                        colors={['#DC2626', '#B91C1C'] as const} // ✅ Critical severity red
+                                        start={{ x: 0, y: 0 }}
+                                        end={{ x: 1, y: 0 }}
+                                        style={styles.ignoreButton}
+                                    >
+                                        {processingAction ? (
+                                            <ActivityIndicator color="#FFFFFF" size="small" />
+                                        ) : (
+                                            <>
+                                                <IconSymbol name="xmark" size={20} color="#FFFFFF" />
+                                                <Text style={styles.actionButtonText}>Decline</Text>
+                                            </>
+                                        )}
+                                    </LinearGradient>
                                 </TouchableOpacity>
                             </>
                         )}
                     </View>
                 )}
-                {/* Action Buttons */}
+
+                {/* Resolve Button */}
                 {incident.status === 'investigating' && (
                     <View style={styles.actionButtonsContainer}>
                         <TouchableOpacity
-                            style={[styles.actionButton, styles.acceptButton]}
+                            style={styles.actionButtonWrapper}
                             onPress={handleAccept}
                             disabled={processingAction}
                         >
-                            {processingAction ? (
-                                <ActivityIndicator color="#FFFFFF" size="small" />
-                            ) : (
-                                <>
-                                    <IconSymbol name="checkmark" size={20} color="#FFFFFF" />
-                                    <Text style={styles.actionButtonText}>Mark as Resolved</Text>
-                                </>
-                            )}
+                            <LinearGradient
+                                colors={['#16A34A', '#15803D'] as const} // ✅ Low severity green
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 0 }}
+                                style={styles.resolveButton}
+                            >
+                                {processingAction ? (
+                                    <ActivityIndicator color="#FFFFFF" size="small" />
+                                ) : (
+                                    <>
+                                        <IconSymbol name="checkmark" size={20} color="#FFFFFF" />
+                                        <Text style={styles.actionButtonText}>Mark as Resolved</Text>
+                                    </>
+                                )}
+                            </LinearGradient>
                         </TouchableOpacity>
                     </View>
                 )}
@@ -580,21 +610,28 @@ export default function InnerIncidentPage() {
                         textAlignVertical="top"
                     />
                     <TouchableOpacity
-                        style={[
-                            styles.submitCommentButton,
-                            (!comment.trim() || submittingComment) && styles.submitCommentButtonDisabled
-                        ]}
+                        style={styles.submitCommentButtonWrapper}
                         onPress={handleSubmitComment}
                         disabled={!comment.trim() || submittingComment}
                     >
-                        {submittingComment ? (
-                            <ActivityIndicator color="#FFFFFF" size="small" />
-                        ) : (
-                            <>
-                                <IconSymbol name="paperplane.fill" size={16} color="#FFFFFF" />
-                                <Text style={styles.submitCommentButtonText}>Submit Comment</Text>
-                            </>
-                        )}
+                        <LinearGradient
+                            colors={(!comment.trim() || submittingComment)
+                                ? ['#64748B', '#64748B']
+                                : ['#F97316', '#DC2626']
+                            }
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 0 }}
+                            style={styles.submitCommentButton}
+                        >
+                            {submittingComment ? (
+                                <ActivityIndicator color="#FFFFFF" size="small" />
+                            ) : (
+                                <>
+                                    <IconSymbol name="paperplane.fill" size={16} color="#FFFFFF" />
+                                    <Text style={styles.submitCommentButtonText}>Submit Comment</Text>
+                                </>
+                            )}
+                        </LinearGradient>
                     </TouchableOpacity>
                 </View>
             </ScrollView>
@@ -605,7 +642,7 @@ export default function InnerIncidentPage() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F3F4F6',
+        backgroundColor: 'transparent',
     },
     loadingContainer: {
         justifyContent: 'center',
@@ -618,12 +655,12 @@ const styles = StyleSheet.create({
     loadingText: {
         marginTop: 16,
         fontSize: 15,
-        color: '#6B7280',
+        color: '#94A3B8',
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     errorText: {
         fontSize: 16,
-        color: '#DC2626',
+        color: '#FCA5A5',
         fontFamily: FONT_FAMILY.POPPINS_MEDIUM,
     },
     header: {
@@ -632,9 +669,9 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         paddingHorizontal: 20,
         paddingVertical: 16,
-        backgroundColor: '#FFFFFF',
+        backgroundColor: 'rgba(30, 41, 59, 0.8)',
         borderBottomWidth: 1,
-        borderBottomColor: '#E5E7EB',
+        borderBottomColor: '#334155',
     },
     backButton: {
         flexDirection: 'row',
@@ -645,13 +682,13 @@ const styles = StyleSheet.create({
     },
     backButtonText: {
         fontSize: 16,
-        color: '#3B82F6',
+        color: '#F97316',
         fontFamily: FONT_FAMILY.POPPINS_MEDIUM,
     },
     headerTitle: {
         fontSize: 18,
         fontWeight: '600',
-        color: '#111827',
+        color: '#FFFFFF',
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
     headerRight: {
@@ -674,13 +711,15 @@ const styles = StyleSheet.create({
         fontFamily: FONT_FAMILY.POPPINS_BOLD,
     },
     detailsCard: {
-        backgroundColor: '#FFFFFF',
+        backgroundColor: 'rgba(30, 41, 59, 0.6)',
         margin: 16,
-        borderRadius: 12,
+        borderRadius: 16,
         padding: 20,
+        borderWidth: 1,
+        borderColor: '#334155',
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
+        shadowOpacity: 0.3,
         shadowRadius: 4,
         elevation: 2,
     },
@@ -692,11 +731,15 @@ const styles = StyleSheet.create({
     },
     incidentTitle: {
         fontSize: 17,
-        color: '#111827',
+        color: '#FFFFFF',
         flex: 1,
         marginRight: 12,
         lineHeight: 28,
         fontFamily: FONT_FAMILY.POPPINS_BOLD,
+    },
+    severityBadgeWrapper: {
+        borderRadius: 16,
+        overflow: 'hidden',
     },
     severityBadge: {
         paddingHorizontal: 12,
@@ -705,20 +748,19 @@ const styles = StyleSheet.create({
     },
     severityText: {
         fontSize: 12,
-        fontWeight: '700',
         color: '#FFFFFF',
         fontFamily: FONT_FAMILY.POPPINS_BOLD,
     },
     incidentDescription: {
         fontSize: 15,
-        color: '#374151',
+        color: '#CBD5E1',
         lineHeight: 22,
         marginBottom: 24,
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     metadataSection: {
         borderTopWidth: 1,
-        borderTopColor: '#E5E7EB',
+        borderTopColor: '#334155',
         paddingTop: 20,
         gap: 12,
     },
@@ -729,14 +771,14 @@ const styles = StyleSheet.create({
     },
     metadataLabel: {
         fontSize: 13,
-        color: '#6B7280',
+        color: '#94A3B8',
         fontWeight: '500',
         minWidth: 80,
         fontFamily: FONT_FAMILY.POPPINS_MEDIUM,
     },
     metadataValue: {
         fontSize: 13,
-        color: '#111827',
+        color: '#FFFFFF',
         flex: 1,
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
@@ -747,30 +789,43 @@ const styles = StyleSheet.create({
         gap: 12,
         marginBottom: 16,
     },
-    actionButton: {
+    actionButtonWrapper: {
         flex: 1,
+        borderRadius: 8,
+        overflow: 'hidden',
+        minWidth: 0,
+    },
+    actionButton: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
         paddingVertical: 14,
         borderRadius: 8,
         gap: 8,
-        minWidth: '100%',
     },
     acceptButton: {
-        backgroundColor: '#10B981',
-        flex: 1,
-        minWidth: 0,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 14,
+        borderRadius: 8,
+        gap: 8,
     },
     ignoreButton: {
-        backgroundColor: '#EF4444',
-        flex: 1,
-        minWidth: 0,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 14,
+        borderRadius: 8,
+        gap: 8,
     },
     resolveButton: {
-        backgroundColor: '#8B5CF6',
-        flex: 1,
-        minWidth: 0,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 14,
+        borderRadius: 8,
+        gap: 8,
     },
     actionButtonText: {
         fontSize: 15,
@@ -779,21 +834,23 @@ const styles = StyleSheet.create({
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
     commentsDisplaySection: {
-        backgroundColor: '#FFFFFF',
+        backgroundColor: 'rgba(30, 41, 59, 0.6)',
         margin: 16,
         marginTop: 0,
-        borderRadius: 12,
+        borderRadius: 16,
         padding: 20,
+        borderWidth: 1,
+        borderColor: '#334155',
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
+        shadowOpacity: 0.3,
         shadowRadius: 4,
         elevation: 2,
     },
     commentsDisplayTitle: {
         fontSize: 16,
         fontWeight: '600',
-        color: '#111827',
+        color: '#FFFFFF',
         marginBottom: 16,
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
@@ -802,7 +859,7 @@ const styles = StyleSheet.create({
     },
     commentItem: {
         borderBottomWidth: 1,
-        borderBottomColor: '#E5E7EB',
+        borderBottomColor: '#334155',
         paddingBottom: 12,
         marginBottom: 12,
     },
@@ -815,59 +872,65 @@ const styles = StyleSheet.create({
     commentAuthor: {
         fontSize: 13,
         fontWeight: '600',
-        color: '#3B82F6',
+        color: '#F97316',
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
     commentAuthorEmail: {
         fontSize: 10,
         fontWeight: '600',
-        color: '#525050',
+        color: '#94A3B8',
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     commentTime: {
         marginTop: -15,
         fontSize: 11,
-        color: '#6B7280',
+        color: '#94A3B8',
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     commentText: {
         fontSize: 14,
-        color: '#374151',
+        color: '#CBD5E1',
         lineHeight: 20,
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     commentSection: {
-        backgroundColor: '#FFFFFF',
+        backgroundColor: 'rgba(30, 41, 59, 0.6)',
         margin: 16,
         marginTop: 0,
-        borderRadius: 12,
+        borderRadius: 16,
         padding: 20,
+        borderWidth: 1,
+        borderColor: '#334155',
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
+        shadowOpacity: 0.3,
         shadowRadius: 4,
         elevation: 2,
     },
     commentSectionTitle: {
         fontSize: 16,
         fontWeight: '600',
-        color: '#111827',
+        color: '#FFFFFF',
         marginBottom: 12,
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
     commentInput: {
         borderWidth: 1,
-        borderColor: '#D1D5DB',
+        borderColor: '#334155',
         borderRadius: 8,
         padding: 14,
         fontSize: 14,
-        backgroundColor: '#FFFFFF',
+        backgroundColor: 'rgba(15, 23, 42, 0.6)',
+        color: '#FFFFFF',
         marginBottom: 16,
         minHeight: 100,
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
+    submitCommentButtonWrapper: {
+        borderRadius: 8,
+        overflow: 'hidden',
+    },
     submitCommentButton: {
-        backgroundColor: '#3B82F6',
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
@@ -875,13 +938,10 @@ const styles = StyleSheet.create({
         borderRadius: 8,
         gap: 8,
     },
-    submitCommentButtonDisabled: {
-        backgroundColor: '#9CA3AF',
-    },
     submitCommentButtonText: {
         fontSize: 15,
         fontWeight: '600',
         color: '#FFFFFF',
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
-})
+});

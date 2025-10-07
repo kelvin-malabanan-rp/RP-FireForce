@@ -77,7 +77,7 @@ export const LoginComponent = ({ onLogin }: LoginProps) => {
                     {/* Header with Logo */}
                     <View style={styles.headerContainer}>
                         <Image
-                            source={require("@/assets/images/notification-icon.png")}
+                            source={require("@/assets/images/rp-fireforce-white.png")}
                             style={styles.logo}
                         />
                         <Text style={styles.appTitle}>RP FireForce</Text>

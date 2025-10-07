@@ -1,4 +1,3 @@
-// app/(tabs)/oncall.tsx
 import React, { useState, useEffect } from 'react';
 import {
     View,
@@ -9,20 +8,20 @@ import {
     RefreshControl,
     Alert,
     StatusBar,
-    ActivityIndicator
+    ActivityIndicator,
+    Platform
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { CurrentOnCall, OnCallUser, OnCallTeam, OnCallScheduleDay } from '@/types/oncall-types';
 import { oncallController } from '@/api/oncall-schedule-controller';
-import { useColorScheme } from 'react-native';
 import { FONT_FAMILY } from '@/constants/fonts';
 import { retrieveUserSession } from "@/constants/local-storage";
+import {LinearGradient} from "expo-linear-gradient";
 
 export default function OnCallTab() {
     const router = useRouter();
     const params = useLocalSearchParams();
-    const colorScheme = useColorScheme();
     const teamId = (params.teamId as string) || 'team-1';
     const [currentOnCall, setCurrentOnCall] = useState<CurrentOnCall | null>(null);
     const [schedule, setSchedule] = useState<OnCallScheduleDay[]>([]);
@@ -50,7 +49,6 @@ export default function OnCallTab() {
                 const userTeam = await oncallController.getUserTeam(session.id);
                 if (userTeam) {
                     setUserTeamId(userTeam.id);
-                    // 👇 Set immediately so it's the default selected & appears first
                     setSelectedTeamId(userTeam.id);
                 }
             }
@@ -68,12 +66,11 @@ export default function OnCallTab() {
             setSchedule(data.schedule || []);
             setHasActiveOnCall(true);
 
-            // ✅ Ensure user’s own team is always first
             const sortedTeams = userTeamId
                 ? [
                     ...data.teams.filter(t => t.id === userTeamId),
                     ...data.teams.filter(t => t.id !== userTeamId)
-                  ]
+                ]
                 : data.teams;
             setTeams(sortedTeams);
         } catch (error: any) {
@@ -81,7 +78,7 @@ export default function OnCallTab() {
                 console.warn(`No active on-call for team ${selectedTeamId}`);
                 setCurrentOnCall(null);
                 setSchedule([]);
-                setHasActiveOnCall(false); // 👈 mark no active on-call
+                setHasActiveOnCall(false);
                 return;
             }
 
@@ -146,7 +143,7 @@ export default function OnCallTab() {
     if (loading) {
         return (
             <View style={[styles.container, styles.loadingContainer]}>
-                <ActivityIndicator size="large" color="#3B82F6" />
+                <ActivityIndicator size="large" color="#F97316" />
                 <Text style={styles.loadingText}>Loading on-call schedule...</Text>
             </View>
         );
@@ -154,11 +151,16 @@ export default function OnCallTab() {
 
     return (
         <View style={styles.container}>
-            <StatusBar barStyle={colorScheme === 'dark' ? "light-content" : "dark-content"} />
+            <StatusBar barStyle="light-content" />
 
             <ScrollView
                 refreshControl={
-                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#3B82F6" />
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={onRefresh}
+                        tintColor="#F97316"
+                        colors={['#F97316']}
+                    />
                 }
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={styles.scrollContent}
@@ -168,28 +170,37 @@ export default function OnCallTab() {
                     <Text style={styles.sectionTitle}>On Call Teams</Text>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                         {teams.map(team => (
-                            <TouchableOpacity
-                                key={team.id}
-                                style={[
-                                    styles.teamButton,
-                                    selectedTeamId === team.id && styles.teamButtonActive
-                                ]}
-                                onPress={() => setSelectedTeamId(team.id)}
-                            >
-                                <Text
-                                    style={[
-                                        styles.teamButtonText,
-                                        selectedTeamId === team.id && styles.teamButtonTextActive
-                                    ]}
-                                >
-                                    {team.name}
-                                </Text>
+                            <View key={team.id} style={styles.teamButtonWrapper}>
+                                {/* Badge outside the button */}
                                 {userTeamId === team.id && (
                                     <View style={styles.myTeamBadge}>
                                         <Text style={styles.myTeamBadgeText}>My Team</Text>
                                     </View>
                                 )}
-                            </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    onPress={() => setSelectedTeamId(team.id)}
+                                >
+                                    {selectedTeamId === team.id ? (
+                                        <LinearGradient
+                                            colors={['#F97316', '#DC2626']}
+                                            start={{ x: 0, y: 0 }}
+                                            end={{ x: 1, y: 0 }}
+                                            style={styles.teamButtonActive}
+                                        >
+                                            <Text style={styles.teamButtonTextActive}>
+                                                {team.name}
+                                            </Text>
+                                        </LinearGradient>
+                                    ) : (
+                                        <View style={styles.teamButton}>
+                                            <Text style={styles.teamButtonText}>
+                                                {team.name}
+                                            </Text>
+                                        </View>
+                                    )}
+                                </TouchableOpacity>
+                            </View>
                         ))}
                     </ScrollView>
                 </View>
@@ -202,7 +213,7 @@ export default function OnCallTab() {
                                 <View style={styles.cardHeader}>
                                     <Text style={styles.sectionTitle}>Currently On-Call</Text>
                                     <TouchableOpacity onPress={onRefresh}>
-                                        <Ionicons name="refresh" size={20} color="#3B82F6" />
+                                        <Ionicons name="refresh" size={20} color="#F97316" />
                                     </TouchableOpacity>
                                 </View>
 
@@ -284,14 +295,13 @@ export default function OnCallTab() {
                         </View>
                     </>
                 ) : (
-                    // 👇 When there’s no active on-call
                     <View style={styles.noOnCallContainer}>
-                        <Ionicons name="alert-circle-outline" size={50} color="#9CA3AF" />
+                        <Ionicons name="alert-circle-outline" size={50} color="#64748B" />
                         <Text style={styles.noOnCallText}>No active on-call schedule for this team</Text>
                     </View>
                 )}
 
-                {/* Quick Actions - Only show for user's own team */}
+                {/* Quick Actions */}
                 {isMyTeam && (
                     <View style={styles.actionsCard}>
                         <Text style={styles.sectionTitle}>Quick Actions</Text>
@@ -318,88 +328,130 @@ export default function OnCallTab() {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#F3F4F6' },
-    scrollContent: { paddingBottom: 20 },
-    loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
-    loadingText: {
-            fontSize: 16,
-            color: '#6B7280',
-            marginTop: 12,
-            fontFamily: FONT_FAMILY.POPPINS_REGULAR,
+    container: {
+        flex: 1,
+        backgroundColor: 'transparent',
+        marginTop: 15,
     },
-   teamSelector: { backgroundColor: '#FFFFFF', padding: 16, marginBottom: 16 },
-   sectionTitle: {
-            fontSize: 16,
-            fontWeight: '600',
-            color: '#111827',
-            marginBottom: 12,
-            fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
-        },
-        teamButton: {
-            marginTop: 10,
-            paddingHorizontal: 16,
-            paddingVertical: 8,
-            borderRadius: 20,
-            backgroundColor: '#F3F4F6',
-            marginRight: 8,
-            position: 'relative',
-            overflow: 'visible',
-        },
-        teamButtonActive: { backgroundColor: '#3B82F6' },
-        teamButtonText: {
-            fontSize: 14,
-            color: '#6B7280',
-            fontWeight: '500',
-            fontFamily: FONT_FAMILY.POPPINS_MEDIUM,
-        },
-        teamButtonTextActive: { color: '#FFFFFF', fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD },
-        myTeamBadge: {
-            position: 'absolute',
-            top: -10,
-            backgroundColor: '#10B981',
-            paddingHorizontal: 6,
-            paddingVertical: 2,
-            borderRadius: 8,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 1 },
-            shadowOpacity: 0.2,
-            shadowRadius: 2,
-            elevation: 3,
-        },
-        myTeamBadgeText: {
-            fontSize: 9,
-            color: '#FFFFFF',
-            fontWeight: '700',
-            fontFamily: FONT_FAMILY.POPPINS_BOLD,
-        },
-        currentOnCallCard: {
-            backgroundColor: '#FFFFFF',
-            borderRadius: 12,
-            padding: 16,
-            marginHorizontal: 16,
-            marginBottom: 16,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.1,
-            shadowRadius: 4,
-            elevation: 2,
-        },
-        noOnCallContainer: {
-            backgroundColor: '#FFFFFF',
-            borderRadius: 12,
-            padding: 30,
-            marginHorizontal: 16,
-            marginBottom: 16,
-            alignItems: 'center',
-            justifyContent: 'center',
-        },
-        noOnCallText: {
-            fontSize: 16,
-            color: '#6B7280',
-            marginTop: 10,
-            textAlign: 'center',
-            fontFamily: FONT_FAMILY.POPPINS_REGULAR,
-        },
+    scrollContent: {
+        paddingBottom: 20,
+        paddingTop: Platform.OS === 'ios' ? 100 : 80
+    },
+    loadingContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 40
+    },
+    loadingText: {
+        fontSize: 16,
+        color: '#94A3B8',
+        marginTop: 12,
+        fontFamily: FONT_FAMILY.POPPINS_REGULAR,
+    },
+    teamSelector: {
+        backgroundColor: 'rgba(30, 41, 59, 0.6)',
+        padding: 16,
+        marginBottom: 16,
+        marginHorizontal: 16,
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: '#334155',
+    },
+    sectionTitle: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#FFFFFF',
+        marginBottom: 12,
+        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
+    },
+    teamButtonWrapper: {
+        marginTop: 10,
+        marginRight: 8,
+        position: 'relative',
+        // NO overflow property here
+    },
+    teamButton: {
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 20,
+        backgroundColor: 'rgba(15, 23, 42, 0.6)',
+        borderWidth: 1,
+        borderColor: '#334155',
+        overflow: 'hidden', // ✅ Add here instead
+    },
+    teamButtonActive: {
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 20,
+        overflow: 'hidden', // ✅ Add here instead
+    },
+    teamButtonText: {
+        fontSize: 14,
+        color: '#94A3B8',
+        fontWeight: '500',
+        fontFamily: FONT_FAMILY.POPPINS_MEDIUM,
+    },
+    teamButtonTextActive: {
+        fontSize: 14,
+        color: '#FFFFFF',
+        fontWeight: '600',
+        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD
+    },
+    myTeamBadge: {
+        position: 'absolute',
+        top: -8,
+        left: '18%',
+        transform: [{ translateX: -30 }], // Center it
+        backgroundColor: '#10B981',
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 10,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 3,
+        elevation: 4,
+        zIndex: 10,
+    },
+    myTeamBadgeText: {
+        fontSize: 9,
+        color: '#FFFFFF',
+        fontWeight: '700',
+        fontFamily: FONT_FAMILY.POPPINS_BOLD,
+    },
+    currentOnCallCard: {
+        backgroundColor: 'rgba(30, 41, 59, 0.6)',
+        borderRadius: 16,
+        padding: 16,
+        marginHorizontal: 16,
+        marginBottom: 16,
+        borderWidth: 1,
+        borderColor: '#334155',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4,
+        elevation: 2,
+    },
+    noOnCallContainer: {
+        backgroundColor: 'rgba(30, 41, 59, 0.6)',
+        borderRadius: 16,
+        padding: 30,
+        marginHorizontal: 16,
+        marginBottom: 16,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: '#334155',
+    },
+    noOnCallText: {
+        fontSize: 16,
+        color: '#94A3B8',
+        marginTop: 10,
+        textAlign: 'center',
+        fontFamily: FONT_FAMILY.POPPINS_REGULAR,
+    },
     cardHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -410,7 +462,7 @@ const styles = StyleSheet.create({
         marginBottom: 16,
         paddingBottom: 16,
         borderBottomWidth: 1,
-        borderBottomColor: '#F3F4F6',
+        borderBottomColor: '#334155',
     },
     roleIndicator: {
         flexDirection: 'row',
@@ -426,13 +478,13 @@ const styles = StyleSheet.create({
     personName: {
         fontSize: 18,
         fontWeight: '600',
-        color: '#111827',
+        color: '#FFFFFF',
         marginBottom: 4,
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
     personEmail: {
         fontSize: 14,
-        color: '#6B7280',
+        color: '#94A3B8',
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     timeInfo: {
@@ -443,24 +495,26 @@ const styles = StyleSheet.create({
     },
     timeLabel: {
         fontSize: 14,
-        color: '#6B7280',
+        color: '#94A3B8',
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     timeValue: {
         fontSize: 14,
         fontWeight: '600',
-        color: '#111827',
+        color: '#FFFFFF',
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
     scheduleCard: {
-        backgroundColor: '#FFFFFF',
-        borderRadius: 12,
+        backgroundColor: 'rgba(30, 41, 59, 0.6)',
+        borderRadius: 16,
         padding: 16,
         marginHorizontal: 16,
         marginBottom: 16,
+        borderWidth: 1,
+        borderColor: '#334155',
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
+        shadowOpacity: 0.3,
         shadowRadius: 4,
         elevation: 2,
     },
@@ -470,7 +524,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingVertical: 12,
         borderBottomWidth: 1,
-        borderBottomColor: '#F3F4F6',
+        borderBottomColor: '#334155',
     },
     dayHeader: {
         flex: 1,
@@ -478,12 +532,12 @@ const styles = StyleSheet.create({
     dayDate: {
         fontSize: 16,
         fontWeight: '600',
-        color: '#111827',
+        color: '#FFFFFF',
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
     dayOfWeek: {
         fontSize: 12,
-        color: '#6B7280',
+        color: '#94A3B8',
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     dayAssignment: {
@@ -492,25 +546,27 @@ const styles = StyleSheet.create({
     },
     assignmentText: {
         fontSize: 14,
-        color: '#374151',
+        color: '#CBD5E1',
         marginBottom: 2,
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     noAssignment: {
         fontSize: 14,
-        color: '#9CA3AF',
+        color: '#64748B',
         fontStyle: 'italic',
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     actionsCard: {
-        backgroundColor: '#FFFFFF',
-        borderRadius: 12,
+        backgroundColor: 'rgba(30, 41, 59, 0.6)',
+        borderRadius: 16,
         padding: 16,
         marginHorizontal: 16,
         marginBottom: 16,
+        borderWidth: 1,
+        borderColor: '#334155',
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
+        shadowOpacity: 0.3,
         shadowRadius: 4,
         elevation: 2,
     },
@@ -519,12 +575,14 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         padding: 12,
         borderRadius: 8,
-        backgroundColor: '#F9FAFB',
+        backgroundColor: 'rgba(15, 23, 42, 0.6)',
+        borderWidth: 1,
+        borderColor: '#334155',
         marginBottom: 8,
     },
     actionButtonText: {
         fontSize: 16,
-        color: '#374151',
+        color: '#CBD5E1',
         marginLeft: 12,
         fontFamily: FONT_FAMILY.POPPINS_MEDIUM,
     },

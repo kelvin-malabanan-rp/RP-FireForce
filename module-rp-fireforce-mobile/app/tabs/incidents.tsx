@@ -9,23 +9,25 @@ import {
     TextInput,
     TouchableOpacity,
     View,
-    ActivityIndicator, Platform,
+    ActivityIndicator,
+    Platform,
 } from "react-native";
 import {
     createIncident,
     getAllIncidents
 } from "@/api/incident-controller";
 import { oncallController } from "@/api/oncall-schedule-controller";
-import {getSeverityColor} from "@/constants/colors";
-import {CreateIncidentData,
-    Incident,
-    IncidentUI} from "@/types/incident-types";
+import {
+    CreateIncidentData,
+    IncidentUI
+} from "@/types/incident-types";
 import { FONT_FAMILY } from '@/constants/fonts';
-import {Ionicons} from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import IncidentList from "@/components/incident-list";
-import {retrieveUserSession} from "@/constants/local-storage";
-import {createAuditLog} from "@/api/audit-trail";
-import {usePushNotificationContext} from "@/context/push-notification-context";
+import { retrieveUserSession } from "@/constants/local-storage";
+import { createAuditLog } from "@/api/audit-trail";
+import { usePushNotificationContext } from "@/context/push-notification-context";
+import {LinearGradient} from "expo-linear-gradient";
 
 type TeamMember = {
     id: string;
@@ -111,19 +113,14 @@ export default function IncidentsScreen() {
         }
     };
 
-    // Fetch team members and teams
     const fetchTeamMembersAndTeams = async () => {
         try {
             const teams = await oncallController.getTeams();
-
-            // Store teams
             setAvailableTeams(teams);
 
-            // Flatten all team members from all teams into a single list
             const allMembers: TeamMember[] = [];
             teams.forEach(team => {
                 team.members.forEach(member => {
-                    // Avoid duplicates
                     if (!allMembers.find(m => m.id === member.id)) {
                         allMembers.push({
                             id: member.id,
@@ -210,7 +207,6 @@ export default function IncidentsScreen() {
                 if (notificationMode === 'individual') {
                     incidentData.notifyUsers = selectedUsers;
                 } else {
-                    // Get all user IDs from selected teams
                     const teamUserIds = availableTeams
                         .filter(team => selectedTeams.includes(team.id))
                         .flatMap(team => team.members.map(member => member.id));
@@ -218,13 +214,11 @@ export default function IncidentsScreen() {
                 }
             }
 
-            // 1️⃣ Create the incident
             const response = await createIncident(incidentData);
 
             if (response.httpStatus === "OK" && response.data) {
                 const incident = response.data;
 
-                // 2️⃣ Build full audit log payload
                 const auditPayload = {
                     action: "CREATE_INCIDENT",
                     incidentId: incident.id,
@@ -242,7 +236,6 @@ export default function IncidentsScreen() {
                     },
                 };
 
-                // 3️⃣ Send to audit log API
                 try {
                     const auditResponse = await createAuditLog(auditPayload);
                     console.log("✅ Audit log created:", auditResponse);
@@ -250,10 +243,8 @@ export default function IncidentsScreen() {
                     console.warn("⚠️ Failed to create audit log:", auditError);
                 }
 
-                // 4️⃣ Refresh incidents list
                 await fetchAllIncidents();
 
-                // 6️⃣ Remote notification logic
                 const isBypassing = newIncident.bypassRotation;
                 let selectedEmails: string[] = [];
 
@@ -263,7 +254,6 @@ export default function IncidentsScreen() {
                             .filter(u => selectedUsers.includes(u.id))
                             .map(u => u.email);
                     } else {
-                        // Get all emails from selected teams
                         selectedEmails = availableTeams
                             .filter(team => selectedTeams.includes(team.id))
                             .flatMap(team => team.members.map(member => member.email));
@@ -285,7 +275,6 @@ export default function IncidentsScreen() {
                     console.error("[incident] Remote notification failed", error);
                 }
 
-                // 7️⃣ Cleanup & UI feedback
                 resetIncidentForm();
                 setModalVisible(false);
 
@@ -313,7 +302,7 @@ export default function IncidentsScreen() {
     if (loading) {
         return (
             <View style={[styles.container, styles.loadingContainer]}>
-                <ActivityIndicator size="large" color="#3B82F6" />
+                <ActivityIndicator size="large" color="#F97316" />
                 <Text style={styles.loadingText}>Loading incidents...</Text>
             </View>
         );
@@ -325,18 +314,30 @@ export default function IncidentsScreen() {
             <View style={styles.header}>
                 <Text style={styles.headerTitle}>Incident Management</Text>
                 <TouchableOpacity
-                    style={styles.addButton}
+                    style={styles.addButtonWrapper}
                     onPress={() => setModalVisible(true)}
                 >
-                    <Ionicons name="add" size={24} color="#FFFFFF" />
+                    <LinearGradient
+                        colors={['#F97316', '#DC2626']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                        style={styles.addButton}
+                    >
+                        <Ionicons name="add" size={24} color="#FFFFFF" />
+                    </LinearGradient>
                 </TouchableOpacity>
             </View>
 
-            {/* Incident List Component */}
+            {/* Scrollable Content */}
             <ScrollView
                 style={styles.scrollView}
                 refreshControl={
-                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={onRefresh}
+                        tintColor="#F97316"
+                        colors={['#F97316']}
+                    />
                 }
             >
                 <IncidentList incidents={incidents} error={error} />
@@ -372,13 +373,14 @@ export default function IncidentsScreen() {
                                     resetIncidentForm();
                                     setModalVisible(false);
                                 }}>
-                                    <Ionicons name="close" size={24} color="#6B7280" />
+                                    <Ionicons name="close" size={24} color="#94A3B8" />
                                 </TouchableOpacity>
                             </View>
 
                             <TextInput
                                 style={styles.input}
                                 placeholder="Incident Title"
+                                placeholderTextColor="#64748B"
                                 value={newIncident.title}
                                 onChangeText={(text) =>
                                     setNewIncident((prev) => ({ ...prev, title: text }))
@@ -388,6 +390,7 @@ export default function IncidentsScreen() {
                             <TextInput
                                 style={[styles.input, styles.textArea]}
                                 placeholder="Description"
+                                placeholderTextColor="#64748B"
                                 value={newIncident.description}
                                 onChangeText={(text) =>
                                     setNewIncident((prev) => ({ ...prev, description: text }))
@@ -399,43 +402,66 @@ export default function IncidentsScreen() {
                             <TextInput
                                 style={styles.input}
                                 placeholder="Location (optional)"
+                                placeholderTextColor="#64748B"
                                 value={newIncident.location}
                                 onChangeText={(text) =>
                                     setNewIncident((prev) => ({ ...prev, location: text }))
                                 }
                             />
 
+                            {/* Severity Selector */}
                             <View style={styles.severitySelector}>
                                 <Text style={styles.severityLabel}>Severity:</Text>
-                                {["low", "medium", "high", "critical"].map((sev) => (
-                                    <TouchableOpacity
-                                        key={sev}
-                                        style={[
-                                            styles.severityOption,
-                                            { borderColor: getSeverityColor(sev) },
-                                            newIncident.severity === sev && {
-                                                backgroundColor: getSeverityColor(sev)
-                                            },
-                                        ]}
-                                        onPress={() =>
-                                            setNewIncident((prev) => ({
-                                                ...prev,
-                                                severity: sev as "low" | "medium" | "high" | "critical",
-                                            }))
-                                        }
-                                    >
-                                        <Text
-                                            style={[
-                                                styles.severityOptionText,
-                                                newIncident.severity === sev && {
-                                                    color: '#FFFFFF',
-                                                },
-                                            ]}
-                                        >
-                                            {sev.charAt(0).toUpperCase() + sev.slice(1)}
-                                        </Text>
-                                    </TouchableOpacity>
-                                ))}
+                                <View style={styles.severityContainer}>
+                                    {[
+                                        { key: "low", label: "Low", colors: ['#16A34A', '#15803D'] as const, color: '#16A34A' },
+                                        { key: "medium", label: "Medium", colors: ['#D97706', '#B45309'] as const, color: '#D97706' },
+                                        { key: "high", label: "High", colors: ['#EA580C', '#C2410C'] as const, color: '#EA580C' },
+                                        { key: "critical", label: "Critical", colors: ['#DC2626', '#B91C1C'] as const, color: '#DC2626' },
+                                    ].map((sev) => {
+                                        const isActive = newIncident.severity === sev.key;
+                                        return (
+                                            <TouchableOpacity
+                                                key={sev.key}
+                                                style={[
+                                                    styles.severityButtonWrapper,
+                                                    { flex: isActive ? 1.5 : 1 }, // ✅ Selected is bigger
+                                                ]}
+                                                onPress={() =>
+                                                    setNewIncident((prev) => ({
+                                                        ...prev,
+                                                        severity: sev.key as "low" | "medium" | "high" | "critical",
+                                                    }))
+                                                }
+                                            >
+                                                {isActive ? (
+                                                    <LinearGradient
+                                                        colors={sev.colors}
+                                                        start={{ x: 0, y: 0 }}
+                                                        end={{ x: 1, y: 0 }}
+                                                        style={styles.severityActive}
+                                                    >
+                                                        <Text style={styles.severityTextActive} numberOfLines={1}>
+                                                            {sev.label}
+                                                        </Text>
+                                                        <Ionicons
+                                                            name="checkmark-circle"
+                                                            size={18}
+                                                            color="#FFFFFF"
+                                                            style={{ marginLeft: 4 }}
+                                                        />
+                                                    </LinearGradient>
+                                                ) : (
+                                                    <View style={[styles.severityInactive, { borderColor: sev.color }]}>
+                                                        <Text style={styles.severityText} numberOfLines={1}>
+                                                            {sev.label}
+                                                        </Text>
+                                                    </View>
+                                                )}
+                                            </TouchableOpacity>
+                                        );
+                                    })}
+                                </View>
                             </View>
 
                             {/* Emergency Bypass Section */}
@@ -487,7 +513,7 @@ export default function IncidentsScreen() {
                                                     <Ionicons
                                                         name="person"
                                                         size={16}
-                                                        color={notificationMode === 'individual' ? '#FFFFFF' : '#6B7280'}
+                                                        color={notificationMode === 'individual' ? '#FFFFFF' : '#94A3B8'}
                                                     />
                                                     <Text style={[
                                                         styles.modeButtonText,
@@ -507,7 +533,7 @@ export default function IncidentsScreen() {
                                                     <Ionicons
                                                         name="people"
                                                         size={16}
-                                                        color={notificationMode === 'team' ? '#FFFFFF' : '#6B7280'}
+                                                        color={notificationMode === 'team' ? '#FFFFFF' : '#94A3B8'}
                                                     />
                                                     <Text style={[
                                                         styles.modeButtonText,
@@ -527,7 +553,7 @@ export default function IncidentsScreen() {
                                                 </Text>
                                                 {availableUsers.length === 0 ? (
                                                     <View style={styles.emptyUsersContainer}>
-                                                        <Ionicons name="people-outline" size={32} color="#9CA3AF" />
+                                                        <Ionicons name="people-outline" size={32} color="#64748B" />
                                                         <Text style={styles.emptyUsersText}>No team members found</Text>
                                                     </View>
                                                 ) : (
@@ -541,7 +567,7 @@ export default function IncidentsScreen() {
                                                                 <Ionicons
                                                                     name="person-circle"
                                                                     size={24}
-                                                                    color="#6B7280"
+                                                                    color="#94A3B8"
                                                                 />
                                                                 <View style={styles.userDetails}>
                                                                     <Text style={styles.userName}>
@@ -577,7 +603,7 @@ export default function IncidentsScreen() {
                                                 </Text>
                                                 {availableTeams.length === 0 ? (
                                                     <View style={styles.emptyUsersContainer}>
-                                                        <Ionicons name="people-outline" size={32} color="#9CA3AF" />
+                                                        <Ionicons name="people-outline" size={32} color="#64748B" />
                                                         <Text style={styles.emptyUsersText}>No teams found</Text>
                                                     </View>
                                                 ) : (
@@ -618,13 +644,16 @@ export default function IncidentsScreen() {
                                     </>
                                 )}
                             </View>
-
-                            {/* Only show button here if bypass is OFF */}
-                            {!newIncident.bypassRotation && (
-                                <TouchableOpacity
+                            <TouchableOpacity
+                                style={styles.createButtonWrapper}
+                                onPress={createNewIncident}
+                                disabled={creating}
+                            >
+                                <LinearGradient
+                                    colors={['#F97316', '#DC2626']}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 1, y: 0 }}
                                     style={[styles.createButton, creating && styles.createButtonDisabled]}
-                                    onPress={createNewIncident}
-                                    disabled={creating}
                                 >
                                     {creating ? (
                                         <ActivityIndicator color="#FFFFFF" />
@@ -632,35 +661,13 @@ export default function IncidentsScreen() {
                                         <>
                                             <Ionicons name="send" size={18} color="#FFFFFF" />
                                             <Text style={styles.createButtonText}>
-                                                Create Incident
+                                                {newIncident.bypassRotation ? 'Create & Notify' : 'Create Incident'}
                                             </Text>
                                         </>
                                     )}
-                                </TouchableOpacity>
-                            )}
+                                </LinearGradient>
+                            </TouchableOpacity>
                         </ScrollView>
-
-                        {/* Fixed button at bottom when bypass is ON */}
-                        {newIncident.bypassRotation && (
-                            <View style={styles.fixedButtonContainer}>
-                                <TouchableOpacity
-                                    style={[styles.createButton, creating && styles.createButtonDisabled]}
-                                    onPress={createNewIncident}
-                                    disabled={creating}
-                                >
-                                    {creating ? (
-                                        <ActivityIndicator color="#FFFFFF" />
-                                    ) : (
-                                        <>
-                                            <Ionicons name="send" size={18} color="#FFFFFF" />
-                                            <Text style={styles.createButtonText}>
-                                                Create & Notify
-                                            </Text>
-                                        </>
-                                    )}
-                                </TouchableOpacity>
-                            </View>
-                        )}
                     </TouchableOpacity>
                 </TouchableOpacity>
             </Modal>
@@ -669,10 +676,9 @@ export default function IncidentsScreen() {
 }
 
 const styles = StyleSheet.create({
-    // ... keep all your existing styles ...
     container: {
         flex: 1,
-        backgroundColor: "#F3F4F6",
+        backgroundColor: 'transparent',
     },
     loadingContainer: {
         justifyContent: 'center',
@@ -681,7 +687,7 @@ const styles = StyleSheet.create({
     loadingText: {
         marginTop: 16,
         fontSize: 15,
-        color: "#6B7280",
+        color: "#94A3B8",
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     header: {
@@ -689,38 +695,44 @@ const styles = StyleSheet.create({
         justifyContent: "space-between",
         alignItems: "center",
         padding: 20,
-        backgroundColor: "#FFFFFF",
+        paddingTop: Platform.OS === 'ios' ? 100 : 80,
+        backgroundColor: 'rgba(30, 41, 59, 0.6)',
         borderBottomWidth: 1,
-        borderBottomColor: "#E5E7EB",
+        borderBottomColor: '#334155',
     },
     headerTitle: {
         fontSize: 22,
-        color: "#111827",
-        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
+        color: "#FFFFFF",
+        fontFamily: FONT_FAMILY.POPPINS_BOLD,
     },
     addButton: {
-        backgroundColor: "#3B82F6",
         width: 40,
         height: 40,
         borderRadius: 20,
         justifyContent: "center",
         alignItems: "center",
     },
+    addButtonWrapper: {
+        borderRadius: 20,
+        overflow: 'hidden',
+    },
     scrollView: {
         flex: 1,
     },
     modalOverlay: {
         flex: 1,
-        backgroundColor: "rgba(0, 0, 0, 0.5)",
+        backgroundColor: "rgba(0, 0, 0, 0.7)",
         justifyContent: "center",
         alignItems: "center",
     },
     modalContent: {
-        backgroundColor: "#FFFFFF",
+        backgroundColor: "#1E293B",
         borderRadius: 16,
         padding: 20,
         width: "90%",
         maxHeight: "90%",
+        borderWidth: 1,
+        borderColor: '#334155',
     },
     modalHeader: {
         flexDirection: "row",
@@ -731,51 +743,91 @@ const styles = StyleSheet.create({
     modalTitle: {
         fontSize: 18,
         fontWeight: "600",
-        color: "#111827",
+        color: "#FFFFFF",
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
     input: {
         borderWidth: 1,
-        borderColor: "#D1D5DB",
+        borderColor: "#334155",
         borderRadius: 8,
         padding: 14,
         fontSize: 14,
         marginBottom: 16,
-        backgroundColor: "#FFFFFF",
+        backgroundColor: 'rgba(15, 23, 42, 0.5)',
+        color: '#FFFFFF',
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     textArea: {
         height: 100,
         textAlignVertical: "top",
     },
+    severityContainer: {
+        flexDirection: 'row',
+        gap: 8,
+    },
     severitySelector: {
         marginBottom: 20,
+    },
+    severityOptionActive: {
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+        borderRadius: 8,
+        alignItems: 'center',
     },
     severityLabel: {
         fontSize: 15,
         fontWeight: "500",
-        color: "#374151",
+        color: "#CBD5E1",
         marginBottom: 12,
         fontFamily: FONT_FAMILY.POPPINS_MEDIUM,
     },
-    severityOption: {
-        borderWidth: 2,
+    severityButtonWrapper: {
         borderRadius: 8,
-        paddingVertical: 10,
-        paddingHorizontal: 16,
-        marginBottom: 8,
-        backgroundColor: '#FFFFFF',
+        overflow: 'hidden',
     },
-    severityOptionText: {
-        fontSize: 13,
-        fontWeight: "500",
-        color: "#6B7280",
+    severityOptionWrapper: {
+        marginBottom: 8,
+        borderRadius: 8,
+        overflow: 'hidden',
+    },
+    severityInactive: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 10,
+        paddingHorizontal: 8,
+        borderRadius: 8,
+        borderWidth: 2,
+        backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    },
+    severityActive: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 10,
+        paddingHorizontal: 8,
+        borderRadius: 8,
+    },
+    severityDot: {
+        width: 12,
+        height: 12,
+        borderRadius: 6,
+        marginRight: 6,
+    },
+    severityText: {
+        fontSize: 12,
+        color: "#94A3B8",
         fontFamily: FONT_FAMILY.POPPINS_MEDIUM,
+    },
+    severityTextActive: {
+        fontSize: 13,
+        color: '#FFFFFF',
+        fontFamily: FONT_FAMILY.POPPINS_BOLD,
     },
     emergencySection: {
         marginBottom: 20,
         borderTopWidth: 1,
-        borderTopColor: "#E5E7EB",
+        borderTopColor: "#334155",
         paddingTop: 20,
     },
     bypassToggle: {
@@ -783,10 +835,10 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
         padding: 12,
-        backgroundColor: '#FEF2F2',
+        backgroundColor: 'rgba(220, 38, 38, 0.1)',
         borderRadius: 8,
         borderWidth: 1,
-        borderColor: '#FEE2E2',
+        borderColor: '#DC2626',
         marginBottom: 16,
     },
     bypassToggleContent: {
@@ -801,12 +853,12 @@ const styles = StyleSheet.create({
     bypassTitle: {
         fontSize: 14,
         fontWeight: '600',
-        color: '#DC2626',
+        color: '#FCA5A5',
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
     bypassSubtitle: {
         fontSize: 11,
-        color: '#991B1B',
+        color: '#DC2626',
         marginTop: 2,
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
@@ -814,7 +866,7 @@ const styles = StyleSheet.create({
         width: 44,
         height: 24,
         borderRadius: 12,
-        backgroundColor: '#D1D5DB',
+        backgroundColor: '#475569',
         padding: 2,
         justifyContent: 'center',
     },
@@ -831,14 +883,13 @@ const styles = StyleSheet.create({
     toggleCircleActive: {
         transform: [{ translateX: 20 }],
     },
-    // ✅ New styles for mode selector
     modeSelector: {
         marginBottom: 16,
     },
     modeSelectorLabel: {
         fontSize: 13,
         fontWeight: '600',
-        color: '#374151',
+        color: '#CBD5E1',
         marginBottom: 8,
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
@@ -855,8 +906,8 @@ const styles = StyleSheet.create({
         paddingHorizontal: 16,
         borderRadius: 8,
         borderWidth: 2,
-        borderColor: '#D1D5DB',
-        backgroundColor: '#FFFFFF',
+        borderColor: '#334155',
+        backgroundColor: 'rgba(15, 23, 42, 0.5)',
         gap: 6,
     },
     modeButtonActive: {
@@ -866,22 +917,24 @@ const styles = StyleSheet.create({
     modeButtonText: {
         fontSize: 13,
         fontWeight: '600',
-        color: '#6B7280',
+        color: '#94A3B8',
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
     modeButtonTextActive: {
         color: '#FFFFFF',
     },
     userSelectionContainer: {
-        backgroundColor: '#F9FAFB',
+        backgroundColor: 'rgba(15, 23, 42, 0.4)',
         borderRadius: 8,
         padding: 12,
         marginBottom: 0,
+        borderWidth: 1,
+        borderColor: '#334155',
     },
     userSelectionTitle: {
         fontSize: 13,
         fontWeight: '600',
-        color: '#374151',
+        color: '#CBD5E1',
         marginBottom: 12,
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
@@ -890,9 +943,11 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
         padding: 10,
-        backgroundColor: '#FFFFFF',
+        backgroundColor: 'rgba(30, 41, 59, 0.6)',
         borderRadius: 6,
         marginBottom: 8,
+        borderWidth: 1,
+        borderColor: '#334155',
     },
     userInfo: {
         flexDirection: 'row',
@@ -906,12 +961,12 @@ const styles = StyleSheet.create({
     userName: {
         fontSize: 13,
         fontWeight: '600',
-        color: '#111827',
+        color: '#FFFFFF',
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
     userEmail: {
         fontSize: 11,
-        color: '#6B7280',
+        color: '#94A3B8',
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     userRole: {
@@ -924,9 +979,9 @@ const styles = StyleSheet.create({
     fixedButtonContainer: {
         padding: 16,
         paddingBottom: 20,
-        backgroundColor: '#FFFFFF',
+        backgroundColor: '#1E293B',
         borderTopWidth: 1,
-        borderTopColor: '#E5E7EB',
+        borderTopColor: '#334155',
     },
     emptyUsersContainer: {
         alignItems: 'center',
@@ -935,7 +990,7 @@ const styles = StyleSheet.create({
     },
     emptyUsersText: {
         fontSize: 13,
-        color: '#9CA3AF',
+        color: '#64748B',
         marginTop: 8,
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
@@ -944,7 +999,7 @@ const styles = StyleSheet.create({
         height: 24,
         borderRadius: 4,
         borderWidth: 2,
-        borderColor: '#D1D5DB',
+        borderColor: '#475569',
         justifyContent: 'center',
         alignItems: 'center',
     },
@@ -953,7 +1008,6 @@ const styles = StyleSheet.create({
         borderColor: '#3B82F6',
     },
     createButton: {
-        backgroundColor: "#3B82F6",
         borderRadius: 8,
         paddingVertical: 14,
         alignItems: "center",
@@ -962,9 +1016,14 @@ const styles = StyleSheet.create({
         gap: 8,
         marginTop: 20,
         marginBottom: 20,
+        overflow: 'hidden', // Add this for gradient
     },
     createButtonDisabled: {
-        backgroundColor: "#9CA3AF",
+        backgroundColor: "#64748B",
+    },
+    createButtonWrapper: {
+        borderRadius: 8,
+        overflow: 'hidden',
     },
     createButtonText: {
         fontSize: 15,

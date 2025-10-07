@@ -10,8 +10,9 @@ import {
 import { getSeverityColor } from "@/constants/colors";
 import { IncidentUI } from "@/types/incident-types";
 import { FONT_FAMILY } from '@/constants/fonts';
+import {LinearGradient} from "expo-linear-gradient";
 
-const ITEMS_PER_PAGE = 10;
+const ITEMS_PER_PAGE = 5;
 
 interface IncidentListProps {
     incidents: IncidentUI[];
@@ -29,21 +30,21 @@ export default function IncidentList({ incidents, error }: IncidentListProps) {
             key: 'open',
             label: 'Open',
             color: '#EF4444',
-            bgColor: '#FEE2E2',
+            bgColor: 'rgba(220, 38, 38, 0.2)',
             count: incidents.filter(i => i.status === 'open').length
         },
         {
             key: 'investigating',
             label: 'Investigating',
             color: '#F59E0B',
-            bgColor: '#FEF3C7',
+            bgColor: 'rgba(245, 158, 11, 0.2)',
             count: incidents.filter(i => i.status === 'investigating').length
         },
         {
             key: 'resolved',
             label: 'Resolved',
             color: '#10B981',
-            bgColor: '#D1FAE5',
+            bgColor: 'rgba(16, 185, 129, 0.2)',
             count: incidents.filter(i => i.status === 'resolved').length
         }
     ];
@@ -163,7 +164,7 @@ export default function IncidentList({ incidents, error }: IncidentListProps) {
                             style={[
                                 styles.tabText,
                                 selectedStatusTab === tab.key && styles.activeTabText,
-                                { color: selectedStatusTab === tab.key ? tab.color : '#6B7280' }
+                                { color: selectedStatusTab === tab.key ? tab.color : '#94A3B8' }
                             ]}
                         >
                             {tab.label}
@@ -195,7 +196,7 @@ export default function IncidentList({ incidents, error }: IncidentListProps) {
                         <IconSymbol
                             name="exclamationmark.triangle"
                             size={48}
-                            color="#9CA3AF"
+                            color="#64748B"
                         />
                         <Text style={styles.emptyText}>
                             No {statusTabs.find(tab => tab.key === selectedStatusTab)?.label.toLowerCase()} incidents
@@ -212,17 +213,21 @@ export default function IncidentList({ incidents, error }: IncidentListProps) {
                 {getAllStatusIncidents.length > ITEMS_PER_PAGE && (
                     <View style={styles.paginationContainer}>
                         <TouchableOpacity
-                            style={[
-                                styles.paginationButton,
-                                currentPageNum === 0 && styles.paginationButtonDisabled
-                            ]}
+                            style={styles.paginationButtonWrapper}
                             onPress={() => handlePageChange('prev')}
                             disabled={currentPageNum === 0}
                         >
-                            <Text style={[
-                                styles.paginationButtonText,
-                                currentPageNum === 0 && styles.paginationButtonTextDisabled
-                            ]}>Previous</Text>
+                            <LinearGradient
+                                colors={currentPageNum === 0 ? ['#475569', '#475569'] : ['#F97316', '#DC2626']}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 0 }}
+                                style={styles.paginationButton}
+                            >
+                                <Text style={[
+                                    styles.paginationButtonText,
+                                    currentPageNum === 0 && styles.paginationButtonTextDisabled
+                                ]}>Previous</Text>
+                            </LinearGradient>
                         </TouchableOpacity>
 
                         <View style={styles.paginationInfo}>
@@ -235,17 +240,21 @@ export default function IncidentList({ incidents, error }: IncidentListProps) {
                         </View>
 
                         <TouchableOpacity
-                            style={[
-                                styles.paginationButton,
-                                currentPageNum >= totalPages - 1 && styles.paginationButtonDisabled
-                            ]}
+                            style={styles.paginationButtonWrapper}
                             onPress={() => handlePageChange('next')}
                             disabled={currentPageNum >= totalPages - 1}
                         >
-                            <Text style={[
-                                styles.paginationButtonText,
-                                currentPageNum >= totalPages - 1 && styles.paginationButtonTextDisabled
-                            ]}>Next</Text>
+                            <LinearGradient
+                                colors={currentPageNum >= totalPages - 1 ? ['#475569', '#475569'] : ['#F97316', '#DC2626']}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 0 }}
+                                style={styles.paginationButton}
+                            >
+                                <Text style={[
+                                    styles.paginationButtonText,
+                                    currentPageNum >= totalPages - 1 && styles.paginationButtonTextDisabled
+                                ]}>Next</Text>
+                            </LinearGradient>
                         </TouchableOpacity>
                     </View>
                 )}
@@ -265,31 +274,35 @@ export default function IncidentList({ incidents, error }: IncidentListProps) {
 
 const styles = StyleSheet.create({
     incidentsSection: {
-        backgroundColor: "#FFFFFF",
+        backgroundColor: 'rgba(30, 41, 59, 0.6)',
         margin: 16,
-        borderRadius: 12,
+        borderRadius: 16,
         padding: 16,
+        borderWidth: 1,
+        borderColor: '#334155',
         shadowColor: "#000",
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
+        shadowOpacity: 0.3,
         shadowRadius: 4,
         elevation: 2,
     },
     sectionTitle: {
         fontSize: 18,
         fontWeight: "600",
-        color: "#111827",
+        color: "#FFFFFF",
         marginBottom: 16,
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
     errorContainer: {
-        backgroundColor: "#FEE2E2",
+        backgroundColor: 'rgba(220, 38, 38, 0.2)',
         padding: 12,
         borderRadius: 8,
         marginBottom: 16,
+        borderWidth: 1,
+        borderColor: '#DC2626',
     },
     errorText: {
-        color: "#DC2626",
+        color: "#FCA5A5",
         fontSize: 13,
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
@@ -298,7 +311,7 @@ const styles = StyleSheet.create({
         marginTop: -10,
         marginBottom: 16,
         borderBottomWidth: 1,
-        borderBottomColor: "#E5E7EB",
+        borderBottomColor: "#334155",
     },
     tab: {
         flex: 1,
@@ -311,7 +324,7 @@ const styles = StyleSheet.create({
         gap: 6,
     },
     activeTab: {
-        backgroundColor: "#F9FAFB",
+        backgroundColor: 'rgba(15, 23, 42, 0.5)',
     },
     tabText: {
         fontSize: 13,
@@ -341,11 +354,11 @@ const styles = StyleSheet.create({
         marginBottom: 0,
     },
     incidentCard: {
-        backgroundColor: "#F9FAFB",
-        borderRadius: 10,
+        backgroundColor: 'rgba(15, 23, 42, 0.6)',
+        borderRadius: 12,
         padding: 14,
         borderWidth: 1,
-        borderColor: "#E5E7EB",
+        borderColor: '#334155',
         position: 'relative',
     },
     incidentHeader: {
@@ -360,7 +373,7 @@ const styles = StyleSheet.create({
     incidentTitle: {
         fontSize: 14,
         fontWeight: "600",
-        color: "#111827",
+        color: "#FFFFFF",
         flex: 1,
         marginRight: 12,
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
@@ -378,12 +391,12 @@ const styles = StyleSheet.create({
     },
     incidentTime: {
         fontSize: 11,
-        color: "#6B7280",
+        color: "#94A3B8",
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     incidentDescription: {
         fontSize: 12,
-        color: "#374151",
+        color: "#CBD5E1",
         lineHeight: 17,
         marginBottom: 10,
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
@@ -396,33 +409,37 @@ const styles = StyleSheet.create({
     },
     reportedBy: {
         fontSize: 10,
-        color: "#6B7280",
+        color: "#94A3B8",
         fontStyle: "italic",
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     assignedTo: {
         fontSize: 10,
-        color: "#6B7280",
+        color: "#94A3B8",
         fontStyle: "italic",
         marginTop: 3,
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     awsInfo: {
         fontSize: 10,
-        color: "#6B7280",
+        color: "#94A3B8",
         fontStyle: "italic",
         marginTop: 2,
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     location: {
         fontSize: 10,
-        color: "#6B7280",
+        color: "#94A3B8",
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     tapIndicator: {
         position: 'absolute',
         right: 12,
         top: 12,
+    },
+    paginationButtonWrapper: {
+        borderRadius: 8,
+        overflow: 'hidden',
     },
     paginationContainer: {
         flexDirection: "row",
@@ -431,16 +448,17 @@ const styles = StyleSheet.create({
         marginTop: 16,
         paddingTop: 16,
         borderTopWidth: 1,
-        borderTopColor: "#E5E7EB",
+        borderTopColor: "#334155",
     },
     paginationButton: {
         paddingHorizontal: 16,
         paddingVertical: 8,
         borderRadius: 8,
-        backgroundColor: "#3B82F6",
+        alignItems: 'center',
+        justifyContent: 'center',
     },
-    paginationButtonDisabled: {
-        backgroundColor: "#D1D5DB",
+    paginationButtonTextDisabled: {
+        color: "#94A3B8",
     },
     paginationButtonText: {
         fontSize: 13,
@@ -448,21 +466,18 @@ const styles = StyleSheet.create({
         color: "#FFFFFF",
         fontFamily: FONT_FAMILY.POPPINS_MEDIUM,
     },
-    paginationButtonTextDisabled: {
-        color: "#9CA3AF",
-    },
     paginationInfo: {
         alignItems: "center",
     },
     paginationText: {
         fontSize: 13,
         fontWeight: "500",
-        color: "#111827",
+        color: "#FFFFFF",
         fontFamily: FONT_FAMILY.POPPINS_MEDIUM,
     },
     paginationSubtext: {
         fontSize: 11,
-        color: "#6B7280",
+        color: "#94A3B8",
         marginTop: 2,
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
@@ -470,11 +485,11 @@ const styles = StyleSheet.create({
         marginTop: 16,
         paddingTop: 16,
         borderTopWidth: 1,
-        borderTopColor: "#E5E7EB",
+        borderTopColor: "#334155",
     },
     statsText: {
         fontSize: 12,
-        color: "#6B7280",
+        color: "#94A3B8",
         textAlign: "center",
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
@@ -482,17 +497,21 @@ const styles = StyleSheet.create({
         alignItems: "center",
         justifyContent: "center",
         paddingVertical: 40,
+        backgroundColor: 'rgba(15, 23, 42, 0.4)',
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: '#334155',
     },
     emptyText: {
         fontSize: 14,
         fontWeight: "600",
-        color: "#6B7280",
+        color: "#94A3B8",
         marginTop: 12,
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
     emptySubtext: {
         fontSize: 12,
-        color: "#9CA3AF",
+        color: "#64748B",
         marginTop: 6,
         textAlign: "center",
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,

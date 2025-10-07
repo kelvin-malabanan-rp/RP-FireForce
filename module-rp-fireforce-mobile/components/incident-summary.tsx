@@ -5,13 +5,15 @@ import {
     StyleSheet,
     ScrollView,
     TouchableOpacity,
-    ActivityIndicator, Platform,
+    ActivityIndicator,
+    Platform,
 } from 'react-native';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { getAllIncidents, getAllIncidentStats } from '@/api/incident-controller';
 import { Incident, IncidentStatsResponse } from '@/types/incident-types';
-import {FONT_FAMILY} from "@/constants/fonts";
-import {Ionicons} from "@expo/vector-icons";
+import { FONT_FAMILY } from "@/constants/fonts";
+import { Ionicons } from "@expo/vector-icons";
+import {LinearGradient} from "expo-linear-gradient";
 
 interface IncidentSummaryProps {
     timeframe?: '24h' | '7d' | '30d';
@@ -27,29 +29,24 @@ const IncidentSummary: React.FC<IncidentSummaryProps> = ({
     const [stats, setStats] = useState<IncidentStatsResponse | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [refreshing, setRefreshing] = useState(false);
 
-    // Auto-refresh interval (30 seconds)
     const AUTO_REFRESH_INTERVAL = 30000;
 
     const loadIncidentData = async () => {
         setLoading(true);
         setError(null);
         try {
-            // Fetch both incidents and stats in parallel
             const [incidentsResponse, statsResponse] = await Promise.all([
                 getAllIncidents(),
-                getAllIncidentStats(selectedTimeframe) // Actually call the API
+                getAllIncidentStats(selectedTimeframe)
             ]);
 
-            // Extract incidents - they're directly in data array
             if (incidentsResponse.data && Array.isArray(incidentsResponse.data)) {
                 setIncidents(incidentsResponse.data);
             } else if (incidentsResponse.data) {
                 setIncidents(incidentsResponse.data);
             }
 
-            // Extract stats
             if (statsResponse.data) {
                 setStats(statsResponse.data);
             }
@@ -61,12 +58,10 @@ const IncidentSummary: React.FC<IncidentSummaryProps> = ({
         }
     };
 
-    // Load data from API
     useEffect(() => {
         loadIncidentData();
     }, [selectedTimeframe]);
 
-    // Sync with parent timeframe changes
     useEffect(() => {
         if (timeframe !== selectedTimeframe) {
             setSelectedTimeframe(timeframe);
@@ -75,29 +70,20 @@ const IncidentSummary: React.FC<IncidentSummaryProps> = ({
 
     const getSeverityColor = (severity: string) => {
         switch (severity) {
-            case "critical":
-                return "#DC2626";
-            case "high":
-                return "#EA580C";
-            case "medium":
-                return "#D97706";
-            case "low":
-                return "#16A34A";
-            default:
-                return "#6B7280";
+            case "critical": return "#DC2626";
+            case "high": return "#EA580C";
+            case "medium": return "#D97706";
+            case "low": return "#16A34A";
+            default: return "#6B7280";
         }
     };
 
     const getStatusColor = (status: string) => {
         switch (status) {
-            case "open":
-                return "#DC2626";
-            case "investigating":
-                return "#D97706";
-            case "resolved":
-                return "#16A34A";
-            default:
-                return "#6B7280";
+            case "open": return "#DC2626";
+            case "investigating": return "#D97706";
+            case "resolved": return "#16A34A";
+            default: return "#6B7280";
         }
     };
 
@@ -126,7 +112,6 @@ const IncidentSummary: React.FC<IncidentSummaryProps> = ({
     };
 
     const getIncidentStats = () => {
-        // Use API stats if available
         if (stats) {
             return {
                 total: stats.total || 0,
@@ -142,7 +127,6 @@ const IncidentSummary: React.FC<IncidentSummaryProps> = ({
             };
         }
 
-        // Fallback to manual calculation from incidents
         const filteredIncidents = filterIncidentsByTimeframe(incidents, selectedTimeframe);
 
         return {
@@ -268,7 +252,7 @@ const IncidentSummary: React.FC<IncidentSummaryProps> = ({
     if (loading) {
         return (
             <View style={[styles.container, styles.loadingContainer]}>
-                <ActivityIndicator size="large" color="#3B82F6" />
+                <ActivityIndicator size="large" color="#F97316" />
                 <Text style={styles.loadingText}>Loading incident summary...</Text>
             </View>
         );
@@ -291,21 +275,28 @@ const IncidentSummary: React.FC<IncidentSummaryProps> = ({
                     {['24h', '7d', '30d'].map((period) => (
                         <TouchableOpacity
                             key={period}
-                            style={[
-                                styles.timeframeButton,
-                                selectedTimeframe === period && styles.timeframeButtonActive,
-                            ]}
+                            style={styles.timeframeButtonWrapper}
                             onPress={() => handleTimeframeChange(period as '24h' | '7d' | '30d')}
                             disabled={loading}
                         >
-                            <Text
-                                style={[
-                                    styles.timeframeText,
-                                    selectedTimeframe === period && styles.timeframeTextActive,
-                                ]}
-                            >
-                                {period}
-                            </Text>
+                            {selectedTimeframe === period ? (
+                                <LinearGradient
+                                    colors={['#F97316', '#DC2626']}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 1, y: 0 }}
+                                    style={styles.timeframeButtonActive}
+                                >
+                                    <Text style={styles.timeframeTextActive}>
+                                        {period}
+                                    </Text>
+                                </LinearGradient>
+                            ) : (
+                                <View style={styles.timeframeButton}>
+                                    <Text style={styles.timeframeText}>
+                                        {period}
+                                    </Text>
+                                </View>
+                            )}
                         </TouchableOpacity>
                     ))}
                 </View>
@@ -410,15 +401,11 @@ const IncidentSummary: React.FC<IncidentSummaryProps> = ({
 
 const styles = StyleSheet.create({
     container: {
-        backgroundColor: '#FFFFFF',
-        borderRadius: 12,
+        flex: 1,
+        borderRadius: 16,
         margin: 16,
         padding: 16,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 2,
+        backgroundColor: 'transparent',
     },
     loadingContainer: {
         minHeight: 200,
@@ -428,20 +415,22 @@ const styles = StyleSheet.create({
     loadingText: {
         marginTop: 12,
         fontSize: 13,
-        color: '#6B7280',
+        color: '#94A3B8',
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     errorContainer: {
-        backgroundColor: '#FEE2E2',
+        backgroundColor: 'rgba(254, 226, 226, 0.2)',
         padding: 12,
-        borderRadius: 8,
+        borderRadius: 12,
         marginBottom: 16,
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#DC2626',
     },
     errorText: {
-        color: '#DC2626',
+        color: '#FCA5A5',
         fontSize: 13,
         flex: 1,
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
@@ -450,7 +439,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#DC2626',
         paddingHorizontal: 16,
         paddingVertical: 8,
-        borderRadius: 6,
+        borderRadius: 8,
         marginLeft: 12,
     },
     retryText: {
@@ -466,37 +455,49 @@ const styles = StyleSheet.create({
         marginBottom: 8,
     },
     title: {
-        fontSize: 18,
-        color: '#111827',
-        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
+        fontSize: 20,
+        color: '#FFFFFF',
+        fontFamily: FONT_FAMILY.POPPINS_BOLD,
     },
     subtitle: {
         fontSize: 13,
-        color: '#6B7280',
+        color: '#94A3B8',
         marginBottom: 16,
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     timeframeSelector: {
         flexDirection: 'row',
-        backgroundColor: '#F3F4F6',
-        borderRadius: 8,
+        backgroundColor: 'rgba(30, 41, 59, 0.8)',
+        borderRadius: 10,
         padding: 2,
+        borderWidth: 1,
+        borderColor: '#334155',
+        gap: 4,
+    },
+    timeframeButtonWrapper: {
+        borderRadius: 8,
+        overflow: 'hidden',
     },
     timeframeButton: {
         paddingHorizontal: 12,
         paddingVertical: 6,
-        borderRadius: 6,
+        borderRadius: 8,
     },
     timeframeButtonActive: {
-        backgroundColor: '#3B82F6',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 8,
+        // Remove: backgroundColor: '#F97316',
     },
     timeframeText: {
         fontSize: 11,
         fontWeight: '500',
-        color: '#6B7280',
+        color: '#94A3B8',
         fontFamily: FONT_FAMILY.POPPINS_MEDIUM,
     },
     timeframeTextActive: {
+        fontSize: 11,
+        fontWeight: '600',
         color: '#FFFFFF',
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
@@ -510,38 +511,50 @@ const styles = StyleSheet.create({
         flex: 1,
         alignItems: 'center',
         padding: 16,
-        borderRadius: 12,
+        borderRadius: 16,
+        borderWidth: 1,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
-        shadowRadius: 2,
-        elevation: 1,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 2,
     },
-    totalCard: { backgroundColor: '#EFF6FF' },
-    criticalCard: { backgroundColor: '#FEF2F2' },
-    openCard: { backgroundColor: '#FEF3C7' },
+    totalCard: {
+        backgroundColor: 'rgba(59, 130, 246, 0.25)', // ✅ Increased opacity for pastel blue
+        borderColor: 'rgba(59, 130, 246, 0.4)',
+    },
+    criticalCard: {
+        backgroundColor: 'rgba(220, 38, 38, 0.25)', // ✅ Increased opacity for pastel red
+        borderColor: 'rgba(220, 38, 38, 0.4)',
+    },
+    openCard: {
+        backgroundColor: 'rgba(234, 88, 12, 0.25)', // ✅ Increased opacity for pastel orange
+        borderColor: 'rgba(234, 88, 12, 0.4)',
+    },
     statNumber: {
-        fontSize: 22,
-        color: '#111827',
+        fontSize: 24,
+        color: '#FFFFFF',
         marginTop: 8,
         fontFamily: FONT_FAMILY.POPPINS_BOLD,
     },
     statLabel: {
         fontSize: 11,
-        color: '#6B7280',
+        color: '#94A3B8',
         marginTop: 4,
         fontWeight: '500',
         fontFamily: FONT_FAMILY.POPPINS_MEDIUM,
     },
     chartContainer: {
         marginBottom: 24,
-        backgroundColor: '#FAFBFC',
-        borderRadius: 12,
+        backgroundColor: 'rgba(30, 41, 59, 0.6)',
+        borderRadius: 16,
         padding: 16,
+        borderWidth: 1,
+        borderColor: '#334155',
     },
     chartTitle: {
         fontSize: 16,
-        color: '#111827',
+        color: '#FFFFFF',
         marginBottom: 16,
         fontFamily: FONT_FAMILY.POPPINS_BOLD,
     },
@@ -564,20 +577,20 @@ const styles = StyleSheet.create({
     },
     bar: {
         width: 36,
-        borderRadius: 6,
+        borderRadius: 8,
         minHeight: 8,
     },
     barLabel: {
         fontSize: 10,
         fontWeight: '600',
-        color: '#6B7280',
+        color: '#94A3B8',
         marginBottom: 4,
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
     barCount: {
         fontSize: 13,
         fontWeight: '700',
-        color: '#111827',
+        color: '#FFFFFF',
         fontFamily: FONT_FAMILY.POPPINS_BOLD,
     },
     pieChartContainer: {
@@ -586,7 +599,7 @@ const styles = StyleSheet.create({
     pieItem: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: 8,
+        marginBottom: 12,
     },
     pieIndicator: {
         width: 12,
@@ -601,25 +614,27 @@ const styles = StyleSheet.create({
     },
     pieLabel: {
         fontSize: 13,
-        color: '#374151',
+        color: '#CBD5E1',
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     pieCount: {
         fontSize: 13,
         fontWeight: '500',
-        color: '#111827',
+        color: '#FFFFFF',
         fontFamily: FONT_FAMILY.POPPINS_MEDIUM,
     },
     emptyChart: {
         height: 100,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: '#F9FAFB',
-        borderRadius: 8,
+        backgroundColor: 'rgba(30, 41, 59, 0.3)',
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#334155',
     },
     emptyChartText: {
         fontSize: 13,
-        color: '#6B7280',
+        color: '#94A3B8',
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     recentIncidents: {
@@ -628,21 +643,21 @@ const styles = StyleSheet.create({
     sectionTitle: {
         fontSize: 16,
         fontWeight: '700',
-        color: '#111827',
+        color: '#FFFFFF',
         marginBottom: 16,
         fontFamily: FONT_FAMILY.POPPINS_BOLD,
     },
     incidentPreview: {
         padding: 16,
-        backgroundColor: '#FFFFFF',
-        borderRadius: 12,
+        backgroundColor: 'rgba(30, 41, 59, 0.6)',
+        borderRadius: 16,
         marginBottom: 12,
         borderWidth: 1,
-        borderColor: '#F3F4F6',
+        borderColor: '#334155',
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
-        shadowRadius: 2,
+        shadowOpacity: 0.3,
+        shadowRadius: 4,
         elevation: 1,
     },
     incidentPreviewHeader: {
@@ -654,7 +669,7 @@ const styles = StyleSheet.create({
     incidentPreviewTitle: {
         fontSize: 14,
         fontWeight: '600',
-        color: '#111827',
+        color: '#FFFFFF',
         flex: 1,
         marginRight: 12,
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
@@ -676,24 +691,28 @@ const styles = StyleSheet.create({
     },
     incidentPreviewTime: {
         fontSize: 12,
-        color: '#6B7280',
+        color: '#94A3B8',
         fontWeight: '500',
         fontFamily: FONT_FAMILY.POPPINS_MEDIUM,
     },
     emptyState: {
         alignItems: 'center',
         justifyContent: 'center',
-        paddingVertical: 20,
+        paddingVertical: 32,
+        backgroundColor: 'rgba(30, 41, 59, 0.3)',
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: '#334155',
     },
     emptyText: {
-        fontSize: 13,
+        fontSize: 14,
         fontWeight: '500',
-        color: '#6B7280',
+        color: '#94A3B8',
         fontFamily: FONT_FAMILY.POPPINS_MEDIUM,
     },
     emptySubtext: {
-        fontSize: 11,
-        color: '#9CA3AF',
+        fontSize: 12,
+        color: '#64748B',
         marginTop: 4,
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },

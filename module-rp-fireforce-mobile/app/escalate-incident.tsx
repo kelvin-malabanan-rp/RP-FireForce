@@ -17,6 +17,7 @@ import { Picker } from '@react-native-picker/picker';
 import { oncallController } from '@/api/oncall-schedule-controller';
 import { FONT_FAMILY } from "@/constants/fonts";
 import { BASE_URL_DEV } from '@/utils/backend-url';
+import {LinearGradient} from "expo-linear-gradient";
 
 type IncidentLite = { id: string; title: string };
 
@@ -113,7 +114,7 @@ export default function EscalateIncidentScreen() {
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
                 <TouchableOpacity onPress={() => router.back()}>
-                    <Ionicons name="arrow-back" size={24} color="#111827" />
+                    <Ionicons name="arrow-back" size={24} color="#F97316" />
                 </TouchableOpacity>
                 <Text style={styles.title}>Escalate Incident</Text>
                 <View style={{ width: 24 }} />
@@ -176,8 +177,11 @@ export default function EscalateIncidentScreen() {
                                     key={p}
                                     style={[
                                         styles.priorityButton,
-                                        { borderColor: color },
-                                        isActive && { backgroundColor: `${color}22`, borderColor: color },
+                                        {
+                                            borderColor: color,
+                                            flex: isActive ? 1.5 : 1, // ✅ Selected button is bigger
+                                        },
+                                        isActive && { backgroundColor: `${color}22`, borderWidth: 2 },
                                     ]}
                                     onPress={() => setPriority(p)}
                                 >
@@ -187,6 +191,7 @@ export default function EscalateIncidentScreen() {
                                             styles.priorityText,
                                             isActive && { color, fontWeight: '700' },
                                         ]}
+                                        numberOfLines={1}
                                     >
                                         {p.charAt(0).toUpperCase() + p.slice(1)}
                                     </Text>
@@ -195,7 +200,7 @@ export default function EscalateIncidentScreen() {
                                             name="checkmark-circle"
                                             size={18}
                                             color={color}
-                                            style={{ marginLeft: 6 }}
+                                            style={{ marginLeft: 4 }}
                                         />
                                     )}
                                 </TouchableOpacity>
@@ -227,14 +232,21 @@ export default function EscalateIncidentScreen() {
 
                 {/* Submit */}
                 <TouchableOpacity
-                    style={[styles.submitButton, loading && styles.submitButtonDisabled]}
+                    style={styles.submitButtonWrapper}
                     onPress={handleEscalate}
                     disabled={loading}
                 >
-                    <Ionicons name="arrow-up-circle" size={20} color="#FFFFFF" />
-                    <Text style={styles.submitButtonText}>
-                        {loading ? 'Escalating...' : 'Escalate Incident'}
-                    </Text>
+                    <LinearGradient
+                        colors={['#F97316', '#DC2626']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                        style={[styles.submitButton, loading && styles.submitButtonDisabled]}
+                    >
+                        <Ionicons name="arrow-up-circle" size={20} color="#FFFFFF" />
+                        <Text style={styles.submitButtonText}>
+                            {loading ? 'Escalating...' : 'Escalate Incident'}
+                        </Text>
+                    </LinearGradient>
                 </TouchableOpacity>
             </ScrollView>
         </SafeAreaView>
@@ -244,21 +256,21 @@ export default function EscalateIncidentScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F3F4F6',
+        backgroundColor: '#0F172A',
     },
     header: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
         padding: 16,
-        backgroundColor: '#FFFFFF',
+        backgroundColor: 'rgba(30, 41, 59, 0.8)',
         borderBottomWidth: 1,
-        borderBottomColor: '#E5E7EB',
+        borderBottomColor: '#334155',
     },
     title: {
         fontSize: 20,
         fontWeight: '700',
-        color: '#111827',
+        color: '#FFFFFF',
         fontFamily: FONT_FAMILY.POPPINS_BOLD,
     },
     content: {
@@ -271,18 +283,18 @@ const styles = StyleSheet.create({
     label: {
         fontSize: 16,
         fontWeight: '600',
-        color: '#111827',
+        color: '#FFFFFF',
         marginBottom: 8,
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
     input: {
-        backgroundColor: '#FFFFFF',
+        backgroundColor: 'rgba(15, 23, 42, 0.6)',
         borderRadius: 8,
         borderWidth: 1,
-        borderColor: '#E5E7EB',
+        borderColor: '#334155',
         padding: 12,
         fontSize: 16,
-        color: '#111827',
+        color: '#FFFFFF',
     },
     textArea: {
         minHeight: 120,
@@ -294,66 +306,71 @@ const styles = StyleSheet.create({
     },
     pickerContainer: {
         borderWidth: 1,
-        borderColor: '#E5E7EB',
-        backgroundColor: '#FFFFFF',
+        borderColor: '#334155',
+        backgroundColor: 'rgba(15, 23, 42, 0.6)',
         borderRadius: 8,
         overflow: 'hidden',
         height: 50,
         justifyContent: 'center',
     },
     picker: {
-        color: '#111827',
+        color: '#FFFFFF',
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     priorityContainer: {
         flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: 8,
+        gap: 6,
     },
     priorityButton: {
         flexDirection: 'row',
         alignItems: 'center',
+        justifyContent: 'center', // ✅ Center content
         paddingVertical: 10,
-        paddingHorizontal: 12,
+        paddingHorizontal: 8, // ✅ Reduced padding
         borderRadius: 8,
-        borderWidth: 2,
-        backgroundColor: '#FFFFFF',
+        borderWidth: 1,
+        backgroundColor: 'rgba(15, 23, 42, 0.6)',
     },
     priorityDot: {
-        width: 12,
-        height: 12,
+        width: 10,
+        height: 10,
         borderRadius: 6,
-        marginRight: 8,
+        marginRight: 6, // ✅ Reduced margin
     },
     priorityText: {
-        fontSize: 14,
+        fontSize: 13, // ✅ Slightly smaller
         fontWeight: '600',
-        color: '#6B7280',
+        color: '#94A3B8',
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
     infoCard: {
         flexDirection: 'row',
-        backgroundColor: '#EFF6FF',
+        backgroundColor: 'rgba(59, 130, 246, 0.15)',
         padding: 12,
         borderRadius: 8,
         marginBottom: 24,
+        borderWidth: 1,
+        borderColor: '#3B82F6',
     },
     infoText: {
         flex: 1,
         fontSize: 14,
-        color: '#1E40AF',
+        color: '#93C5FD',
         marginLeft: 8,
         lineHeight: 20,
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
+    submitButtonWrapper: {
+        borderRadius: 8,
+        overflow: 'hidden',
+        marginBottom: 32,
+    },
     submitButton: {
         flexDirection: 'row',
-        backgroundColor: '#EA580C',
         padding: 16,
         borderRadius: 8,
         alignItems: 'center',
         justifyContent: 'center',
-        marginBottom: 32,
     },
     submitButtonDisabled: {
         opacity: 0.6,

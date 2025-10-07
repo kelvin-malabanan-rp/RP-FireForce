@@ -16,6 +16,7 @@ import DateTimePickerModal from "react-native-modal-datetime-picker";
 import { oncallController } from '@/api/oncall-schedule-controller';
 import { OnCallUser } from '@/types/oncall-types';
 import { FONT_FAMILY } from '@/constants/fonts';
+import {LinearGradient} from "expo-linear-gradient";
 
 export default function CreateOverrideScreen() {
     const router = useRouter();
@@ -110,7 +111,7 @@ export default function CreateOverrideScreen() {
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
                 <TouchableOpacity onPress={() => router.back()}>
-                    <Ionicons name="arrow-back" size={24} color="#111827" />
+                    <Ionicons name="arrow-back" size={24} color="#F97316" />
                 </TouchableOpacity>
                 <Text style={styles.title}>Create Override</Text>
                 <View style={{ width: 24 }} />
@@ -118,24 +119,56 @@ export default function CreateOverrideScreen() {
 
             <ScrollView style={styles.content}>
                 {/* Role Selection */}
+                {/* Role Selection */}
                 <View style={styles.section}>
                     <Text style={styles.label}>Role</Text>
                     <View style={styles.roleContainer}>
                         <TouchableOpacity
-                            style={[styles.roleButton, role === 'primary' && styles.roleButtonActive]}
+                            style={styles.roleButtonWrapper}
                             onPress={() => setRole('primary')}
                         >
-                            <Text style={[styles.roleText, role === 'primary' && styles.roleTextActive]}>
-                                Primary
-                            </Text>
+                            {role === 'primary' ? (
+                                <LinearGradient
+                                    colors={['#F97316', '#DC2626']}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 1, y: 0 }}
+                                    style={styles.roleButtonActive}
+                                >
+                                    <Text style={styles.roleTextActive}>
+                                        Primary
+                                    </Text>
+                                </LinearGradient>
+                            ) : (
+                                <View style={styles.roleButton}>
+                                    <Text style={styles.roleText}>
+                                        Primary
+                                    </Text>
+                                </View>
+                            )}
                         </TouchableOpacity>
+
                         <TouchableOpacity
-                            style={[styles.roleButton, role === 'backup' && styles.roleButtonActive]}
+                            style={styles.roleButtonWrapper}
                             onPress={() => setRole('backup')}
                         >
-                            <Text style={[styles.roleText, role === 'backup' && styles.roleTextActive]}>
-                                Backup
-                            </Text>
+                            {role === 'backup' ? (
+                                <LinearGradient
+                                    colors={['#F97316', '#DC2626']}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 1, y: 0 }}
+                                    style={styles.roleButtonActive}
+                                >
+                                    <Text style={styles.roleTextActive}>
+                                        Backup
+                                    </Text>
+                                </LinearGradient>
+                            ) : (
+                                <View style={styles.roleButton}>
+                                    <Text style={styles.roleText}>
+                                        Backup
+                                    </Text>
+                                </View>
+                            )}
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -171,7 +204,7 @@ export default function CreateOverrideScreen() {
                         style={styles.dateButton}
                         onPress={() => setShowStartPicker(true)}
                     >
-                        <Ionicons name="calendar-outline" size={20} color="#3B82F6" />
+                        <Ionicons name="calendar-outline" size={20} color="#F97316" />
                         <Text style={styles.dateText}>{formatDate(startDate)}</Text>
                         <Ionicons name="chevron-down" size={20} color="#6B7280" />
                     </TouchableOpacity>
@@ -191,7 +224,7 @@ export default function CreateOverrideScreen() {
                         style={styles.dateButton}
                         onPress={() => setShowEndPicker(true)}
                     >
-                        <Ionicons name="calendar-outline" size={20} color="#3B82F6" />
+                        <Ionicons name="calendar-outline" size={20} color="#F97316" />
                         <Text style={styles.dateText}>{formatDate(endDate)}</Text>
                         <Ionicons name="chevron-down" size={20} color="#6B7280" />
                     </TouchableOpacity>
@@ -220,13 +253,21 @@ export default function CreateOverrideScreen() {
 
                 {/* Submit Button */}
                 <TouchableOpacity
-                    style={[styles.submitButton, loading && styles.submitButtonDisabled]}
+                    style={styles.submitButtonWrapper}
                     onPress={handleCreateOverride}
                     disabled={loading}
                 >
-                    <Text style={styles.submitButtonText}>
-                        {loading ? 'Creating...' : 'Create Override'}
-                    </Text>
+                    <LinearGradient
+                        colors={['#F97316', '#DC2626']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                        style={[styles.submitButton, loading && styles.submitButtonDisabled]}
+                    >
+                        <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
+                        <Text style={styles.submitButtonText}>
+                            {loading ? 'Creating...' : 'Create Override'}
+                        </Text>
+                    </LinearGradient>
                 </TouchableOpacity>
             </ScrollView>
         </SafeAreaView>
@@ -236,21 +277,21 @@ export default function CreateOverrideScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F3F4F6',
+        backgroundColor: '#0F172A',
     },
     header: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
         padding: 16,
-        backgroundColor: '#FFFFFF',
+        backgroundColor: 'rgba(30, 41, 59, 0.8)',
         borderBottomWidth: 1,
-        borderBottomColor: '#E5E7EB',
+        borderBottomColor: '#334155',
     },
     title: {
         fontSize: 20,
         fontWeight: '700',
-        color: '#111827',
+        color: '#FFFFFF',
         fontFamily: FONT_FAMILY.POPPINS_BOLD,
     },
     content: {
@@ -263,7 +304,7 @@ const styles = StyleSheet.create({
     label: {
         fontSize: 16,
         fontWeight: '600',
-        color: '#111827',
+        color: '#FFFFFF',
         marginBottom: 8,
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
@@ -271,26 +312,34 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         gap: 12,
     },
-    roleButton: {
+    roleButtonWrapper: {
         flex: 1,
+        borderRadius: 8,
+        overflow: 'hidden',
+    },
+    roleButton: {
         padding: 12,
         borderRadius: 8,
         borderWidth: 1,
-        borderColor: '#E5E7EB',
+        borderColor: '#334155',
+        backgroundColor: 'rgba(15, 23, 42, 0.6)',
         alignItems: 'center',
     },
     roleButtonActive: {
-        backgroundColor: '#3B82F6',
-        borderColor: '#3B82F6',
+        padding: 12,
+        borderRadius: 8,
+        alignItems: 'center',
     },
     roleText: {
         fontSize: 16,
-        color: '#6B7280',
+        color: '#94A3B8',
         fontWeight: '500',
         fontFamily: FONT_FAMILY.POPPINS_MEDIUM,
     },
     roleTextActive: {
+        fontSize: 16,
         color: '#FFFFFF',
+        fontWeight: '600',
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
     userList: {
@@ -301,15 +350,15 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
         padding: 12,
-        backgroundColor: '#FFFFFF',
+        backgroundColor: 'rgba(15, 23, 42, 0.6)',
         borderRadius: 8,
         marginBottom: 8,
         borderWidth: 1,
-        borderColor: '#E5E7EB',
+        borderColor: '#334155',
     },
     userItemSelected: {
-        borderColor: '#3B82F6',
-        backgroundColor: '#EFF6FF',
+        borderColor: '#F97316',
+        backgroundColor: 'rgba(249, 115, 22, 0.15)',
     },
     userInfo: {
         flex: 1,
@@ -317,12 +366,12 @@ const styles = StyleSheet.create({
     userName: {
         fontSize: 16,
         fontWeight: '600',
-        color: '#111827',
+        color: '#FFFFFF',
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
     userEmail: {
         fontSize: 14,
-        color: '#6B7280',
+        color: '#94A3B8',
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     dateButton: {
@@ -330,38 +379,43 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
         padding: 12,
-        backgroundColor: '#EFF6FF',
+        backgroundColor: 'rgba(249, 115, 22, 0.15)', // ✅ Orange background
         borderRadius: 8,
         borderWidth: 2,
-        borderColor: '#3B82F6',
+        borderColor: '#F97316', // ✅ Orange border
     },
     dateText: {
         fontSize: 16,
-        color: '#1E40AF',
+        color: '#FB923C', // ✅ Orange text
         flex: 1,
         marginLeft: 8,
         fontFamily: FONT_FAMILY.POPPINS_MEDIUM,
         fontWeight: '600',
     },
     input: {
-        backgroundColor: '#FFFFFF',
+        backgroundColor: 'rgba(15, 23, 42, 0.6)',
         borderRadius: 8,
         borderWidth: 1,
-        borderColor: '#E5E7EB',
+        borderColor: '#334155',
         padding: 12,
         fontSize: 16,
-        color: '#111827',
+        color: '#FFFFFF',
         minHeight: 80,
         textAlignVertical: 'top',
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
+    submitButtonWrapper: {
+        borderRadius: 8,
+        overflow: 'hidden',
+        marginTop: 8,
+        marginBottom: 32,
+    },
     submitButton: {
-        backgroundColor: '#3B82F6',
+        flexDirection: 'row',
         padding: 16,
         borderRadius: 8,
         alignItems: 'center',
-        marginTop: 8,
-        marginBottom: 32,
+        justifyContent: 'center',
     },
     submitButtonDisabled: {
         opacity: 0.6,
@@ -370,6 +424,7 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
         color: '#FFFFFF',
+        marginLeft: 8,
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
 });
