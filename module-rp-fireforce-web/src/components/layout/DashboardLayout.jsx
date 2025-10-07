@@ -9,7 +9,7 @@ import AnalyticsPage from '../../pages/analytics/AnalyticsPage';
 import IncidentsPage from '../../pages/incidents/IncidentsPage';
 import IncidentDetailsPage from '../../pages/incidents/IncidentDetailsPage';
 import OnCallSchedulePage from '../../pages/oncall-schedule/OnCallSchedulePage';
-import TeamsPage from '../../pages/teams/TeamsPage';
+import TeamsPage from '../../pages/teams'; // Now uses enhanced version by default
 import SettingsPage from '../../pages/settings/SettingsPage';
 import AuditTrailPage from '../../pages/audit-trail/AuditTrailPage';
 

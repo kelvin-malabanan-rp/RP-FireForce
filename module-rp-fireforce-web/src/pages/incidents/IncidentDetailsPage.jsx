@@ -25,10 +25,10 @@ import {
   Minimize2,
   Maximize2
 } from 'lucide-react';
-import StreamingChatbot from '../../components/StreamingChatbot';
-import SaveResolutionModal from '../../components/SaveResolutionModal';
-import IncidentAuditTimeline from '../../components/IncidentAuditTimeline';
-import NotificationHistoryPanel from '../../components/NotificationHistoryPanel';
+import StreamingChatbot from './components/StreamingChatbot';
+import SaveResolutionModal from './components/SaveResolutionModal';
+import IncidentAuditTimeline from './components/IncidentAuditTimeline';
+import NotificationHistoryPanel from './components/NotificationHistoryPanel';
 import { auditTrailService } from '../../services/api';
 
 const IncidentDetailsPage = ({ incidentId, onBack }) => {

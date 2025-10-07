@@ -29,7 +29,7 @@ import {
   Zap,
   Target
 } from 'lucide-react';
-import AuditStatisticsPanel from '../../components/AuditStatisticsPanel';
+import AuditStatisticsPanel from './components/AuditStatisticsPanel';
 
 const AnalyticsPage = () => {
   const [selectedTimeRange, setSelectedTimeRange] = useState('7d');

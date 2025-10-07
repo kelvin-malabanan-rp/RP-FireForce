@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import AlertManager from '../../components/AlertManager';
+import AlertManager from './components/AlertManager';
 import { 
   Settings, 
   Shield, 

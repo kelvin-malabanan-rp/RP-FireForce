@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { FileDown, RefreshCw, AlertCircle, FileText } from 'lucide-react';
-import AuditEventCard from '../../components/AuditEventCard';
-import AuditFilters from '../../components/AuditFilters';
-import AuditEventDetails from '../../components/AuditEventDetails';
+import AuditEventCard from './components/AuditEventCard';
+import AuditFilters from './components/AuditFilters';
+import AuditEventDetails from './components/AuditEventDetails';
 import Pagination from '../../components/Pagination';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import EmptyState from '../../components/EmptyState';

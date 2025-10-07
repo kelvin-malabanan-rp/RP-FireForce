@@ -100,6 +100,12 @@ export const onCallService = {
     return response.object || [];
   },
 
+  // Get user's team
+  async getUserTeam(userId) {
+    const response = await apiRequest(`/api/oncall/user/team?userId=${userId}`);
+    return response.data || null;
+  },
+
   // Load all on-call data at once
   async loadAllOnCallData(teamId, days = 7) {
     try {

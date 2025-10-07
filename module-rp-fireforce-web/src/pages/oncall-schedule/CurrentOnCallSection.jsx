@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Clock, Phone, Mail, MessageSquare, Users, Bell } from 'lucide-react';
-import SendAlertModal from '../../components/SendAlertModal';
+import SendAlertModal from './components/SendAlertModal';
 
 const CurrentOnCallCard = ({ person, role, color }) => {
   const [showAlertModal, setShowAlertModal] = useState(false);

@@ -30,7 +30,7 @@ import {
   Play,
   Pause
 } from 'lucide-react';
-import AIChatbot from '../../components/AIChatbot';
+import AIChatbot from './components/AIChatbot';
 
 const IncidentsModal = ({ incident, isOpen, onClose, onRefresh }) => {
   // Comments state
