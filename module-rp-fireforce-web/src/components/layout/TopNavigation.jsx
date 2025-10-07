@@ -19,7 +19,7 @@ import {
   Monitor
 } from 'lucide-react';
 import useEnhancedNotifications from '../../hooks/useEnhancedNotifications';
-import NotificationSettings from '../NotificationSettings';
+import NotificationSettings from '../../pages/settings/components/NotificationSettings';
 
 const TopNavigation = ({ user, onLogout, toggleSidebar, collapsed, onNavigateToSettings, onNavigateToIncident }) => {
   const [showUserDropdown, setShowUserDropdown] = useState(false);

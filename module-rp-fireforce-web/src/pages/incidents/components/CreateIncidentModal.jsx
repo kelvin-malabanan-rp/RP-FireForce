@@ -21,16 +21,18 @@ const CreateIncidentModal = ({ isOpen, onClose, onIncidentCreated }) => {
     description: '',
     severity: 'medium',
     location: '',
-    bypassRotation: false,
+    notificationMode: 'automatic', // 'automatic' or 'manual'
   });
 
   const [selectedUsers, setSelectedUsers] = useState([]);
   const [availableUsers, setAvailableUsers] = useState([]);
+  const [emergencyUsers, setEmergencyUsers] = useState([]); // Users with push token info
   const [onCallTeam, setOnCallTeam] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingTeams, setIsLoadingTeams] = useState(false);
+  const [isLoadingEmergency, setIsLoadingEmergency] = useState(false);
   const [error, setError] = useState('');
-  const [currentStep, setCurrentStep] = useState(1); // 1: Form, 2: Team Selection
+  const [currentStep, setCurrentStep] = useState(1); // 1: Form, 2: Personnel Selection
 
   const API_BASE_URL = 'https://incident-webhook-api.rapidresponse.workers.dev';
 
@@ -41,6 +43,7 @@ const CreateIncidentModal = ({ isOpen, onClose, onIncidentCreated }) => {
       fetchAllTeamMembers();
       // Clear any previously selected users when modal opens
       setSelectedUsers([]);
+      setEmergencyUsers([]);
     }
   }, [isOpen]);
 
@@ -110,6 +113,12 @@ const CreateIncidentModal = ({ isOpen, onClose, onIncidentCreated }) => {
     }));
   };
 
+  const handleNotificationModeChange = (mode) => {
+    setFormData(prev => ({ ...prev, notificationMode: mode }));
+    setSelectedUsers([]); // Clear selection when switching modes
+    setEmergencyUsers([]);
+  };
+
   const handleToggleUser = (userId) => {
     setSelectedUsers(prev =>
       prev.includes(userId)
@@ -126,6 +135,40 @@ const CreateIncidentModal = ({ isOpen, onClose, onIncidentCreated }) => {
     setSelectedUsers([]);
   };
 
+  // Fetch emergency override users when proceeding to step 2 in manual mode
+  const fetchEmergencyUsers = async () => {
+    if (formData.notificationMode !== 'manual' || selectedUsers.length === 0) {
+      return;
+    }
+
+    try {
+      setIsLoadingEmergency(true);
+      const selectedEmails = availableUsers
+        .filter(u => selectedUsers.includes(u.id))
+        .map(u => u.email);
+
+      const response = await fetch(`${API_BASE_URL}/api/users/emergency-override`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ emails: selectedEmails })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch emergency override users');
+      }
+
+      const data = await response.json();
+      if (data.httpStatus === 'OK' && data.data) {
+        setEmergencyUsers(data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching emergency users:', error);
+      setError('Failed to load emergency override user details');
+    } finally {
+      setIsLoadingEmergency(false);
+    }
+  };
+
   const validateForm = () => {
     if (!formData.title.trim()) {
       setError('Please enter an incident title');
@@ -135,8 +178,8 @@ const CreateIncidentModal = ({ isOpen, onClose, onIncidentCreated }) => {
       setError('Please enter an incident description');
       return false;
     }
-    if (formData.bypassRotation && selectedUsers.length === 0) {
-      setError('Please select at least one team member to notify');
+    if (formData.notificationMode === 'manual' && selectedUsers.length === 0) {
+      setError('Please select at least one person to notify');
       return false;
     }
     return true;
@@ -153,22 +196,18 @@ const CreateIncidentModal = ({ isOpen, onClose, onIncidentCreated }) => {
 
     try {
       // Get user info from localStorage
-      let reportedBy = 'admin@rocketpartners.io'; // Fallback to a known valid email
+      let reportedBy = 'admin@rocketpartners.io';
       try {
         const userStr = localStorage.getItem('user');
         if (userStr) {
           const user = JSON.parse(userStr);
-          // Use email from localStorage if available
-          // Backend validates this email exists in database
           reportedBy = user.email || user.username || 'admin@rocketpartners.io';
-          console.log('User from localStorage:', user);
-          console.log('Using reportedBy email:', reportedBy);
         }
       } catch (e) {
         console.warn('Could not parse user from localStorage, using fallback:', e);
       }
 
-      // Ensure all required fields are strings (backend calls .trim() without checking)
+      // Build incident data
       const incidentData = {
         title: String(formData.title || '').trim(),
         description: String(formData.description || '').trim(),
@@ -177,7 +216,7 @@ const CreateIncidentModal = ({ isOpen, onClose, onIncidentCreated }) => {
         reportedBy: String(reportedBy).trim() || 'admin@rocketpartners.io',
       };
 
-      // Validate that required fields are not empty after trimming
+      // Validate required fields
       if (!incidentData.title) {
         setError('Title is required');
         setIsLoading(false);
@@ -190,61 +229,33 @@ const CreateIncidentModal = ({ isOpen, onClose, onIncidentCreated }) => {
         return;
       }
 
-      if (!incidentData.reportedBy || incidentData.reportedBy === '') {
-        incidentData.reportedBy = 'Web User';
-      }
-
-      // Add selected users if bypassing rotation
-      if (formData.bypassRotation && selectedUsers.length > 0) {
-        // Validate that all selected users exist in availableUsers
-        const validUserIds = availableUsers.map(u => u.id);
-        const invalidUsers = selectedUsers.filter(id => !validUserIds.includes(id));
-        
-        if (invalidUsers.length > 0) {
-          console.error('Invalid user IDs selected:', invalidUsers);
-          setError(`Invalid users selected: ${invalidUsers.join(', ')}. Please refresh and try again.`);
-          setIsLoading(false);
-          return;
-        }
-        
+      // Add selected users if manual mode
+      if (formData.notificationMode === 'manual' && selectedUsers.length > 0) {
         incidentData.notify_users = selectedUsers;
       }
 
-      console.log('Creating incident with data:', JSON.stringify(incidentData, null, 2));
-      console.log('Bypass rotation enabled:', formData.bypassRotation);
-      console.log('Selected users count:', selectedUsers.length);
-      if (formData.bypassRotation) {
-        console.log('Selected user IDs:', selectedUsers);
-        console.log('Available user IDs:', availableUsers.map(u => u.id));
-      }
+      console.log('Creating incident:', {
+        ...incidentData,
+        notificationMode: formData.notificationMode,
+        selectedUserCount: selectedUsers.length
+      });
 
       const response = await fetch(`${API_BASE_URL}/api/incidents`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(incidentData),
       });
 
-      console.log('Response status:', response.status);
-      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
-
       if (!response.ok) {
-        // Try to get error details
         let errorMessage = 'Failed to create incident';
         try {
           const errorData = await response.json();
-          console.error('Error response (JSON):', JSON.stringify(errorData, null, 2));
+          console.error('Error response:', errorData);
           errorMessage = errorData.message || errorData.error || JSON.stringify(errorData);
         } catch (e) {
-          // If response is not JSON, try to get text
-          try {
-            const errorText = await response.text();
-            console.error('Error response (text):', errorText);
-            errorMessage = errorText || errorMessage;
-          } catch (e2) {
-            console.error('Could not parse error response');
-          }
+          const errorText = await response.text().catch(() => '');
+          console.error('Error response (text):', errorText);
+          errorMessage = errorText || errorMessage;
         }
         throw new Error(errorMessage);
       }
@@ -253,13 +264,32 @@ const CreateIncidentModal = ({ isOpen, onClose, onIncidentCreated }) => {
       console.log('Success response:', result);
 
       if (result.httpStatus === 'OK' && result.data) {
-        // Success notification
-        const notifyCount = formData.bypassRotation 
-          ? selectedUsers.length 
-          : 'on-call team members';
+        // Success notification with detailed info
+        let successMessage = 'Incident created successfully!\n\n';
         
-        // Show success message
-        alert(`Incident created successfully! ${notifyCount} team member(s) will be notified.`);
+        if (formData.notificationMode === 'manual') {
+          const notifiedUsers = emergencyUsers.length > 0 ? emergencyUsers : availableUsers.filter(u => selectedUsers.includes(u.id));
+          const usersWithTokens = notifiedUsers.filter(u => u.pushToken || u.pushTokenId);
+          
+          successMessage += `📱 Push notifications sent to ${usersWithTokens.length} of ${selectedUsers.length} selected personnel:\n`;
+          usersWithTokens.forEach(u => {
+            successMessage += `  ✓ ${u.firstName} ${u.lastName}\n`;
+          });
+          
+          if (usersWithTokens.length < selectedUsers.length) {
+            successMessage += `\n⚠️ ${selectedUsers.length - usersWithTokens.length} personnel have no registered push tokens`;
+          }
+        } else {
+          const onCallCount = onCallTeam?.primary ? 1 : 0 + (onCallTeam?.backup ? 1 : 0) + (onCallTeam?.escalation?.length || 0);
+          successMessage += `📱 Push notifications sent to ${onCallCount} on-call personnel`;
+        }
+        
+        alert(successMessage);
+        
+        // Dispatch custom event to notify the incident badge
+        window.dispatchEvent(new CustomEvent('incidentCreated', { 
+          detail: { incident: result.data } 
+        }));
         
         // Callback to parent to refresh incidents list
         if (onIncidentCreated) {
@@ -286,9 +316,10 @@ const CreateIncidentModal = ({ isOpen, onClose, onIncidentCreated }) => {
       description: '',
       severity: 'medium',
       location: '',
-      bypassRotation: false,
+      notificationMode: 'automatic',
     });
     setSelectedUsers([]);
+    setEmergencyUsers([]);
     setError('');
     setCurrentStep(1);
     onClose();
@@ -327,7 +358,7 @@ const CreateIncidentModal = ({ isOpen, onClose, onIncidentCreated }) => {
                 <div>
                   <h2 className="text-xl font-bold text-white">Create New Incident</h2>
                   <p className="text-sm text-indigo-100">
-                    {currentStep === 1 ? 'Step 1: Incident Details' : 'Step 2: Team Notification'}
+                    {currentStep === 1 ? 'Step 1: Incident Details' : 'Step 2: Personnel Notification'}
                   </p>
                 </div>
               </div>
@@ -358,7 +389,7 @@ const CreateIncidentModal = ({ isOpen, onClose, onIncidentCreated }) => {
                 }`}>
                   2
                 </div>
-                <span className="font-medium">Team</span>
+                <span className="font-medium">Personnel</span>
               </div>
             </div>
           </div>
@@ -380,7 +411,7 @@ const CreateIncidentModal = ({ isOpen, onClose, onIncidentCreated }) => {
               <div className="space-y-6">
                 {/* Title */}
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  <label className="block text-sm font-semibold text-black mb-2">
                     Incident Title <span className="text-red-500">*</span>
                   </label>
                   <input
@@ -389,14 +420,14 @@ const CreateIncidentModal = ({ isOpen, onClose, onIncidentCreated }) => {
                     value={formData.title}
                     onChange={handleInputChange}
                     placeholder="Brief description of the incident"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent placeholder-gray-700 text-black"
                     required
                   />
                 </div>
 
                 {/* Description */}
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  <label className="block text-sm font-semibold text-black mb-2">
                     Description <span className="text-red-500">*</span>
                   </label>
                   <textarea
@@ -405,14 +436,14 @@ const CreateIncidentModal = ({ isOpen, onClose, onIncidentCreated }) => {
                     onChange={handleInputChange}
                     placeholder="Detailed description of the incident"
                     rows={5}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none placeholder-gray-700 text-black"
                     required
                   />
                 </div>
 
                 {/* Severity */}
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  <label className="block text-sm font-semibold text-black mb-2">
                     Severity Level
                   </label>
                   <div className="grid grid-cols-4 gap-3">
@@ -435,18 +466,18 @@ const CreateIncidentModal = ({ isOpen, onClose, onIncidentCreated }) => {
 
                 {/* Location */}
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Location <span className="text-gray-400 text-xs">(Optional)</span>
+                  <label className="block text-sm font-semibold text-black mb-2">
+                    Location <span className="text-black text-xs">(Optional)</span>
                   </label>
                   <div className="relative">
-                    <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-black" />
                     <input
                       type="text"
                       name="location"
                       value={formData.location}
                       onChange={handleInputChange}
                       placeholder="Service, server, or location"
-                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent placeholder-gray-700 text-black"
                     />
                   </div>
                 </div>
@@ -466,47 +497,72 @@ const CreateIncidentModal = ({ isOpen, onClose, onIncidentCreated }) => {
                 </div>
               </div>
             ) : (
-              /* Step 2: Team Selection */
+              /* Step 2: Personnel Selection */
               <div className="space-y-6">
-                {/* On-Call Team Display */}
-                <OnCallTeamDisplay 
-                  teamData={onCallTeam} 
-                  loading={isLoadingTeams}
-                  teamName="Platform Engineering"
-                />
-
-                {/* Manual Override Toggle */}
-                <div className="bg-white border-2 border-gray-200 rounded-lg p-4">
-                  <label className="flex items-center justify-between cursor-pointer">
-                    <div className="flex items-center space-x-3">
-                      {formData.bypassRotation ? (
-                        <BellOff className="w-6 h-6 text-orange-600" />
-                      ) : (
-                        <Bell className="w-6 h-6 text-green-600" />
-                      )}
-                      <div>
-                        <div className="font-semibold text-gray-900">
-                          {formData.bypassRotation ? 'Manual Team Selection' : 'Automatic Rotation'}
-                        </div>
-                        <div className="text-sm text-gray-600">
-                          {formData.bypassRotation 
-                            ? 'Select specific team members to notify' 
-                            : 'Notify the current on-call team automatically'}
-                        </div>
-                      </div>
-                    </div>
-                    <input
-                      type="checkbox"
-                      name="bypassRotation"
-                      checked={formData.bypassRotation}
-                      onChange={handleInputChange}
-                      className="w-6 h-6 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-                    />
+                {/* Notification Mode - Radio Buttons */}
+                <div className="bg-white border-2 border-gray-200 rounded-lg p-5">
+                  <label className="block text-sm font-semibold text-gray-900 mb-4">
+                    Notification Mode
                   </label>
+                  
+                  <div className="space-y-3">
+                    {/* Automatic Rotation Option */}
+                    <label className="flex items-start space-x-3 p-4 border-2 rounded-lg cursor-pointer transition-all hover:border-indigo-300 hover:bg-indigo-50"
+                           style={{ borderColor: formData.notificationMode === 'automatic' ? '#4F46E5' : '#E5E7EB', backgroundColor: formData.notificationMode === 'automatic' ? '#EEF2FF' : 'white' }}>
+                      <input
+                        type="radio"
+                        name="notificationMode"
+                        value="automatic"
+                        checked={formData.notificationMode === 'automatic'}
+                        onChange={() => handleNotificationModeChange('automatic')}
+                        className="mt-1 w-5 h-5 text-indigo-600"
+                      />
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-2">
+                          <Bell className="w-5 h-5 text-green-600" />
+                          <span className="font-semibold text-gray-900">Automatic Rotation</span>
+                        </div>
+                        <p className="text-sm text-black mt-1">
+                          Notify current on-call team members automatically based on the rotation schedule
+                        </p>
+                      </div>
+                    </label>
+
+                    {/* Manual Personnel Selection Option */}
+                    <label className="flex items-start space-x-3 p-4 border-2 rounded-lg cursor-pointer transition-all hover:border-orange-300 hover:bg-orange-50"
+                           style={{ borderColor: formData.notificationMode === 'manual' ? '#F97316' : '#E5E7EB', backgroundColor: formData.notificationMode === 'manual' ? '#FFF7ED' : 'white' }}>
+                      <input
+                        type="radio"
+                        name="notificationMode"
+                        value="manual"
+                        checked={formData.notificationMode === 'manual'}
+                        onChange={() => handleNotificationModeChange('manual')}
+                        className="mt-1 w-5 h-5 text-orange-600"
+                      />
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-2">
+                          <Users className="w-5 h-5 text-orange-600" />
+                          <span className="font-semibold text-gray-900">Manual Personnel Selection</span>
+                        </div>
+                        <p className="text-sm text-black mt-1">
+                          Select specific personnel to notify regardless of on-call schedule
+                        </p>
+                      </div>
+                    </label>
+                  </div>
                 </div>
 
-                {/* Team Member Selector (only if bypassRotation is true) */}
-                {formData.bypassRotation && (
+                {/* On-Call Team Display (for automatic mode) */}
+                {formData.notificationMode === 'automatic' && (
+                  <OnCallTeamDisplay 
+                    teamData={onCallTeam} 
+                    loading={isLoadingTeams}
+                    teamName="Platform Engineering"
+                  />
+                )}
+
+                {/* Personnel Selector (for manual mode) */}
+                {formData.notificationMode === 'manual' && (
                   <TeamMemberSelector
                     availableUsers={availableUsers}
                     selectedUsers={selectedUsers}
@@ -515,6 +571,109 @@ const CreateIncidentModal = ({ isOpen, onClose, onIncidentCreated }) => {
                     onDeselectAll={handleDeselectAll}
                   />
                 )}
+
+                {/* Notification Preview */}
+                <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border-2 border-indigo-200 rounded-lg p-5">
+                  <div className="flex items-start space-x-3">
+                    <Bell className="w-6 h-6 text-indigo-600 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <h3 className="font-bold text-indigo-900 mb-2">
+                        📱 Push Notifications Will Be Sent To:
+                      </h3>
+                      
+                      {formData.notificationMode === 'manual' ? (
+                        // Manual mode - show selected users
+                        selectedUsers.length > 0 ? (
+                          <div className="space-y-2">
+                            <p className="text-sm text-indigo-700 font-medium">
+                              {selectedUsers.length} selected personnel:
+                            </p>
+                            <div className="bg-white rounded-lg p-3 max-h-40 overflow-y-auto">
+                              <ul className="space-y-2">
+                                {selectedUsers.map(userId => {
+                                  const user = availableUsers.find(u => u.id === userId);
+                                  return user ? (
+                                    <li key={userId} className="flex items-center space-x-2 text-sm">
+                                      <CheckCircle className="w-4 h-4 text-green-600" />
+                                      <span className="font-medium text-black">
+                                        {user.firstName} {user.lastName}
+                                      </span>
+                                      <span className="text-black">({user.email})</span>
+                                    </li>
+                                  ) : null;
+                                })}
+                              </ul>
+                            </div>
+                            <p className="text-xs text-indigo-600 italic mt-2">
+                              💡 Only these selected personnel will receive push notifications
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                            <p className="text-sm text-yellow-800">
+                              ⚠️ No personnel selected. Please select at least one person to notify.
+                            </p>
+                          </div>
+                        )
+                      ) : (
+                        // Automatic mode - show on-call team
+                        onCallTeam ? (
+                          <div className="space-y-2">
+                            <p className="text-sm text-indigo-700 font-medium">
+                              Current on-call team:
+                            </p>
+                            <div className="bg-white rounded-lg p-3">
+                              <ul className="space-y-2">
+                                {onCallTeam.primary && (
+                                  <li className="flex items-center space-x-2 text-sm">
+                                    <CheckCircle className="w-4 h-4 text-green-600" />
+                                    <span className="font-medium text-black">
+                                      {onCallTeam.primary.firstName} {onCallTeam.primary.lastName}
+                                    </span>
+                                    <span className="px-2 py-0.5 text-xs rounded-full bg-indigo-100 text-indigo-700">
+                                      Primary
+                                    </span>
+                                  </li>
+                                )}
+                                {onCallTeam.backup && (
+                                  <li className="flex items-center space-x-2 text-sm">
+                                    <CheckCircle className="w-4 h-4 text-green-600" />
+                                    <span className="font-medium text-black">
+                                      {onCallTeam.backup.firstName} {onCallTeam.backup.lastName}
+                                    </span>
+                                    <span className="px-2 py-0.5 text-xs rounded-full bg-blue-100 text-blue-700">
+                                      Backup
+                                    </span>
+                                  </li>
+                                )}
+                                {onCallTeam.escalation && onCallTeam.escalation.map((member, idx) => (
+                                  <li key={idx} className="flex items-center space-x-2 text-sm">
+                                    <CheckCircle className="w-4 h-4 text-green-600" />
+                                    <span className="font-medium text-black">
+                                      {member.firstName} {member.lastName}
+                                    </span>
+                                    <span className="px-2 py-0.5 text-xs rounded-full bg-purple-100 text-purple-700">
+                                      Escalation
+                                    </span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                            <p className="text-xs text-indigo-600 italic mt-2">
+                              💡 All current on-call members will receive push notifications
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                            <p className="text-sm text-yellow-800">
+                              ⚠️ No on-call team found.
+                            </p>
+                          </div>
+                        )
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
           </div>
@@ -526,7 +685,7 @@ const CreateIncidentModal = ({ isOpen, onClose, onIncidentCreated }) => {
                 <>
                   <button
                     onClick={handleClose}
-                    className="px-6 py-2 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-100 transition-colors"
+                    className="px-6 py-2 border border-gray-300 text-black font-medium rounded-lg hover:bg-gray-100 transition-colors"
                   >
                     Cancel
                   </button>
@@ -538,7 +697,7 @@ const CreateIncidentModal = ({ isOpen, onClose, onIncidentCreated }) => {
                     }}
                     className="px-6 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors flex items-center space-x-2"
                   >
-                    <span>Next: Select Team</span>
+                    <span>Next: Select Personnel</span>
                     <Users className="w-5 h-5" />
                   </button>
                 </>

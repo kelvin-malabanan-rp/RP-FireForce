@@ -25,8 +25,11 @@ import {
   Minimize2,
   Maximize2
 } from 'lucide-react';
-import StreamingChatbot from '../../components/StreamingChatbot';
-import SaveResolutionModal from '../../components/SaveResolutionModal';
+import StreamingChatbot from './components/StreamingChatbot';
+import SaveResolutionModal from './components/SaveResolutionModal';
+import IncidentAuditTimeline from './components/IncidentAuditTimeline';
+import NotificationHistoryPanel from './components/NotificationHistoryPanel';
+import { auditTrailService } from '../../services/api';
 
 const IncidentDetailsPage = ({ incidentId, onBack }) => {
   const [incident, setIncident] = useState(null);
@@ -140,6 +143,7 @@ const IncidentDetailsPage = ({ incidentId, onBack }) => {
     setIsSubmittingComment(true);
     try {
       const userId = localStorage.getItem('userId') || 'user-4';
+      const userEmail = localStorage.getItem('userEmail') || 'user@example.com';
       
       const response = await fetch(
         'https://incident-webhook-api.rapidresponse.workers.dev/api/incidents-comment',
@@ -155,6 +159,17 @@ const IncidentDetailsPage = ({ incidentId, onBack }) => {
       );
 
       if (response.ok) {
+        // Create audit log
+        await auditTrailService.createAuditLog({
+          action: 'comment_added',
+          details: {
+            comment: newComment.substring(0, 200), // Limit comment length in audit
+            addedBy: userEmail
+          },
+          incidentId: incident.id,
+          userId: userId
+        });
+        
         setNewComment('');
         await fetchComments();
       } else {
@@ -172,6 +187,7 @@ const IncidentDetailsPage = ({ incidentId, onBack }) => {
     setIsUpdating(true);
     try {
       const userId = localStorage.getItem('userId') || 'user-4';
+      const userEmail = localStorage.getItem('userEmail') || 'user@example.com';
       
       const response = await fetch(
         'https://incident-webhook-api.rapidresponse.workers.dev/api/incidents',
@@ -187,6 +203,19 @@ const IncidentDetailsPage = ({ incidentId, onBack }) => {
       );
 
       if (response.ok) {
+        // Create audit log
+        await auditTrailService.createAuditLog({
+          action: 'incident_acknowledged',
+          details: {
+            severity: incident.severity,
+            description: incident.description,
+            triggeredBy: userEmail,
+            previousStatus: incident.status
+          },
+          incidentId: incident.id,
+          userId: userId
+        });
+        
         alert('Incident acknowledged successfully');
         fetchIncident();
       } else {
@@ -208,6 +237,7 @@ const IncidentDetailsPage = ({ incidentId, onBack }) => {
 
     setIsUpdating(true);
     try {
+      const userId = localStorage.getItem('userId') || 'user-4';
       const userEmail = localStorage.getItem('userEmail') || 'user@example.com';
       
       const response = await fetch(
@@ -224,6 +254,20 @@ const IncidentDetailsPage = ({ incidentId, onBack }) => {
       );
 
       if (response.ok) {
+        // Create audit log
+        await auditTrailService.createAuditLog({
+          action: 'incident_resolved',
+          details: {
+            severity: incident.severity,
+            description: incident.description,
+            resolution: resolutionNote,
+            resolvedBy: userEmail,
+            previousStatus: incident.status
+          },
+          incidentId: incident.id,
+          userId: userId
+        });
+        
         alert('Incident resolved successfully! ✅');
         
         // Update local incident state immediately
@@ -271,6 +315,7 @@ const IncidentDetailsPage = ({ incidentId, onBack }) => {
 
     setIsUpdating(true);
     try {
+      const userId = localStorage.getItem('userId') || 'user-4';
       const userEmail = localStorage.getItem('userEmail') || 'user@example.com';
       
       const response = await fetch(
@@ -287,6 +332,19 @@ const IncidentDetailsPage = ({ incidentId, onBack }) => {
       );
 
       if (response.ok) {
+        // Create audit log
+        await auditTrailService.createAuditLog({
+          action: 'status_updated',
+          details: {
+            severity: incident.severity,
+            previousStatus: incident.status,
+            newStatus: selectedStatus,
+            updatedBy: userEmail
+          },
+          incidentId: incident.id,
+          userId: userId
+        });
+        
         alert('Incident status updated successfully! ✅');
         
         // Update local incident state immediately
@@ -768,6 +826,12 @@ const IncidentDetailsPage = ({ incidentId, onBack }) => {
                 )}
               </div>
             </div>
+
+            {/* Audit Timeline Section */}
+            <IncidentAuditTimeline incidentId={incidentId} />
+
+            {/* Notification History Section */}
+            <NotificationHistoryPanel incidentId={incidentId} />
           </div>
 
           {/* Right Column - AI Chatbot */}

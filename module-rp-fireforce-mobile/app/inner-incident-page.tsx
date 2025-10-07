@@ -311,6 +311,29 @@ export default function InnerIncidentPage() {
         }
     };
 
+    const formatTimestamp = (timestamp: string | Date | null | undefined): string => {
+        if (!timestamp) return 'N/A';
+
+        try {
+            const date = timestamp instanceof Date ? timestamp : new Date(timestamp);
+
+            // Check if date is valid
+            if (isNaN(date.getTime())) return 'Invalid date';
+
+            // Format: "Jan 15, 2024 at 3:45 PM"
+            return date.toLocaleString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true
+            });
+        } catch (error) {
+            return 'Invalid date';
+        }
+    };
+
     const getStatusIcon = (status: string) => {
         switch (status) {
             case 'open':
@@ -395,7 +418,7 @@ export default function InnerIncidentPage() {
                             <IconSymbol name="clock" size={16} color="#6B7280" />
                             <Text style={styles.metadataLabel}>Reported:</Text>
                             <Text style={styles.metadataValue}>
-                                (incident.timestamp)
+                                {formatTimestamp(incident.timestamp)}
                             </Text>
                         </View>
 
@@ -434,7 +457,7 @@ export default function InnerIncidentPage() {
                                 <IconSymbol name="checkmark.circle" size={16} color="#10B981" />
                                 <Text style={styles.metadataLabel}>Resolved:</Text>
                                 <Text style={styles.metadataValue}>
-                                    (incident.resolvedAt)r
+                                    {formatTimestamp(incident.resolvedAt)}
                                 </Text>
                             </View>
                         )}

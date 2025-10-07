@@ -10,10 +10,11 @@ import {
   ChevronLeft,
   ChevronRight,
   Flame,
-  Menu
+  Menu,
+  FileText
 } from 'lucide-react';
 
-const SideNavigation = ({ activeTab, setActiveTab, collapsed, setCollapsed }) => {
+const SideNavigation = ({ activeTab, setActiveTab, collapsed, setCollapsed, openIncidentsCount }) => {
   const navigationItems = [
     {
       id: 'dashboard',
@@ -32,7 +33,7 @@ const SideNavigation = ({ activeTab, setActiveTab, collapsed, setCollapsed }) =>
       label: 'Incidents',
       icon: AlertTriangle,
       path: '/incidents',
-      badge: 3
+      badge: openIncidentsCount > 0 ? openIncidentsCount : null
     },
     {
       id: 'oncall-schedule',
@@ -45,6 +46,12 @@ const SideNavigation = ({ activeTab, setActiveTab, collapsed, setCollapsed }) =>
       label: 'Teams',
       icon: Users,
       path: '/teams'
+    },
+    {
+      id: 'audit-trail',
+      label: 'Audit Trail',
+      icon: FileText,
+      path: '/audit-trail'
     },
     {
       id: 'settings',

@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import SideNavigation from './SideNavigation';
 import TopNavigation from './TopNavigation';
+import useIncidentBadge from '../../hooks/useIncidentBadge';
 
 // Import pages
 import DashboardPage from '../../pages/dashboard/DashboardPage';
@@ -8,8 +9,9 @@ import AnalyticsPage from '../../pages/analytics/AnalyticsPage';
 import IncidentsPage from '../../pages/incidents/IncidentsPage';
 import IncidentDetailsPage from '../../pages/incidents/IncidentDetailsPage';
 import OnCallSchedulePage from '../../pages/oncall-schedule/OnCallSchedulePage';
-import TeamsPage from '../../pages/teams/TeamsPage';
+import TeamsPage from '../../pages/teams'; // Now uses enhanced version by default
 import SettingsPage from '../../pages/settings/SettingsPage';
+import AuditTrailPage from '../../pages/audit-trail/AuditTrailPage';
 
 const DashboardLayout = ({ user, onLogout }) => {
   const [activeTab, setActiveTab] = useState(() => {
@@ -22,6 +24,14 @@ const DashboardLayout = ({ user, onLogout }) => {
   });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  
+  // Use incident badge hook to track new/unread incidents
+  const userId = user?.id || localStorage.getItem('userId') || 'user-1';
+  const { 
+    newIncidentsCount, 
+    markAllAsSeen, 
+    markIncidentAsSeen 
+  } = useIncidentBadge(userId);
 
   // Handle responsive design
   useEffect(() => {
@@ -43,19 +53,25 @@ const DashboardLayout = ({ user, onLogout }) => {
   };
 
   // Custom setActiveTab function that also persists to localStorage
-  const handleSetActiveTab = (tabName, incidentId = null) => {
+  const handleSetActiveTab = useCallback((tabName, incidentId = null) => {
     setActiveTab(tabName);
     localStorage.setItem('activeTab', tabName);
     
-    // If navigating to incident details, store the incident ID
+    // Mark all incidents as seen when user navigates to incidents page
+    if (tabName === 'incidents') {
+      markAllAsSeen();
+    }
+    
+    // If navigating to incident details, mark that specific incident as seen
     if (tabName === 'incident-details' && incidentId) {
       setSelectedIncidentId(incidentId);
       localStorage.setItem('selectedIncidentId', incidentId);
+      markIncidentAsSeen(incidentId);
     } else if (tabName !== 'incident-details') {
       setSelectedIncidentId(null);
       localStorage.removeItem('selectedIncidentId');
     }
-  };
+  }, [markAllAsSeen, markIncidentAsSeen]);
 
   const renderActivePage = () => {
     switch (activeTab) {
@@ -71,6 +87,8 @@ const DashboardLayout = ({ user, onLogout }) => {
         return <OnCallSchedulePage />;
       case 'teams':
         return <TeamsPage />;
+      case 'audit-trail':
+        return <AuditTrailPage />;
       case 'settings':
         return <SettingsPage />;
       default:
@@ -94,6 +112,7 @@ const DashboardLayout = ({ user, onLogout }) => {
             setActiveTab={handleSetActiveTab}
             collapsed={sidebarCollapsed}
             setCollapsed={setSidebarCollapsed}
+            openIncidentsCount={newIncidentsCount}
           />
         </div>
       </div>

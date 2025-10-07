@@ -194,7 +194,7 @@ export default function IncidentsScreen() {
                     action: "CREATE_INCIDENT",
                     incidentId: incident.id,
                     userId: userId,
-                    description: `User ${userName} created incident "${incident.title}"`,
+                    description: `${userName} created incident "${incident.title}"`,
                     details: {
                         title: incident.title,
                         severity: incident.severity,
