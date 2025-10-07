@@ -7,7 +7,9 @@ import {
   ChevronDown,
   PanelLeftOpen,
   PanelLeftClose,
-  Sparkles
+  Sparkles,
+  Settings,
+  LogOut
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -25,9 +27,10 @@ import {
 interface DashboardTopNavProps {
   onMenuToggle: () => void;
   isSidebarOpen: boolean;
+  onNavigate?: (page: string) => void;
 }
 
-export function DashboardTopNav({ onMenuToggle, isSidebarOpen }: DashboardTopNavProps) {
+export function DashboardTopNav({ onMenuToggle, isSidebarOpen, onNavigate }: DashboardTopNavProps) {
   const [notificationCount] = useState(3);
 
   return (
@@ -132,12 +135,20 @@ export function DashboardTopNav({ onMenuToggle, isSidebarOpen }: DashboardTopNav
                 <UserCircle2 className="mr-2 h-4 w-4" />
                 <span>Profile</span>
               </DropdownMenuItem>
-              <DropdownMenuItem className="text-slate-700 dark:text-white">
-                Settings
+              <DropdownMenuItem 
+                className="text-slate-700 dark:text-white cursor-pointer"
+                onClick={() => onNavigate?.('settings')}
+              >
+                <Settings className="mr-2 h-4 w-4" />
+                <span>Settings</span>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-red-600 dark:text-red-400">
-                Log out
+              <DropdownMenuItem 
+                className="text-red-600 dark:text-red-400 cursor-pointer"
+                onClick={() => onNavigate?.('logout')}
+              >
+                <LogOut className="mr-2 h-4 w-4" />
+                <span>Log out</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
