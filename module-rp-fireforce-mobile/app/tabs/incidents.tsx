@@ -23,9 +23,9 @@ import {CreateIncidentData,
 import { FONT_FAMILY } from '@/constants/fonts';
 import {Ionicons} from "@expo/vector-icons";
 import IncidentList from "@/components/incident-list";
-import {usePushNotifications} from "@/hooks/use-push-notifications";
 import {retrieveUserSession} from "@/constants/local-storage";
 import {createAuditLog} from "@/api/audit-trail";
+import {usePushNotificationContext} from "@/context/push-notification-context";
 
 type TeamMember = {
     id: string;
@@ -35,16 +35,28 @@ type TeamMember = {
     role?: string;
 };
 
+type Team = {
+    id: string;
+    name: string;
+    members: TeamMember[];
+};
+
+type NotificationMode = 'individual' | 'team';
+
 export default function IncidentsScreen() {
+    const { sendNotificationToOnCallTeam } = usePushNotificationContext();
     const [incidents, setIncidents] = useState<IncidentUI[]>([]);
     const [refreshing, setRefreshing] = useState(false);
     const [loading, setLoading] = useState(true);
     const [modalVisible, setModalVisible] = useState(false);
     const [creating, setCreating] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const { sendNotificationToOnCallTeam, sendIncidentNotification } = usePushNotifications();
     const [availableUsers, setAvailableUsers] = useState<TeamMember[]>([]);
+    const [availableTeams, setAvailableTeams] = useState<Team[]>([]);
     const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+    const [selectedTeams, setSelectedTeams] = useState<string[]>([]);
+    const [notificationMode, setNotificationMode] = useState<NotificationMode>('individual');
+
     const [newIncident, setNewIncident] = useState({
         title: "",
         description: "",
@@ -52,6 +64,7 @@ export default function IncidentsScreen() {
         location: "",
         bypassRotation: false,
     });
+
     const resetIncidentForm = () => {
         setNewIncident({
             title: "",
@@ -61,13 +74,10 @@ export default function IncidentsScreen() {
             bypassRotation: false,
         });
         setSelectedUsers([]);
+        setSelectedTeams([]);
+        setNotificationMode('individual');
     };
 
-    const parseApiDateTime = (dateTimeString: string): Date => {
-        return new Date(dateTimeString);
-    };
-
-    // utils/incident-transform.ts (or wherever transformApiIncident is)
     const transformApiIncident = (apiIncident: any): IncidentUI => ({
         id: apiIncident.id,
         title: apiIncident.title,
@@ -75,7 +85,7 @@ export default function IncidentsScreen() {
         severity: apiIncident.severity,
         status: apiIncident.status,
         timestamp: new Date(apiIncident.timestamp),
-        reportedBy: apiIncident.reported_by, // 👈 snake → camel
+        reportedBy: apiIncident.reported_by,
         location: apiIncident.location ?? undefined,
         assignedTo: apiIncident.assigned_to ?? undefined,
         resolvedBy: apiIncident.resolved_by ?? undefined,
@@ -101,10 +111,13 @@ export default function IncidentsScreen() {
         }
     };
 
-    // Fetch team members when bypass rotation is enabled
-    const fetchTeamMembers = async () => {
+    // Fetch team members and teams
+    const fetchTeamMembersAndTeams = async () => {
         try {
             const teams = await oncallController.getTeams();
+
+            // Store teams
+            setAvailableTeams(teams);
 
             // Flatten all team members from all teams into a single list
             const allMembers: TeamMember[] = [];
@@ -136,7 +149,7 @@ export default function IncidentsScreen() {
 
     useEffect(() => {
         if (newIncident.bypassRotation) {
-            fetchTeamMembers();
+            fetchTeamMembersAndTeams();
         }
     }, [newIncident.bypassRotation]);
 
@@ -153,15 +166,29 @@ export default function IncidentsScreen() {
         );
     };
 
+    const toggleTeamSelection = (teamId: string) => {
+        setSelectedTeams(prev =>
+            prev.includes(teamId)
+                ? prev.filter(id => id !== teamId)
+                : [...prev, teamId]
+        );
+    };
+
     const createNewIncident = async () => {
         if (!newIncident.title || !newIncident.description) {
             Alert.alert("Error", "Please fill in all required fields");
             return;
         }
 
-        if (newIncident.bypassRotation && selectedUsers.length === 0) {
-            Alert.alert("Error", "Please select at least one person to notify");
-            return;
+        if (newIncident.bypassRotation) {
+            if (notificationMode === 'individual' && selectedUsers.length === 0) {
+                Alert.alert("Error", "Please select at least one person to notify");
+                return;
+            }
+            if (notificationMode === 'team' && selectedTeams.length === 0) {
+                Alert.alert("Error", "Please select at least one team to notify");
+                return;
+            }
         }
 
         setCreating(true);
@@ -180,7 +207,15 @@ export default function IncidentsScreen() {
             };
 
             if (newIncident.bypassRotation) {
-                incidentData.notifyUsers = selectedUsers;
+                if (notificationMode === 'individual') {
+                    incidentData.notifyUsers = selectedUsers;
+                } else {
+                    // Get all user IDs from selected teams
+                    const teamUserIds = availableTeams
+                        .filter(team => selectedTeams.includes(team.id))
+                        .flatMap(team => team.members.map(member => member.id));
+                    incidentData.notifyUsers = teamUserIds;
+                }
             }
 
             // 1️⃣ Create the incident
@@ -218,16 +253,22 @@ export default function IncidentsScreen() {
                 // 4️⃣ Refresh incidents list
                 await fetchAllIncidents();
 
-                // 5️⃣ Local notification
-                await sendIncidentNotification(incident);
-
                 // 6️⃣ Remote notification logic
                 const isBypassing = newIncident.bypassRotation;
-                const selectedEmails = isBypassing
-                    ? availableUsers
-                        .filter(u => selectedUsers.includes(u.id))
-                        .map(u => u.email)
-                    : [];
+                let selectedEmails: string[] = [];
+
+                if (isBypassing) {
+                    if (notificationMode === 'individual') {
+                        selectedEmails = availableUsers
+                            .filter(u => selectedUsers.includes(u.id))
+                            .map(u => u.email);
+                    } else {
+                        // Get all emails from selected teams
+                        selectedEmails = availableTeams
+                            .filter(team => selectedTeams.includes(team.id))
+                            .flatMap(team => team.members.map(member => member.email));
+                    }
+                }
 
                 try {
                     await sendNotificationToOnCallTeam({
@@ -248,10 +289,14 @@ export default function IncidentsScreen() {
                 resetIncidentForm();
                 setModalVisible(false);
 
+                const notificationCount = notificationMode === 'individual'
+                    ? selectedUsers.length
+                    : selectedEmails.length;
+
                 Alert.alert(
                     "Success",
                     newIncident.bypassRotation
-                        ? `Incident created and ${selectedUsers.length} people notified immediately`
+                        ? `Incident created and ${notificationCount} people notified immediately`
                         : "Incident created successfully"
                 );
             } else {
@@ -383,7 +428,7 @@ export default function IncidentsScreen() {
                                             style={[
                                                 styles.severityOptionText,
                                                 newIncident.severity === sev && {
-                                                    color: '#FFFFFF', // White text when selected
+                                                    color: '#FFFFFF',
                                                 },
                                             ]}
                                         >
@@ -426,54 +471,151 @@ export default function IncidentsScreen() {
                                     </View>
                                 </TouchableOpacity>
 
-                                {/* User Selection */}
+                                {/* Notification Mode Selection */}
                                 {newIncident.bypassRotation && (
-                                    <View style={styles.userSelectionContainer}>
-                                        <Text style={styles.userSelectionTitle}>
-                                            Select Team Members to Notify ({selectedUsers.length} selected)
-                                        </Text>
-                                        {availableUsers.length === 0 ? (
-                                            <View style={styles.emptyUsersContainer}>
-                                                <Ionicons name="people-outline" size={32} color="#9CA3AF" />
-                                                <Text style={styles.emptyUsersText}>No team members found</Text>
-                                            </View>
-                                        ) : (
-                                            availableUsers.map(user => (
+                                    <>
+                                        <View style={styles.modeSelector}>
+                                            <Text style={styles.modeSelectorLabel}>Notify by:</Text>
+                                            <View style={styles.modeButtons}>
                                                 <TouchableOpacity
-                                                    key={user.id}
-                                                    style={styles.userOption}
-                                                    onPress={() => toggleUserSelection(user.id)}
+                                                    style={[
+                                                        styles.modeButton,
+                                                        notificationMode === 'individual' && styles.modeButtonActive
+                                                    ]}
+                                                    onPress={() => setNotificationMode('individual')}
                                                 >
-                                                    <View style={styles.userInfo}>
-                                                        <Ionicons
-                                                            name="person-circle"
-                                                            size={24}
-                                                            color="#6B7280"
-                                                        />
-                                                        <View style={styles.userDetails}>
-                                                            <Text style={styles.userName}>
-                                                                {user.firstName} {user.lastName}
-                                                            </Text>
-                                                            <Text style={styles.userEmail}>{user.email}</Text>
-                                                            {user.role && (
-                                                                <Text style={styles.userRole}>
-                                                                    {user.role.toUpperCase()}
-                                                                </Text>
-                                                            )}
-                                                        </View>
-                                                    </View>
-                                                    <View style={[
-                                                        styles.checkbox,
-                                                        selectedUsers.includes(user.id) && styles.checkboxActive
+                                                    <Ionicons
+                                                        name="person"
+                                                        size={16}
+                                                        color={notificationMode === 'individual' ? '#FFFFFF' : '#6B7280'}
+                                                    />
+                                                    <Text style={[
+                                                        styles.modeButtonText,
+                                                        notificationMode === 'individual' && styles.modeButtonTextActive
                                                     ]}>
-                                                        {selectedUsers.includes(user.id) && (
-                                                            <Ionicons name="checkmark" size={16} color="#FFFFFF" />
-                                                        )}
-                                                    </View>
+                                                        Individual
+                                                    </Text>
                                                 </TouchableOpacity>
-                                            ))
+
+                                                <TouchableOpacity
+                                                    style={[
+                                                        styles.modeButton,
+                                                        notificationMode === 'team' && styles.modeButtonActive
+                                                    ]}
+                                                    onPress={() => setNotificationMode('team')}
+                                                >
+                                                    <Ionicons
+                                                        name="people"
+                                                        size={16}
+                                                        color={notificationMode === 'team' ? '#FFFFFF' : '#6B7280'}
+                                                    />
+                                                    <Text style={[
+                                                        styles.modeButtonText,
+                                                        notificationMode === 'team' && styles.modeButtonTextActive
+                                                    ]}>
+                                                        Team
+                                                    </Text>
+                                                </TouchableOpacity>
+                                            </View>
+                                        </View>
+
+                                        {/* Individual Selection */}
+                                        {notificationMode === 'individual' && (
+                                            <View style={styles.userSelectionContainer}>
+                                                <Text style={styles.userSelectionTitle}>
+                                                    Select Team Members ({selectedUsers.length} selected)
+                                                </Text>
+                                                {availableUsers.length === 0 ? (
+                                                    <View style={styles.emptyUsersContainer}>
+                                                        <Ionicons name="people-outline" size={32} color="#9CA3AF" />
+                                                        <Text style={styles.emptyUsersText}>No team members found</Text>
+                                                    </View>
+                                                ) : (
+                                                    availableUsers.map(user => (
+                                                        <TouchableOpacity
+                                                            key={user.id}
+                                                            style={styles.userOption}
+                                                            onPress={() => toggleUserSelection(user.id)}
+                                                        >
+                                                            <View style={styles.userInfo}>
+                                                                <Ionicons
+                                                                    name="person-circle"
+                                                                    size={24}
+                                                                    color="#6B7280"
+                                                                />
+                                                                <View style={styles.userDetails}>
+                                                                    <Text style={styles.userName}>
+                                                                        {user.firstName} {user.lastName}
+                                                                    </Text>
+                                                                    <Text style={styles.userEmail}>{user.email}</Text>
+                                                                    {user.role && (
+                                                                        <Text style={styles.userRole}>
+                                                                            {user.role.toUpperCase()}
+                                                                        </Text>
+                                                                    )}
+                                                                </View>
+                                                            </View>
+                                                            <View style={[
+                                                                styles.checkbox,
+                                                                selectedUsers.includes(user.id) && styles.checkboxActive
+                                                            ]}>
+                                                                {selectedUsers.includes(user.id) && (
+                                                                    <Ionicons name="checkmark" size={16} color="#FFFFFF" />
+                                                                )}
+                                                            </View>
+                                                        </TouchableOpacity>
+                                                    ))
+                                                )}
+                                            </View>
                                         )}
-                                    </View>
+
+                                        {/* Team Selection */}
+                                        {notificationMode === 'team' && (
+                                            <View style={styles.userSelectionContainer}>
+                                                <Text style={styles.userSelectionTitle}>
+                                                    Select Teams ({selectedTeams.length} selected)
+                                                </Text>
+                                                {availableTeams.length === 0 ? (
+                                                    <View style={styles.emptyUsersContainer}>
+                                                        <Ionicons name="people-outline" size={32} color="#9CA3AF" />
+                                                        <Text style={styles.emptyUsersText}>No teams found</Text>
+                                                    </View>
+                                                ) : (
+                                                    availableTeams.map(team => (
+                                                        <TouchableOpacity
+                                                            key={team.id}
+                                                            style={styles.userOption}
+                                                            onPress={() => toggleTeamSelection(team.id)}
+                                                        >
+                                                            <View style={styles.userInfo}>
+                                                                <Ionicons
+                                                                    name="people-circle"
+                                                                    size={24}
+                                                                    color="#3B82F6"
+                                                                />
+                                                                <View style={styles.userDetails}>
+                                                                    <Text style={styles.userName}>
+                                                                        {team.name}
+                                                                    </Text>
+                                                                    <Text style={styles.userEmail}>
+                                                                        {team.members.length} member{team.members.length !== 1 ? 's' : ''}
+                                                                    </Text>
+                                                                </View>
+                                                            </View>
+                                                            <View style={[
+                                                                styles.checkbox,
+                                                                selectedTeams.includes(team.id) && styles.checkboxActive
+                                                            ]}>
+                                                                {selectedTeams.includes(team.id) && (
+                                                                    <Ionicons name="checkmark" size={16} color="#FFFFFF" />
+                                                                )}
+                                                            </View>
+                                                        </TouchableOpacity>
+                                                    ))
+                                                )}
+                                            </View>
+                                        )}
+                                    </>
                                 )}
                             </View>
 
@@ -527,6 +669,7 @@ export default function IncidentsScreen() {
 }
 
 const styles = StyleSheet.create({
+    // ... keep all your existing styles ...
     container: {
         flex: 1,
         backgroundColor: "#F3F4F6",
@@ -621,15 +764,12 @@ const styles = StyleSheet.create({
         paddingVertical: 10,
         paddingHorizontal: 16,
         marginBottom: 8,
-        backgroundColor: '#FFFFFF', // Default white background
+        backgroundColor: '#FFFFFF',
     },
-    // severityOptionActive: {
-    //     backgroundColor: "#F9FAFB",
-    // },
     severityOptionText: {
         fontSize: 13,
         fontWeight: "500",
-        color: "#6B7280", // Default gray text
+        color: "#6B7280",
         fontFamily: FONT_FAMILY.POPPINS_MEDIUM,
     },
     emergencySection: {
@@ -690,6 +830,47 @@ const styles = StyleSheet.create({
     },
     toggleCircleActive: {
         transform: [{ translateX: 20 }],
+    },
+    // ✅ New styles for mode selector
+    modeSelector: {
+        marginBottom: 16,
+    },
+    modeSelectorLabel: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: '#374151',
+        marginBottom: 8,
+        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
+    },
+    modeButtons: {
+        flexDirection: 'row',
+        gap: 8,
+    },
+    modeButton: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+        borderRadius: 8,
+        borderWidth: 2,
+        borderColor: '#D1D5DB',
+        backgroundColor: '#FFFFFF',
+        gap: 6,
+    },
+    modeButtonActive: {
+        backgroundColor: '#3B82F6',
+        borderColor: '#3B82F6',
+    },
+    modeButtonText: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: '#6B7280',
+        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
+    },
+    modeButtonTextActive: {
+        color: '#FFFFFF',
     },
     userSelectionContainer: {
         backgroundColor: '#F9FAFB',
@@ -779,8 +960,8 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'center',
         gap: 8,
-        marginTop: 20, // Add top margin
-        marginBottom: 20, // Add bottom margin for safety
+        marginTop: 20,
+        marginBottom: 20,
     },
     createButtonDisabled: {
         backgroundColor: "#9CA3AF",

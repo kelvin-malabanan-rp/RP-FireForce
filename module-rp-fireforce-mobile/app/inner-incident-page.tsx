@@ -30,6 +30,7 @@ import { UserSession } from "@/types";
 import { retrieveUserSession } from "@/constants/local-storage";
 import {Ionicons} from "@expo/vector-icons";
 import {createAuditLog} from "@/api/audit-trail";
+import { usePushNotificationContext } from '@/context/push-notification-context';
 
 export default function InnerIncidentPage() {
     const router = useRouter();
@@ -43,6 +44,7 @@ export default function InnerIncidentPage() {
     const [comment, setComment] = useState('');
     const [submittingComment, setSubmittingComment] = useState(false);
     const [processingAction, setProcessingAction] = useState(false);
+    const { sendStatusChangeNotification } = usePushNotificationContext();
 
     const parseApiDateTime = (dateTimeString: string): Date => {
         return new Date(dateTimeString);
@@ -147,6 +149,18 @@ export default function InnerIncidentPage() {
 
                             if (result.data || result.object) {
                                 const resultData = result.data || result.object!;
+
+                                // ✅ Send status change notification to entire team
+                                await sendStatusChangeNotification({
+                                    id: incident.id,
+                                    title: incident.title,
+                                    status: isInvestigating ? 'resolved' : 'investigating',
+                                    resolvedBy: isInvestigating ? userSession.email : undefined,
+                                    investigatedBy: !isInvestigating ? userSession.email : undefined,
+                                    excludeUserId: userSession.email, // Exclude the person who acted
+                                    teamId: incident.teamId // Pass team ID if available
+                                });
+
 
                                 // 2️⃣ Build audit log payload
                                 const auditPayload = {
