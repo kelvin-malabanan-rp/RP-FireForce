@@ -6,7 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { Eye, EyeOff, Loader2, Shield, Zap, ArrowRight, Sparkles, Lock, User } from "lucide-react";
 import { AnimatedContainer, fadeInUp } from "../components/animations/variants";
 import { ParticleNetwork } from "../components/animations/ParticleNetwork";
-import { FloatingElements } from "../components/animations/FloatingElements";
 
 interface LoginPageProps {
   onLogin: () => void;
@@ -41,9 +40,6 @@ export function LoginPage({ onLogin }: LoginPageProps) {
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex flex-col relative overflow-hidden">
       {/* Particle Network Background */}
       <ParticleNetwork />
-      
-      {/* Floating Elements */}
-      <FloatingElements />
       
       {/* Background Gradient Overlays */}
       <div className="fixed inset-0 bg-gradient-to-r from-orange-500/5 via-transparent to-red-500/5" style={{ zIndex: 3 }} />

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { OnCallPage } from '../dashboard/OnCallPageClean';
 import { motion, AnimatePresence } from "framer-motion";
 import { DashboardTopNav } from "./DashboardTopNav";
 import { DashboardSideNav } from "./DashboardSideNav";
@@ -7,6 +8,10 @@ import { cn } from "../../lib/utils";
 // Import dashboard pages - using dynamic imports to avoid module resolution issues
 import { DashboardOverview } from "../dashboard/DashboardOverview";
 import { AnalyticsPage } from "../dashboard/AnalyticsPage";
+import { IncidentsPage } from "../dashboard/IncidentsPageNew";
+import { SettingsPage } from "../dashboard/SettingsPage";
+import { TeamsPage } from "../dashboard/TeamsPage";
+
 
 interface DashboardLayoutProps {
   onLogout: () => void;
@@ -79,10 +84,7 @@ export function DashboardLayout({ onLogout }: DashboardLayoutProps) {
             variants={pageVariants}
             transition={pageTransition}
           >
-            <div className="p-6">
-              <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Incidents</h1>
-              <p className="text-slate-600 dark:text-slate-200 mt-2">Incidents page coming soon...</p>
-            </div>
+            <IncidentsPage />
           </motion.div>
         );
       case "on-call":
@@ -95,10 +97,7 @@ export function DashboardLayout({ onLogout }: DashboardLayoutProps) {
             variants={pageVariants}
             transition={pageTransition}
           >
-            <div className="p-6">
-              <h1 className="text-3xl font-bold text-slate-900 dark:text-white">On-Call</h1>
-              <p className="text-slate-600 dark:text-slate-200 mt-2">On-Call page coming soon...</p>
-            </div>
+            <OnCallPage />
           </motion.div>
         );
       case "teams":
@@ -111,10 +110,7 @@ export function DashboardLayout({ onLogout }: DashboardLayoutProps) {
             variants={pageVariants}
             transition={pageTransition}
           >
-            <div className="p-6">
-              <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Teams</h1>
-              <p className="text-slate-600 dark:text-slate-200 mt-2">Teams page coming soon...</p>
-            </div>
+            <TeamsPage />
           </motion.div>
         );
       case "settings":
@@ -127,10 +123,7 @@ export function DashboardLayout({ onLogout }: DashboardLayoutProps) {
             variants={pageVariants}
             transition={pageTransition}
           >
-            <div className="p-6">
-              <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Settings</h1>
-              <p className="text-slate-600 dark:text-slate-200 mt-2">Settings page coming soon...</p>
-            </div>
+            <SettingsPage />
           </motion.div>
         );
       default:
@@ -154,7 +147,8 @@ export function DashboardLayout({ onLogout }: DashboardLayoutProps) {
       {/* Top Navigation */}
       <DashboardTopNav 
         onMenuToggle={toggleSidebar} 
-        isSidebarOpen={isSidebarOpen} 
+        isSidebarOpen={isSidebarOpen}
+        onNavigate={handleNavigation}
       />
 
       <div className="flex">

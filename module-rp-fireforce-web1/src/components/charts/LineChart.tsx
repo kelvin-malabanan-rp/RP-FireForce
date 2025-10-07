@@ -14,12 +14,12 @@ export function LineChart({ data, height = 200, color = "stroke-blue-500" }: Lin
   const minValue = Math.min(...data.map(d => d.value));
   const range = maxValue - minValue || 1;
   
-  // Use viewBox for responsive design
-  const viewBoxWidth = 500;
-  const viewBoxHeight = height;
+  // Fixed dimensions that look good
+  const svgWidth = 600;
+  const svgHeight = height;
   const padding = 50;
-  const chartWidth = viewBoxWidth - (padding * 2);
-  const chartHeight = viewBoxHeight - (padding * 2);
+  const chartWidth = svgWidth - (padding * 2);
+  const chartHeight = svgHeight - (padding * 2);
   
   // Calculate points for the line
   const points = data.map((item, index) => {
@@ -34,16 +34,14 @@ export function LineChart({ data, height = 200, color = "stroke-blue-500" }: Lin
   ).join(' ');
   
   // Create area path for gradient fill
-  const areaPath = `${pathData} L ${points[points.length - 1].x} ${viewBoxHeight - padding} L ${padding} ${viewBoxHeight - padding} Z`;
+  const areaPath = `${pathData} L ${points[points.length - 1].x} ${svgHeight - padding} L ${padding} ${svgHeight - padding} Z`;
   
   return (
-    <div className="w-full flex flex-col">
+    <div className="w-full flex justify-center">
       <svg 
-        width="100%" 
-        height={height} 
-        viewBox={`0 0 ${viewBoxWidth} ${viewBoxHeight}`}
-        className="overflow-visible"
-        preserveAspectRatio="none"
+        width={svgWidth} 
+        height={svgHeight} 
+        className="max-w-full h-auto"
       >
         {/* Grid lines */}
         <defs>
@@ -59,7 +57,7 @@ export function LineChart({ data, height = 200, color = "stroke-blue-500" }: Lin
             key={index}
             x1={padding}
             y1={padding + chartHeight * ratio}
-            x2={viewBoxWidth - padding}
+            x2={svgWidth - padding}
             y2={padding + chartHeight * ratio}
             className="stroke-slate-200 dark:stroke-slate-700"
             strokeWidth="1"
@@ -74,7 +72,7 @@ export function LineChart({ data, height = 200, color = "stroke-blue-500" }: Lin
             x1={point.x}
             y1={padding}
             x2={point.x}
-            y2={viewBoxHeight - padding}
+            y2={svgHeight - padding}
             className="stroke-slate-100 dark:stroke-slate-800"
             strokeWidth="0.5"
             strokeDasharray="2,2"
@@ -105,7 +103,7 @@ export function LineChart({ data, height = 200, color = "stroke-blue-500" }: Lin
         
         {/* Data points */}
         {points.map((point, index) => (
-          <motion.g key={index}>
+          <motion.g key={index} className="group">
             <motion.circle
               initial={{ scale: 0, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
@@ -113,17 +111,13 @@ export function LineChart({ data, height = 200, color = "stroke-blue-500" }: Lin
               cx={point.x}
               cy={point.y}
               r="5"
-              className="fill-white dark:fill-slate-900"
+              className="fill-white dark:fill-slate-900 cursor-pointer hover:scale-110 transition-transform"
               stroke={color.replace('stroke-', '')}
               strokeWidth="2"
             />
             
-            {/* Hover tooltip */}
-            <motion.g
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.5 + index * 0.1 }}
-            >
+            {/* Hover tooltip - hidden by default, shown on group hover */}
+            <g className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
               <rect
                 x={point.x - 18}
                 y={point.y - 30}
@@ -141,7 +135,7 @@ export function LineChart({ data, height = 200, color = "stroke-blue-500" }: Lin
               >
                 {point.value}
               </text>
-            </motion.g>
+            </g>
           </motion.g>
         ))}
         
@@ -150,7 +144,7 @@ export function LineChart({ data, height = 200, color = "stroke-blue-500" }: Lin
           <text
             key={index}
             x={point.x}
-            y={viewBoxHeight - 15}
+            y={svgHeight - 15}
             textAnchor="middle"
             className="text-sm fill-slate-600 dark:fill-slate-400 font-medium"
           >

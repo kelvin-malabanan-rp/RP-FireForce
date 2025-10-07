@@ -37,17 +37,17 @@ export const ParticleNetwork: React.FC<ParticleNetworkProps> = ({ className = ""
 
     // Initialize particles
     const initParticles = () => {
-      const particleCount = Math.min(100, Math.floor((canvas.width * canvas.height) / 12000));
+      const particleCount = Math.min(80, Math.floor((canvas.width * canvas.height) / 15000));
       particlesRef.current = [];
 
       for (let i = 0; i < particleCount; i++) {
         particlesRef.current.push({
           x: Math.random() * canvas.width,
           y: Math.random() * canvas.height,
-          vx: (Math.random() - 0.5) * 0.8,
-          vy: (Math.random() - 0.5) * 0.8,
-          radius: Math.random() * 3 + 2,
-          opacity: Math.random() * 0.6 + 0.4,
+          vx: (Math.random() - 0.5) * 0.5,
+          vy: (Math.random() - 0.5) * 0.5,
+          radius: Math.random() * 2 + 1.5,
+          opacity: Math.random() * 0.4 + 0.3,
         });
       }
     };
@@ -90,16 +90,16 @@ export const ParticleNetwork: React.FC<ParticleNetworkProps> = ({ className = ""
           const dy = mouse.y - particle.y;
           const distance = Math.sqrt(dx * dx + dy * dy);
           
-          if (distance < 150) {
-            const force = (150 - distance) / 150 * 0.005;
+          if (distance < 120) {
+            const force = (120 - distance) / 120 * 0.003;
             particle.vx += (dx / distance) * force;
             particle.vy += (dy / distance) * force;
           }
         }
 
-        // Apply friction
-        particle.vx *= 0.995;
-        particle.vy *= 0.995;
+        // Apply friction for smoother movement
+        particle.vx *= 0.998;
+        particle.vy *= 0.998;
 
         // Draw connections to nearby particles
         particles.forEach((otherParticle, otherIndex) => {
@@ -110,11 +110,11 @@ export const ParticleNetwork: React.FC<ParticleNetworkProps> = ({ className = ""
           const distance = Math.sqrt(dx * dx + dy * dy);
 
           // Connect particles that are close to each other
-          if (distance < 100) {
-            const opacity = Math.pow((100 - distance) / 100, 2) * 0.5;
+          if (distance < 120) {
+            const opacity = Math.pow((120 - distance) / 120, 2) * 0.4;
             
             ctx.strokeStyle = `rgba(249, 115, 22, ${opacity})`;
-            ctx.lineWidth = 1;
+            ctx.lineWidth = 0.8;
             ctx.beginPath();
             ctx.moveTo(particle.x, particle.y);
             ctx.lineTo(otherParticle.x, otherParticle.y);
@@ -122,16 +122,22 @@ export const ParticleNetwork: React.FC<ParticleNetworkProps> = ({ className = ""
           }
         });
 
-        // Draw particle
+        // Draw particle with improved glow
         ctx.fillStyle = `rgba(249, 115, 22, ${particle.opacity})`;
         ctx.beginPath();
         ctx.arc(particle.x, particle.y, particle.radius, 0, Math.PI * 2);
         ctx.fill();
 
-        // Add subtle glow effect
-        ctx.fillStyle = `rgba(249, 115, 22, ${particle.opacity * 0.3})`;
+        // Add enhanced glow effect
+        ctx.fillStyle = `rgba(249, 115, 22, ${particle.opacity * 0.2})`;
         ctx.beginPath();
-        ctx.arc(particle.x, particle.y, particle.radius * 2, 0, Math.PI * 2);
+        ctx.arc(particle.x, particle.y, particle.radius * 1.8, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Outer glow for more depth
+        ctx.fillStyle = `rgba(249, 115, 22, ${particle.opacity * 0.1})`;
+        ctx.beginPath();
+        ctx.arc(particle.x, particle.y, particle.radius * 2.5, 0, Math.PI * 2);
         ctx.fill();
       });
 

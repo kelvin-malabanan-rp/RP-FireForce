@@ -112,7 +112,7 @@ export function AnalyticsPage() {
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Yearly Incident Trends - Bar Chart */}
+        {/* Monthly Incident Trends - Line Chart */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -121,18 +121,18 @@ export function AnalyticsPage() {
           <Card className="border border-slate-200 dark:border-white/20">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-slate-900 dark:text-white">
-                <BarChart3 className="h-5 w-5 text-blue-600" />
+                <TrendingUp className="h-5 w-5 text-blue-600" />
                 Monthly Incident Trends (2025)
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <BarChart
+              <LineChart
                 data={yearlyIncidents.map(month => ({
                   label: month.month,
-                  value: month.incidents,
-                  color: 'bg-gradient-to-t from-blue-500 to-blue-400'
+                  value: month.incidents
                 }))}
                 height={250}
+                color="stroke-blue-500"
               />
             </CardContent>
           </Card>
@@ -169,7 +169,7 @@ export function AnalyticsPage() {
 
       {/* Additional Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Resolution Time Line Chart */}
+        {/* Resolution Success Rate */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -178,15 +178,15 @@ export function AnalyticsPage() {
           <Card className="border border-slate-200 dark:border-white/20">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-slate-900 dark:text-white">
-                <TrendingUp className="h-5 w-5 text-green-600" />
-                Average Resolution Time Trend
+                <Activity className="h-5 w-5 text-green-600" />
+                Incident Resolution Success Rate
               </CardTitle>
             </CardHeader>
             <CardContent>
               <LineChart
                 data={yearlyIncidents.map(month => ({
                   label: month.month,
-                  value: month.mttr
+                  value: Math.round((month.resolved / month.incidents) * 100)
                 }))}
                 height={220}
                 color="stroke-green-500"
