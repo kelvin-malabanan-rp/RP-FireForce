@@ -15,6 +15,7 @@ export const usePushNotifications = () => {
     const [permissionStatus, setPermissionStatus] = useState<string>('unknown');
     const [registrationStatus, setRegistrationStatus] = useState<'pending' | 'registered' | 'failed'>('pending');
     const [id, setId] = useState<string | null>(null);
+    const [notificationIds, setNotificationIds] = useState<Record<string, string[]>>({});
 
     // Load user session on mount
     useEffect(() => {
@@ -30,33 +31,54 @@ export const usePushNotifications = () => {
         loadUserSession();
     }, []);
 
-    // Navigation on notification tap (basic)
     useEffect(() => {
-        const sub = Notifications.addNotificationResponseReceivedListener((response) => {
-            const data = response.notification.request.content.data as any;
-            if (data?.incidentId) {
-                router.push({
-                    pathname: '/inner-incident-page',
-                    params: { incidentId: data.incidentId },
-                });
+        const sub = Notifications.addNotificationReceivedListener((notification) => {
+            const data = notification.request.content.data as any;
+            const incidentId = data?.incidentId || data?.data?.incidentId;
+            const notificationId = notification.request.identifier;
+
+            if (incidentId) {
+                console.log('[push] Notification received, storing ID:', notificationId);
+                setNotificationIds(prev => ({
+                    ...prev,
+                    [incidentId]: [...(prev[incidentId] || []), notificationId]
+                }));
             }
         });
+
         return () => sub.remove();
     }, []);
 
-    // Unified listener for both action buttons and default taps
+    const clearStoredNotifications = async (incidentId: string) => {
+        const ids = notificationIds[incidentId] || [];
+
+        for (const id of ids) {
+            await Notifications.dismissNotificationAsync(id);
+        }
+
+        // Clean up stored IDs
+        setNotificationIds(prev => {
+            const updated = { ...prev };
+            delete updated[incidentId];
+            return updated;
+        });
+    };
+
+    // In your notification response handler
     useEffect(() => {
         const sub = Notifications.addNotificationResponseReceivedListener(async (response) => {
             const { actionIdentifier } = response;
             const data = response.notification.request.content.data as any;
             const incidentId = data?.incidentId || data?.data?.incidentId;
 
+            // Get the ACTUAL notification identifier
+            const notificationId = response.notification.request.identifier;
+            console.log('[push] Notification ID:', notificationId);
+
             if (!incidentId) {
                 console.error('[push] No incident ID in notification data');
                 return;
             }
-
-            console.log('[push] Notification response:', actionIdentifier, data);
 
             const session = await retrieveUserSession();
 
@@ -71,8 +93,10 @@ export const usePushNotifications = () => {
                 try {
                     await respondToIncident(incidentId, 'acknowledge', session.id);
                     console.log('[push] Successfully acknowledged incident');
-                    await Notifications.dismissNotificationAsync(`incident-${incidentId}`);
-                    await Notifications.dismissNotificationAsync(`incident-${incidentId}-reminder`);
+
+                    // Use the ACTUAL notification identifier, not your custom one
+                    await Notifications.dismissNotificationAsync(notificationId);
+
                 } catch (error) {
                     console.error('[push] Error acknowledging:', error);
                 }
@@ -87,13 +111,20 @@ export const usePushNotifications = () => {
                 try {
                     await respondToIncident(incidentId, 'decline', session.id);
                     console.log('[push] Successfully declined incident');
-                    await Notifications.dismissNotificationAsync(`incident-${incidentId}`);
-                    await Notifications.dismissNotificationAsync(`incident-${incidentId}-reminder`);
+
+                    // Use the ACTUAL notification identifier
+                    await Notifications.dismissNotificationAsync(notificationId);
+
                 } catch (error) {
                     console.error('[push] Error declining:', error);
                 }
             } else {
-                // Default tap (no action button)
+                // Default tap
+                console.log('[push] User tapped notification', incidentId);
+
+                // Dismiss using actual identifier
+                await Notifications.dismissNotificationAsync(notificationId);
+
                 router.push({
                     pathname: '/inner-incident-page',
                     params: { incidentId },
@@ -102,7 +133,7 @@ export const usePushNotifications = () => {
         });
 
         return () => sub.remove();
-    }, []); // No dependencies needed
+    }, []);
 
     useEffect(() => {
         console.log('[push] useEffect start');
@@ -357,24 +388,122 @@ export const usePushNotifications = () => {
         }
     };
 
+    // ✅ Updated to send remote notifications to the entire team
+    const sendStatusChangeNotification = async (incident: {
+        id: string;
+        title: string;
+        status: 'investigating' | 'resolved';
+        resolvedBy?: string;
+        investigatedBy?: string;
+        excludeUserId?: string;
+        teamId?: string | null;
+    }) => {
+        try {
+            console.log('[push] Sending status change notification:', incident.status);
 
-    // Local notification helper
-    const sendIncidentNotification = async (incident: any) => {
-        const channelId = getChannelBySeverity(incident.severity);
-        const content = {
-            title: `${incident.severity.toUpperCase()}: ${incident.title}`,
-            body: incident.description,
-            sound: 'default',
-            badge: 1,
-        };
-        await Notifications.scheduleNotificationAsync({
-            content,
-            trigger: null,
-            identifier: `incident-${incident.id}`,
-        });
+            const session = await retrieveUserSession();
+
+            // Get team members to notify
+            let membersToNotify: any[] = [];
+
+            if (incident.teamId) {
+                console.log('[push] Getting team members for team:', incident.teamId);
+                const response = await getAllCurrentOnCall(incident.teamId);
+                if (response.httpStatus === 'OK' && response.data) {
+                    response.data.forEach((team: any) => {
+                        membersToNotify.push(...team.members);
+                    });
+                }
+            } else {
+                console.log('[push] Getting all on-call team members');
+                const response = await getAllCurrentOnCall();
+                if (response.httpStatus === 'OK' && response.data) {
+                    response.data.forEach((team: any) => {
+                        membersToNotify.push(...team.members);
+                    });
+                }
+            }
+
+            if (!membersToNotify.length) {
+                console.warn('[push] No team members found to notify');
+                return;
+            }
+
+            const statusMessage = incident.status === 'resolved'
+                ? `✅ "${incident.title}" has been resolved${incident.resolvedBy ? ` by ${incident.resolvedBy}` : ''}.`
+                : `🔍 "${incident.title}" is now being investigated${incident.investigatedBy ? ` by ${incident.investigatedBy}` : ''}.`;
+
+            let sentCount = 0;
+            let skippedCount = 0;
+
+            for (const member of membersToNotify) {
+                // Skip the person who made the action
+                if (member.id === incident.excludeUserId) {
+                    console.log('[push] Skipping notification for user who made the action:', member.email);
+
+                    // Still dismiss their original notification if it's them on current device
+                    if (session?.id === member.id) {
+                        await clearStoredNotifications(incident.id);
+                    }
+
+                    skippedCount++;
+                    continue;
+                }
+
+                if (!member.pushToken) {
+                    skippedCount++;
+                    continue;
+                }
+
+                try {
+                    // Send remote push notification
+                    const message = {
+                        to: member.pushToken,
+                        sound: 'default', // Gentle sound for status updates
+                        title: incident.status === 'resolved'
+                            ? '✅ Incident Resolved'
+                            : '🔍 Incident Under Investigation',
+                        body: statusMessage,
+                        data: {
+                            incidentId: incident.id,
+                            status: incident.status,
+                            type: 'status_change'
+                        },
+                        badge: 0, // Don't increment badge for positive updates
+                        priority: 'default', // Lower priority for status updates
+                    };
+
+                    const pushResponse = await fetch('https://exp.host/--/api/v2/push/send', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(message),
+                    });
+
+                    if (pushResponse.ok) {
+                        sentCount++;
+                        console.log('[push] Status notification sent to:', member.email);
+                    } else {
+                        console.warn('[push] Failed to send to:', member.email);
+                    }
+
+                    // If it's the current user, also clear their original notification
+                    if (session?.id === member.id) {
+                        await clearStoredNotifications(incident.id);
+                    }
+
+                } catch (err) {
+                    console.error('[push] Error sending to:', member.email, err);
+                }
+            }
+
+            console.log(`[push] Status change notifications: Sent ${sentCount}, Skipped ${skippedCount}`);
+        } catch (error) {
+            console.error('[push] Error sending status change notification:', error);
+        }
     };
 
     const clearIncidentNotifications = async (incidentId: string) => {
+        console.log('[push] Clearing notification for incident:', incidentId);
         await Notifications.dismissNotificationAsync(`incident-${incidentId}`);
         await Notifications.dismissNotificationAsync(`incident-${incidentId}-reminder`);
     };
@@ -392,8 +521,8 @@ export const usePushNotifications = () => {
         registrationStatus,
         id,
         registerDevice,
-        sendIncidentNotification,
         sendNotificationToOnCallTeam,
+        sendStatusChangeNotification,
         clearIncidentNotifications,
         getNotificationSettings,
     };

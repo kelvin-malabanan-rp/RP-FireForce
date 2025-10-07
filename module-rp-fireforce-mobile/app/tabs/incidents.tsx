@@ -25,6 +25,7 @@ import {Ionicons} from "@expo/vector-icons";
 import IncidentList from "@/components/incident-list";
 import {usePushNotifications} from "@/hooks/use-push-notifications";
 import {retrieveUserSession} from "@/constants/local-storage";
+import {usePushNotificationContext} from "@/context/push-notification-context";
 
 type TeamMember = {
     id: string;
@@ -35,13 +36,13 @@ type TeamMember = {
 };
 
 export default function IncidentsScreen() {
+    const { sendNotificationToOnCallTeam, sendIncidentNotification } = usePushNotificationContext();
     const [incidents, setIncidents] = useState<IncidentUI[]>([]);
     const [refreshing, setRefreshing] = useState(false);
     const [loading, setLoading] = useState(true);
     const [modalVisible, setModalVisible] = useState(false);
     const [creating, setCreating] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const { sendNotificationToOnCallTeam, sendIncidentNotification } = usePushNotifications();
     const [availableUsers, setAvailableUsers] = useState<TeamMember[]>([]);
     const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
     const [newIncident, setNewIncident] = useState({
@@ -187,7 +188,7 @@ export default function IncidentsScreen() {
                 await fetchAllIncidents();
 
                 // local notification
-                await sendIncidentNotification(response.data);
+                //await sendIncidentNotification(response.data);
 
                 // optional: send remote notifications
                 const isBypassing = newIncident.bypassRotation;
