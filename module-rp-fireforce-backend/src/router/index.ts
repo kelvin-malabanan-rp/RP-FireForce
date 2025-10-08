@@ -27,7 +27,11 @@ import {
 	handleUpdateScheduleConfig
 } from "../handlers/oncall.handler";
 import {handleGetAllUsers, handleGetUserById} from "../handlers/user-handlers";
-import {handleCreateAuditLog} from "../handlers/audit.handlers";
+import {
+	handleCreateAuditLog,
+	handleGetAuditLogs,
+	handleGetAuditStats
+} from "../handlers/audit.handlers";
 
 export class Router {
 	private env: Env;
@@ -184,11 +188,16 @@ export class Router {
 				return handleCreateAuditLog(request, this.env, CORS_HEADERS);
 			}
 
-			// // Get audit logs with filtering
-			// if (path === '/api/audit/logs' && method === 'GET') {
-			// 	return getAuditLogsHandler(request, this.env, CORS_HEADERS);
-			// }
-			//
+			// Get audit logs with filtering
+			if (path === '/api/audit/logs' && method === 'GET') {
+				return handleGetAuditLogs(request, this.env, CORS_HEADERS);
+			}
+
+			// Get audit statistics
+			if (path === '/api/audit/stats' && method === 'GET') {
+				return handleGetAuditStats(request, this.env, CORS_HEADERS);
+			}
+
 			// // Record notification response
 			// if (path.match(/^\/api\/audit\/notifications\/[^/]+\/response$/) && method === 'POST') {
 			// 	return recordNotificationResponseHandler(request, this.env, CORS_HEADERS);
@@ -212,11 +221,6 @@ export class Router {
 			// // Export audit trail as CSV
 			// if (path.match(/^\/api\/audit\/incidents\/[^/]+\/export\/csv$/) && method === 'GET') {
 			// 	return exportAuditTrailAsCSVHandler(request, this.env, CORS_HEADERS);
-			// }
-			//
-			// // Get audit statistics
-			// if (path === '/api/audit/stats' && method === 'GET') {
-			// 	return getAuditStatsHandler(request, this.env, CORS_HEADERS);
 			// }
 
 			// 404 Not Found

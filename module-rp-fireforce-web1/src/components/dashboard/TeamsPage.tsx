@@ -1,319 +1,500 @@
-import { motion } from "framer-motion";
-import { Users, Plus, Search, UserPlus, Settings, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
-import { Badge } from "../ui/badge";
-import { Button } from "../ui/button";
-import { Input } from "../ui/input";
-import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../ui/dropdown-menu";
-import { useState } from "react";
+import React, { useState, useEffect, useMemo } from 'react';
+import { motion } from 'framer-motion';
+import { Search, Users, Shield, Clock, MapPin, RefreshCw, Plus } from 'lucide-react';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
+import { Badge } from '../ui/badge';
+import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
+import { onCallService } from '../../services';
+import { TeamDetailsModal } from '../modals/TeamDetailsModal';
 
-export function TeamsPage() {
+interface TeamMember {
+  id: string;
+  name?: string;
+  firstName?: string;
+  lastName?: string;
+  email: string;
+  role: string;
+  is_online: boolean;
+  avatar?: string;
+}
+
+interface Team {
+  id: string;
+  name: string;
+  description?: string;
+  members: TeamMember[];
+  timezone?: string;
+  location?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export const TeamsPage: React.FC = () => {
+  console.log('🎯 TeamsPage component mounted/rendered');
+  
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [myTeam, setMyTeam] = useState<Team | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterOption, setFilterOption] = useState<'all' | 'my-team'>('all');
   const [currentPage, setCurrentPage] = useState(1);
-  const [selectedTeamFilter, setSelectedTeamFilter] = useState("all");
-  const [searchTerm, setSearchTerm] = useState("");
   const teamsPerPage = 4;
+  
+  // Team details modal state
+  const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
 
-  const teams = [
-    {
-      id: 1,
-      name: "Platform Engineering",
-      description: "Infrastructure and platform services",
-      members: 8,
-      lead: "John Doe",
-      status: "active",
-      incidentsThisWeek: 3,
-      avgResponseTime: "2.1m",
-      members_list: [
-        { name: "John Doe", role: "Tech Lead" },
-        { name: "Jane Smith", role: "Senior SRE" },
-        { name: "Mike Johnson", role: "DevOps Engineer" },
-        { name: "Sarah Wilson", role: "Platform Engineer" }
-      ],
-      color: "bg-blue-500"
-    },
-    {
-      id: 2,
-      name: "API Services",
-      description: "Backend APIs and microservices",
-      members: 6,
-      lead: "Alex Rodriguez",
-      status: "active",
-      incidentsThisWeek: 1,
-      avgResponseTime: "1.8m",
-      members_list: [
-        { name: "Alex Rodriguez", role: "Tech Lead" },
-        { name: "Emily Davis", role: "Senior Backend Engineer" },
-        { name: "Tom Wilson", role: "Backend Engineer" },
-        { name: "Lisa Chen", role: "API Specialist" }
-      ],
-      color: "bg-green-500"
-    },
-    {
-      id: 3,
-      name: "Frontend & Mobile",
-      description: "Web and mobile application development",
-      members: 5,
-      lead: "Maria Garcia",
-      status: "active",
-      incidentsThisWeek: 0,
-      avgResponseTime: "3.2m",
-      members_list: [
-        { name: "Maria Garcia", role: "Tech Lead" },
-        { name: "David Brown", role: "Senior Frontend Engineer" },
-        { name: "Rachel Kim", role: "Mobile Engineer" },
-        { name: "James Liu", role: "UI/UX Engineer" }
-      ],
-      color: "bg-purple-500"
-    },
-    {
-      id: 4,
-      name: "Data & Analytics",
-      description: "Data infrastructure and analytics",
-      members: 4,
-      lead: "Chris Johnson",
-      status: "active",
-      incidentsThisWeek: 2,
-      avgResponseTime: "4.1m",
-      members_list: [
-        { name: "Chris Johnson", role: "Tech Lead" },
-        { name: "Anna Martinez", role: "Data Engineer" },
-        { name: "Kevin Wong", role: "Analytics Engineer" },
-        { name: "Sophie Turner", role: "Data Scientist" }
-      ],
-      color: "bg-orange-500"
-    },
-    {
-      id: 5,
-      name: "Security & Compliance",
-      description: "Information security and compliance",
-      members: 3,
-      lead: "Jennifer Lee",
-      status: "active",
-      incidentsThisWeek: 1,
-      avgResponseTime: "1.5m",
-      members_list: [
-        { name: "Jennifer Lee", role: "Tech Lead" },
-        { name: "Robert Taylor", role: "Security Engineer" },
-        { name: "Michelle Adams", role: "Compliance Specialist" }
-      ],
-      color: "bg-red-500"
-    },
-    {
-      id: 6,
-      name: "DevOps & Infrastructure",
-      description: "CI/CD and cloud infrastructure",
-      members: 7,
-      lead: "Daniel Kim",
-      status: "active",
-      incidentsThisWeek: 4,
-      avgResponseTime: "2.8m",
-      members_list: [
-        { name: "Daniel Kim", role: "Tech Lead" },
-        { name: "Jessica Brown", role: "DevOps Engineer" },
-        { name: "Mark Wilson", role: "Cloud Architect" },
-        { name: "Amanda Davis", role: "Infrastructure Engineer" }
-      ],
-      color: "bg-teal-500"
-    },
-    {
-      id: 7,
-      name: "Quality Assurance",
-      description: "Testing and quality assurance",
-      members: 5,
-      lead: "Brian Miller",
-      status: "active",
-      incidentsThisWeek: 0,
-      avgResponseTime: "3.5m",
-      members_list: [
-        { name: "Brian Miller", role: "QA Lead" },
-        { name: "Sarah Connor", role: "Senior QA Engineer" },
-        { name: "Tim Cook", role: "Automation Engineer" },
-        { name: "Lisa Anderson", role: "QA Engineer" }
-      ],
-      color: "bg-indigo-500"
-    },
-    {
-      id: 8,
-      name: "Product Management",
-      description: "Product strategy and management",
-      members: 4,
-      lead: "Carol White",
-      status: "active",
-      incidentsThisWeek: 0,
-      avgResponseTime: "5.2m",
-      members_list: [
-        { name: "Carol White", role: "Product Manager" },
-        { name: "Steve Jobs", role: "Senior PM" },
-        { name: "Grace Hopper", role: "Technical PM" },
-        { name: "Ada Lovelace", role: "Product Analyst" }
-      ],
-      color: "bg-pink-500"
+  const handleViewDetails = (team: Team) => {
+    setSelectedTeam(team);
+    setIsDetailsModalOpen(true);
+  };
+
+  const handleCloseDetailsModal = () => {
+    setIsDetailsModalOpen(false);
+    setTimeout(() => setSelectedTeam(null), 200); // Clear after animation
+  };
+
+  // Load teams from API
+  const loadTeams = async (isRefresh = false) => {
+    try {
+      if (isRefresh) {
+        setIsRefreshing(true);
+      } else {
+        setIsLoading(true);
+      }
+      setError(null);
+
+      console.log('👥 Loading teams from API...');
+      const response = await onCallService.getTeams();
+
+      if (response.success && response.data) {
+        const teamsData = Array.isArray(response.data) ? response.data : [];
+        console.log('✅ Teams loaded:', teamsData.length);
+
+        // Get current user to identify their team
+        const userStr = localStorage.getItem('user');
+        const currentUserId = userStr ? JSON.parse(userStr).id : null;
+
+        if (currentUserId) {
+          const userTeam = teamsData.find((team: Team) =>
+            team.members?.some((member: TeamMember) => member.id === currentUserId)
+          );
+          setMyTeam(userTeam || null);
+        }
+
+        setTeams(teamsData);
+      } else {
+        throw new Error(response.message || 'Failed to load teams');
+      }
+    } catch (err: any) {
+      console.error('❌ Error loading teams:', err);
+      setError(err.message || 'Failed to load teams');
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
     }
-  ];
+  };
 
-  // Filter teams based on search and selected filter
-  const filteredTeams = teams.filter(team => {
-    const matchesSearch = team.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         team.description.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesFilter = selectedTeamFilter === "all" || 
-                         (selectedTeamFilter === "active" && team.status === "active") ||
-                         (selectedTeamFilter === "high-incidents" && team.incidentsThisWeek > 2) ||
-                         (selectedTeamFilter === "low-incidents" && team.incidentsThisWeek <= 1);
-    
-    return matchesSearch && matchesFilter;
-  });
+  useEffect(() => {
+    loadTeams();
+  }, []);
 
-  // Pagination logic
+  // Filter and search teams
+  const filteredTeams = useMemo(() => {
+    let result = teams;
+
+    // Apply team filter
+    if (filterOption === 'my-team' && myTeam) {
+      result = [myTeam];
+    }
+
+    // Apply search filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter(
+        (team) =>
+          team.name.toLowerCase().includes(query) ||
+          team.description?.toLowerCase().includes(query) ||
+          team.location?.toLowerCase().includes(query) ||
+          team.timezone?.toLowerCase().includes(query)
+      );
+    }
+
+    return result;
+  }, [teams, myTeam, filterOption, searchQuery]);
+
+  // Pagination
   const totalPages = Math.ceil(filteredTeams.length / teamsPerPage);
-  const startIndex = (currentPage - 1) * teamsPerPage;
-  const endIndex = startIndex + teamsPerPage;
-  const currentTeams = filteredTeams.slice(startIndex, endIndex);
+  const paginatedTeams = filteredTeams.slice(
+    (currentPage - 1) * teamsPerPage,
+    currentPage * teamsPerPage
+  );
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const teamFilterOptions = [
-    { value: "all", label: "All Teams" },
-    { value: "active", label: "Active Teams" },
-    { value: "high-incidents", label: "High Incidents (3+)" },
-    { value: "low-incidents", label: "Low Incidents (≤1)" }
-  ];
+  // Helper functions
+  const getFullName = (member: TeamMember): string => {
+    if (member.name) return member.name;
+    if (member.firstName && member.lastName) {
+      return `${member.firstName} ${member.lastName}`;
+    }
+    if (member.firstName) return member.firstName;
+    if (member.lastName) return member.lastName;
+    return member.email || 'Unknown';
+  };
+
+  const getInitials = (member: TeamMember): string => {
+    // Try to get from firstName and lastName first
+    if (member.firstName && member.lastName) {
+      return (member.firstName[0] + member.lastName[0]).toUpperCase();
+    }
+    
+    // Fallback to name field
+    const name = member.name || member.firstName || member.lastName || member.email || '??';
+    
+    if (!name || typeof name !== 'string') return '??';
+    
+    return name
+      .split(' ')
+      .filter(n => n.length > 0)
+      .map((n) => n[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2) || '??';
+  };
+
+  const getMemberRole = (member: TeamMember): string => {
+    if (member.role?.toLowerCase().includes('lead') || member.role?.toLowerCase().includes('manager')) {
+      return 'Team Lead';
+    }
+    return member.role || 'Member';
+  };
+
+  // Calculate stats
+  const totalMembers = teams.reduce((sum, team) => sum + (team.members?.length || 0), 0);
+  const onlineMembers = teams.reduce(
+    (sum, team) => sum + (team.members?.filter((m) => m.is_online).length || 0),
+    0
+  );
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <div className="h-10 bg-slate-200 dark:bg-slate-700 rounded-lg w-64 animate-pulse" />
+            <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-96 animate-pulse" />
+          </div>
+          <div className="h-10 bg-slate-200 dark:bg-slate-700 rounded-lg w-40 animate-pulse" />
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="bg-white dark:bg-slate-800 rounded-xl p-6 h-32 border border-slate-200 dark:border-slate-700 animate-pulse" />
+          ))}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="bg-white dark:bg-slate-800 rounded-xl p-6 h-64 border border-slate-200 dark:border-slate-700 animate-pulse" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <Card className="bg-white dark:bg-slate-800 border-red-500/50">
+        <CardHeader>
+          <CardTitle className="text-red-600 dark:text-red-400">Error Loading Teams</CardTitle>
+          <CardDescription className="text-slate-600 dark:text-gray-400">{error}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button onClick={() => loadTeams()} variant="outline" className="border-red-500 text-red-600 dark:text-red-400 hover:bg-red-500/10">
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Try Again
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <motion.div
+      <motion.div 
+        className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4"
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex items-center justify-between"
+        transition={{ duration: 0.4 }}
       >
         <div>
-          <h1 className="text-3xl font-bold text-white">Teams</h1>
-          <p className="text-white/80 mt-1">Manage teams and their incident response</p>
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 dark:from-white dark:to-slate-200 bg-clip-text text-transparent">
+            Teams
+          </h1>
+          <p className="text-slate-700 dark:text-slate-200 mt-2 text-lg">
+            Manage and view your organization's teams
+          </p>
         </div>
-        <Button className="bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-600 hover:to-red-700 text-white">
-          <Plus className="h-4 w-4 mr-2" />
-          Create Team
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => loadTeams(true)}
+            disabled={isRefreshing}
+            className="text-slate-900 dark:text-white border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
+          >
+            <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            {isRefreshing ? 'Refreshing...' : 'Refresh'}
+          </Button>
+          <Button size="sm" className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white shadow-lg">
+            <Plus className="mr-2 h-4 w-4" />
+            Create Team
+          </Button>
+        </div>
       </motion.div>
 
-      {/* Search and Filter */}
-      <motion.div
+      {/* Search and Filters */}
+      <motion.div 
+        className="flex flex-col sm:flex-row gap-4"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-        className="flex flex-col sm:flex-row gap-4"
+        transition={{ delay: 0.1, duration: 0.4 }}
       >
-        <div className="relative max-w-md flex-1">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-white/60 h-4 w-4" />
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400 dark:text-gray-400" />
           <Input
-            type="search"
             placeholder="Search teams..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10 bg-white/10 border-white/20 text-white placeholder:text-white/60 focus:border-orange-500 focus:ring-orange-500"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-gray-500"
           />
         </div>
-        
-        {/* Team Filter Dropdown */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" className="bg-white/10 border-white/20 text-white hover:bg-white/20 hover:text-white">
-              {teamFilterOptions.find(option => option.value === selectedTeamFilter)?.label}
-              <ChevronDown className="h-4 w-4 ml-2" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent className="bg-slate-800 border-slate-700 text-white">
-            {teamFilterOptions.map((option) => (
-              <DropdownMenuItem
-                key={option.value}
-                onClick={() => {
-                  setSelectedTeamFilter(option.value);
-                  setCurrentPage(1); // Reset to first page when filter changes
-                }}
-                className="text-white hover:bg-slate-700 focus:bg-slate-700 cursor-pointer"
-              >
-                {option.label}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <div className="flex gap-2">
+          <Button
+            variant={filterOption === 'all' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setFilterOption('all')}
+            className={filterOption === 'all' 
+              ? 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white shadow-lg' 
+              : 'text-slate-900 dark:text-white border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'}
+          >
+            All Teams
+          </Button>
+          <Button
+            variant={filterOption === 'my-team' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setFilterOption('my-team')}
+            disabled={!myTeam}
+            className={filterOption === 'my-team' 
+              ? 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white shadow-lg' 
+              : 'text-slate-900 dark:text-white border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50'}
+          >
+            My Team
+          </Button>
+        </div>
       </motion.div>
 
+      {/* Team Performance Summary */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2, duration: 0.4 }}
+          whileHover={{ y: -5, transition: { duration: 0.2 } }}
+        >
+          <Card className="bg-gradient-to-br from-white to-slate-50 dark:from-slate-800 dark:to-slate-900 border-slate-200 dark:border-slate-700 hover:shadow-xl transition-shadow">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-slate-900 dark:text-white">Total Teams</CardTitle>
+              <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-xl">
+                <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-slate-900 dark:text-white">{teams.length}</div>
+              <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">Active teams</p>
+            </CardContent>
+          </Card>
+        </motion.div>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3, duration: 0.4 }}
+          whileHover={{ y: -5, transition: { duration: 0.2 } }}
+        >
+          <Card className="bg-gradient-to-br from-white to-slate-50 dark:from-slate-800 dark:to-slate-900 border-slate-200 dark:border-slate-700 hover:shadow-xl transition-shadow">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-slate-900 dark:text-white">Total Members</CardTitle>
+              <div className="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-xl">
+                <Shield className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-slate-900 dark:text-white">{totalMembers}</div>
+              <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">Across all teams</p>
+            </CardContent>
+          </Card>
+        </motion.div>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4, duration: 0.4 }}
+          whileHover={{ y: -5, transition: { duration: 0.2 } }}
+        >
+          <Card className="bg-gradient-to-br from-white to-slate-50 dark:from-slate-800 dark:to-slate-900 border-slate-200 dark:border-slate-700 hover:shadow-xl transition-shadow">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-slate-900 dark:text-white">Members Online</CardTitle>
+              <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-xl">
+                <div className="h-3 w-3 rounded-full bg-green-500 animate-pulse" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-slate-900 dark:text-white">{onlineMembers}</div>
+              <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
+                {totalMembers > 0 ? Math.round((onlineMembers / totalMembers) * 100) : 0}% online
+              </p>
+            </CardContent>
+          </Card>
+        </motion.div>
+      </div>
+
       {/* Teams Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {currentTeams.map((team, index) => (
-          <motion.div
-            key={team.id}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.1 }}
-          >
-            <Card className="hover:shadow-xl transition-all duration-300 border border-white/20 bg-white/5 backdrop-blur-sm hover:bg-white/10">
-              <CardHeader>
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-3 h-3 rounded-full ${team.color}`} />
-                    <div>
-                      <CardTitle className="text-lg text-white font-semibold">{team.name}</CardTitle>
-                      <p className="text-sm text-white/80 mt-1">{team.description}</p>
+      {paginatedTeams.length === 0 ? (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.5, duration: 0.4 }}
+        >
+          <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
+            <CardContent className="flex flex-col items-center justify-center py-12">
+              <div className="p-4 bg-slate-100 dark:bg-slate-700 rounded-full mb-4">
+                <Users className="h-12 w-12 text-slate-400 dark:text-gray-400" />
+              </div>
+              <p className="text-lg font-medium text-slate-900 dark:text-white">No teams found</p>
+              <p className="text-sm text-slate-600 dark:text-gray-400 mt-2">
+                {searchQuery
+                  ? 'Try adjusting your search'
+                  : 'Create your first team to get started'}
+              </p>
+            </CardContent>
+          </Card>
+        </motion.div>
+      ) : (
+        <motion.div 
+          className="grid gap-6 md:grid-cols-2"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.5, duration: 0.4 }}
+        >
+          {paginatedTeams.map((team, index) => {
+            const teamMembers = team.members || [];
+            const onlineCount = teamMembers.filter((m) => m.is_online).length;
+            const teamLead = teamMembers.find((m) =>
+              getMemberRole(m) === 'Team Lead'
+            );
+
+            return (
+              <motion.div
+                key={team.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.5 + index * 0.1, duration: 0.4 }}
+                whileHover={{ y: -5, transition: { duration: 0.2 } }}
+              >
+                <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:shadow-xl hover:shadow-blue-500/10 dark:hover:shadow-blue-500/20 transition-all h-full">
+                  <CardHeader>
+                    <div className="flex items-start justify-between">
+                      <div className="space-y-1">
+                        <CardTitle className="text-xl text-slate-900 dark:text-white">{team.name}</CardTitle>
+                        <CardDescription className="text-slate-600 dark:text-gray-400">{team.description || 'No description'}</CardDescription>
+                      </div>
+                      <Badge variant={myTeam?.id === team.id ? 'default' : 'secondary'} className={myTeam?.id === team.id ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-white'}>
+                        {myTeam?.id === team.id ? 'My Team' : 'Team'}
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* Team Info */}
+                  <div className="flex items-center gap-4 text-sm">
+                    <div className="flex items-center gap-1 text-slate-600 dark:text-gray-400">
+                      <Users className="h-4 w-4" />
+                      <span className="text-slate-900 dark:text-white">{teamMembers.length} members</span>
+                    </div>
+                    <div className="flex items-center gap-1 text-slate-600 dark:text-gray-400">
+                      <div className="h-2 w-2 rounded-full bg-green-500" />
+                      <span className="text-slate-900 dark:text-white">{onlineCount} online</span>
                     </div>
                   </div>
-                  <Badge className="bg-green-600 text-white border-0">
-                    {team.status.toUpperCase()}
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {/* Team Stats */}
-                  <div className="grid grid-cols-3 gap-4 text-center">
-                    <div>
-                      <p className="text-2xl font-bold text-white">{team.members}</p>
-                      <p className="text-xs text-white/70">Members</p>
+
+                  {/* Location and Timezone */}
+                  {(team.location || team.timezone) && (
+                    <div className="flex items-center gap-4 text-sm">
+                      {team.location && (
+                        <div className="flex items-center gap-1 text-slate-600 dark:text-gray-400">
+                          <MapPin className="h-4 w-4" />
+                          <span className="text-slate-900 dark:text-white">{team.location}</span>
+                        </div>
+                      )}
+                      {team.timezone && (
+                        <div className="flex items-center gap-1 text-slate-600 dark:text-gray-400">
+                          <Clock className="h-4 w-4" />
+                          <span className="text-slate-900 dark:text-white">{team.timezone}</span>
+                        </div>
+                      )}
                     </div>
-                    <div>
-                      <p className="text-2xl font-bold text-white">{team.incidentsThisWeek}</p>
-                      <p className="text-xs text-white/70">Incidents</p>
-                    </div>
-                    <div>
-                      <p className="text-2xl font-bold text-white">{team.avgResponseTime}</p>
-                      <p className="text-xs text-white/70">Avg Response</p>
-                    </div>
-                  </div>
+                  )}
 
                   {/* Team Lead */}
-                  <div className="flex items-center gap-3 p-3 bg-white/10 rounded-lg border border-white/20">
-                    <Avatar className="h-8 w-8">
-                      <AvatarImage src={`/placeholder-avatar-${team.id}.jpg`} alt={team.lead} />
-                      <AvatarFallback className="bg-gradient-to-r from-orange-500 to-red-600 text-white text-xs">
-                        {team.lead.split(' ').map(n => n[0]).join('')}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <p className="font-medium text-sm text-white">{team.lead}</p>
-                      <p className="text-xs text-white/70">Team Lead</p>
+                  {teamLead && (
+                    <div className="flex items-center gap-2 p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg border border-slate-200 dark:border-slate-600">
+                      <Shield className="h-4 w-4 text-blue-500 dark:text-blue-400" />
+                      <div className="flex items-center gap-2 flex-1">
+                        <Avatar className="h-8 w-8 border-2 border-blue-500">
+                          <AvatarImage src={teamLead?.avatar} alt={getFullName(teamLead)} />
+                          <AvatarFallback className="text-xs bg-blue-500 text-white">
+                            {getInitials(teamLead)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate text-slate-900 dark:text-white">{getFullName(teamLead)}</p>
+                          <p className="text-xs text-slate-600 dark:text-gray-400">Team Lead</p>
+                        </div>
+                        {teamLead?.is_online && (
+                          <div className="h-2 w-2 rounded-full bg-green-500" />
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  )}
 
-                  {/* Team Members Preview */}
-                  <div>
-                    <p className="text-sm font-medium text-white mb-2">Team Members</p>
+                  {/* Members Avatars */}
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium text-slate-900 dark:text-white">Team Members</p>
                     <div className="flex -space-x-2">
-                      {team.members_list.slice(0, 4).map((member, idx) => (
-                        <Avatar key={idx} className="h-8 w-8 border-2 border-white/20">
-                          <AvatarImage src={`/placeholder-avatar-${idx}.jpg`} alt={member.name} />
-                          <AvatarFallback className="bg-gradient-to-r from-orange-500 to-red-600 text-white text-xs">
-                            {member.name.split(' ').map(n => n[0]).join('')}
+                      {teamMembers.slice(0, 8).map((member, idx) => (
+                        <Avatar
+                          key={member?.id || idx}
+                          className="h-10 w-10 border-2 border-white dark:border-slate-800 hover:border-blue-500 dark:hover:border-blue-500 transition-colors"
+                          title={`${getFullName(member)} - ${member?.is_online ? 'Online' : 'Offline'}`}
+                        >
+                          <AvatarImage src={member?.avatar} alt={getFullName(member)} />
+                          <AvatarFallback className="text-xs bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-white">
+                            {getInitials(member)}
                           </AvatarFallback>
                         </Avatar>
                       ))}
-                      {team.members > 4 && (
-                        <div className="h-8 w-8 rounded-full bg-white/20 border-2 border-white/20 flex items-center justify-center text-xs font-medium text-white">
-                          +{team.members - 4}
+                      {teamMembers.length > 8 && (
+                        <div className="flex items-center justify-center h-10 w-10 rounded-full bg-slate-200 dark:bg-slate-700 border-2 border-white dark:border-slate-800 text-xs font-medium text-slate-900 dark:text-white">
+                          +{teamMembers.length - 8}
                         </div>
                       )}
                     </div>
@@ -321,123 +502,80 @@ export function TeamsPage() {
 
                   {/* Actions */}
                   <div className="flex gap-2 pt-2">
-                    <Button variant="outline" size="sm" className="flex-1 border-white/30 text-white hover:bg-white/20 hover:text-white">
-                      <Users className="h-4 w-4 mr-2" />
-                      View Team
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="flex-1 text-slate-900 dark:text-white border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
+                      onClick={() => handleViewDetails(team)}
+                    >
+                      View Details
                     </Button>
-                    <Button variant="outline" size="sm" className="border-white/30 text-white hover:bg-white/20 hover:text-white">
-                      <UserPlus className="h-4 w-4" />
-                    </Button>
-                    <Button variant="outline" size="sm" className="border-white/30 text-white hover:bg-white/20 hover:text-white">
-                      <Settings className="h-4 w-4" />
-                    </Button>
+                    {myTeam?.id === team.id && (
+                      <Button size="sm" className="flex-1 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white shadow-lg">
+                        Manage Team
+                      </Button>
+                    )}
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        ))}
-      </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+            );
+          })}
+        </motion.div>
+      )}
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <motion.div
+        <motion.div 
+          className="flex items-center justify-center gap-2"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="flex items-center justify-center gap-2"
+          transition={{ delay: 0.5 }}
         >
           <Button
             variant="outline"
             size="sm"
             onClick={() => handlePageChange(currentPage - 1)}
             disabled={currentPage === 1}
-            className="border-white/30 text-white hover:bg-white/20 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+            className="text-slate-900 dark:text-white border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50"
           >
-            <ChevronLeft className="h-4 w-4" />
             Previous
           </Button>
-          
-          <div className="flex items-center gap-1">
+          <div className="flex gap-1">
             {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
               <Button
                 key={page}
-                variant={currentPage === page ? "default" : "outline"}
+                variant={page === currentPage ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => handlePageChange(page)}
-                className={
-                  currentPage === page
-                    ? "bg-gradient-to-r from-orange-500 to-red-600 text-white border-0"
-                    : "border-white/30 text-white hover:bg-white/20 hover:text-white"
-                }
+                className={page === currentPage 
+                  ? 'w-10 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white' 
+                  : 'w-10 text-slate-900 dark:text-white border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'}
               >
                 {page}
               </Button>
             ))}
           </div>
-          
           <Button
             variant="outline"
             size="sm"
             onClick={() => handlePageChange(currentPage + 1)}
             disabled={currentPage === totalPages}
-            className="border-white/30 text-white hover:bg-white/20 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+            className="text-slate-900 dark:text-white border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50"
           >
             Next
-            <ChevronRight className="h-4 w-4" />
           </Button>
         </motion.div>
       )}
-
-      {/* Results Summary */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.2 }}
-        className="text-center"
-      >
-        <p className="text-white/70 text-sm">
-          Showing {startIndex + 1}-{Math.min(endIndex, filteredTeams.length)} of {filteredTeams.length} teams
-          {searchTerm && ` matching "${searchTerm}"`}
-        </p>
-      </motion.div>
-
-      {/* Team Performance Summary */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.4 }}
-      >
-        <Card className="bg-white/5 backdrop-blur-sm border-white/20">
-          <CardHeader>
-            <CardTitle className="text-white">Team Performance Overview</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="text-center">
-                <p className="text-2xl font-bold text-white">{teams.length}</p>
-                <p className="text-sm text-white/70">Active Teams</p>
-              </div>
-              <div className="text-center">
-                <p className="text-2xl font-bold text-white">
-                  {teams.reduce((sum, team) => sum + team.members, 0)}
-                </p>
-                <p className="text-sm text-white/70">Total Engineers</p>
-              </div>
-              <div className="text-center">
-                <p className="text-2xl font-bold text-white">
-                  {teams.reduce((sum, team) => sum + team.incidentsThisWeek, 0)}
-                </p>
-                <p className="text-sm text-white/70">Incidents This Week</p>
-              </div>
-              <div className="text-center">
-                <p className="text-2xl font-bold text-white">2.3m</p>
-                <p className="text-sm text-white/70">Avg Response Time</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </motion.div>
+      
+      {/* Team Details Modal */}
+      <TeamDetailsModal
+        isOpen={isDetailsModalOpen}
+        onClose={handleCloseDetailsModal}
+        team={selectedTeam}
+      />
     </div>
   );
-}
+};
+
+export default TeamsPage;

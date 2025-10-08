@@ -92,3 +92,159 @@ export async function handleCreateAuditLog(
 	}
 }
 
+
+// Get audit logs with filtering
+export async function handleGetAuditLogs(
+	request: Request,
+	env: Env,
+	corsHeaders: Record<string, string>
+): Promise<Response> {
+	try {
+		const url = new URL(request.url);
+		const limit = parseInt(url.searchParams.get('limit') || '50');
+		const offset = parseInt(url.searchParams.get('offset') || '0');
+		const incidentId = url.searchParams.get('incidentId');
+
+		let query = `
+			SELECT 
+				al.*,
+				u.first_name || ' ' || u.last_name as user_name,
+				i.title as incident_title
+			FROM audit_log al
+			LEFT JOIN users u ON al.user_id = u.id
+			LEFT JOIN incidents i ON al.incident_id = i.id
+		`;
+
+		const params: any[] = [];
+		
+		if (incidentId) {
+			query += ` WHERE al.incident_id = ?`;
+			params.push(incidentId);
+		}
+
+		query += ` ORDER BY al.created_at DESC LIMIT ? OFFSET ?`;
+		params.push(limit, offset);
+
+		const result = await env.DB.prepare(query).bind(...params).all();
+
+		const logs = result.results?.map((row: any) => ({
+			id: row.id,
+			incident_id: row.incident_id,
+			user_id: row.user_id,
+			user_name: row.user_name,
+			action: row.action,
+			description: row.description,
+			details: row.details ? JSON.parse(row.details) : null,
+			incident_title: row.incident_title,
+			created_at: row.created_at
+		})) || [];
+
+		const successResponse: ApiResponse<any> = {
+			httpStatus: "OK",
+			message: "Audit logs retrieved successfully",
+			data: {
+				logs,
+				total: logs.length,
+				limit,
+				offset
+			}
+		};
+
+		return new Response(JSON.stringify(successResponse), {
+			status: 200,
+			headers: { ...corsHeaders, "Content-Type": "application/json" }
+		});
+	} catch (error: any) {
+		console.error("Error fetching audit logs:", error);
+
+		const errorResponse: ApiResponse<null> = {
+			httpStatus: "ERROR",
+			message: error.message || "Failed to fetch audit logs",
+			data: null
+		};
+
+		return new Response(JSON.stringify(errorResponse), {
+			status: 500,
+			headers: { ...corsHeaders, "Content-Type": "application/json" }
+		});
+	}
+}
+
+// Get audit statistics
+export async function handleGetAuditStats(
+	request: Request,
+	env: Env,
+	corsHeaders: Record<string, string>
+): Promise<Response> {
+	try {
+		const url = new URL(request.url);
+		const startDate = url.searchParams.get('startDate');
+		const endDate = url.searchParams.get('endDate');
+
+		let whereClause = '';
+		const params: any[] = [];
+
+		if (startDate && endDate) {
+			whereClause = 'WHERE created_at BETWEEN ? AND ?';
+			params.push(startDate, endDate);
+		}
+
+		const query = `
+			SELECT 
+				COUNT(*) as total_logs,
+				COUNT(DISTINCT user_id) as unique_users,
+				COUNT(DISTINCT incident_id) as unique_incidents,
+				action,
+				COUNT(*) as action_count
+			FROM audit_log
+			${whereClause}
+			GROUP BY action
+		`;
+
+		const result = await env.DB.prepare(query).bind(...params).all();
+
+		const actionBreakdown: Record<string, number> = {};
+		let totalLogs = 0;
+		let uniqueUsers = 0;
+		let uniqueIncidents = 0;
+
+		result.results?.forEach((row: any) => {
+			actionBreakdown[row.action] = row.action_count;
+			if (!totalLogs) {
+				totalLogs = row.total_logs;
+				uniqueUsers = row.unique_users;
+				uniqueIncidents = row.unique_incidents;
+			}
+		});
+
+		const successResponse: ApiResponse<any> = {
+			httpStatus: "OK",
+			message: "Audit statistics retrieved successfully",
+			data: {
+				total_logs: totalLogs,
+				unique_users: uniqueUsers,
+				unique_incidents: uniqueIncidents,
+				action_breakdown: actionBreakdown,
+				recent_activity_trend: 0 // Can be calculated based on time periods
+			}
+		};
+
+		return new Response(JSON.stringify(successResponse), {
+			status: 200,
+			headers: { ...corsHeaders, "Content-Type": "application/json" }
+		});
+	} catch (error: any) {
+		console.error("Error fetching audit stats:", error);
+
+		const errorResponse: ApiResponse<null> = {
+			httpStatus: "ERROR",
+			message: error.message || "Failed to fetch audit statistics",
+			data: null
+		};
+
+		return new Response(JSON.stringify(errorResponse), {
+			status: 500,
+			headers: { ...corsHeaders, "Content-Type": "application/json" }
+		});
+	}
+}

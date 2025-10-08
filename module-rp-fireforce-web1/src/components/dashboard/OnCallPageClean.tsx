@@ -4,24 +4,19 @@ import { motion, AnimatePresence } from "framer-motion";
 import { 
   Shield, 
   Clock, 
-  User, 
   Phone, 
   Calendar,
   ChevronLeft,
   ChevronRight,
-  Plus,
   Edit,
-  Trash2,
   Save,
   X,
-  UserCheck,
-  AlertTriangle
+  UserCheck
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
-import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { 
   DropdownMenu, 
@@ -30,12 +25,39 @@ import {
   DropdownMenuTrigger 
 } from "../ui/dropdown-menu";
 
+// Type definitions
+interface TeamMember {
+  id: number;
+  name: string;
+  role: string;
+  phone: string;
+}
+
+interface Schedule {
+  primary: number | null;
+  secondary: number | null;
+  tertiary?: number | null;
+}
+
+interface EditingSchedule extends Schedule {
+  date: Date;
+  team: string;
+}
+
+type TeamMembers = {
+  [key: string]: TeamMember[];
+};
+
+type OnCallSchedules = {
+  [key: string]: Schedule;
+};
+
 export function OnCallPage() {
   const [selectedTeam, setSelectedTeam] = useState<string>('Platform');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
-  const [editingSchedule, setEditingSchedule] = useState<any>(null);
+  const [editingSchedule, setEditingSchedule] = useState<EditingSchedule | null>(null);
 
   // Teams data
   const teams = [
@@ -46,7 +68,7 @@ export function OnCallPage() {
   ];
 
   // Team members
-  const teamMembers = {
+  const teamMembers: TeamMembers = {
     Platform: [
       { id: 1, name: 'John Doe', role: 'Senior SRE', phone: '+1 (555) 123-4567' },
       { id: 2, name: 'Alice Johnson', role: 'Platform Engineer', phone: '+1 (555) 234-5678' },
@@ -68,7 +90,7 @@ export function OnCallPage() {
   };
 
   // On-call schedules (date -> team -> member assignments)
-  const [onCallSchedules, setOnCallSchedules] = useState<any>({
+  const [onCallSchedules, setOnCallSchedules] = useState<OnCallSchedules>({
     '2025-10-07_Platform': { primary: 1, secondary: 2, tertiary: 3 },
     '2025-10-08_Platform': { primary: 2, secondary: 3, tertiary: 1 },
     '2025-10-09_Platform': { primary: 3, secondary: 1, tertiary: 2 },
@@ -188,7 +210,7 @@ export function OnCallPage() {
       const dateKey = formatDateKey(selectedDate);
       const scheduleKey = `${dateKey}_${selectedTeam}`;
       
-      setOnCallSchedules(prev => ({
+      setOnCallSchedules((prev: OnCallSchedules) => ({
         ...prev,
         [scheduleKey]: {
           primary: editingSchedule.primary,
@@ -238,11 +260,11 @@ export function OnCallPage() {
             {hasSchedule && (
               <div className="flex-1 flex flex-col justify-center">
                 <div className="text-xs text-green-400">
-                  P: {teamMembers[selectedTeam]?.find(m => m.id === hasSchedule.primary)?.name.split(' ')[0]}
+                  P: {teamMembers[selectedTeam]?.find((m: TeamMember) => m.id === hasSchedule.primary)?.name.split(' ')[0]}
                 </div>
                 {hasSchedule.secondary && (
                   <div className="text-xs text-yellow-400">
-                    S: {teamMembers[selectedTeam]?.find(m => m.id === hasSchedule.secondary)?.name.split(' ')[0]}
+                    S: {teamMembers[selectedTeam]?.find((m: TeamMember) => m.id === hasSchedule.secondary)?.name.split(' ')[0]}
                   </div>
                 )}
               </div>
@@ -500,13 +522,13 @@ export function OnCallPage() {
                     <DropdownMenuTrigger asChild>
                       <Button variant="outline" className="w-full justify-start border-slate-600 text-white hover:bg-slate-700">
                         {editingSchedule.primary 
-                          ? teamMembers[selectedTeam]?.find(m => m.id === editingSchedule.primary)?.name
+                          ? teamMembers[selectedTeam]?.find((m: TeamMember) => m.id === editingSchedule.primary)?.name
                           : "Select member"
                         }
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent className="bg-slate-800 border-slate-600">
-                      {teamMembers[selectedTeam]?.map((member) => (
+                      {teamMembers[selectedTeam]?.map((member: TeamMember) => (
                         <DropdownMenuItem 
                           key={member.id}
                           onClick={() => setEditingSchedule({...editingSchedule, primary: member.id})}
@@ -525,13 +547,13 @@ export function OnCallPage() {
                     <DropdownMenuTrigger asChild>
                       <Button variant="outline" className="w-full justify-start border-slate-600 text-white hover:bg-slate-700">
                         {editingSchedule.secondary 
-                          ? teamMembers[selectedTeam]?.find(m => m.id === editingSchedule.secondary)?.name
+                          ? teamMembers[selectedTeam]?.find((m: TeamMember) => m.id === editingSchedule.secondary)?.name
                           : "Select member"
                         }
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent className="bg-slate-800 border-slate-600">
-                      {teamMembers[selectedTeam]?.map((member) => (
+                      {teamMembers[selectedTeam]?.map((member: TeamMember) => (
                         <DropdownMenuItem 
                           key={member.id}
                           onClick={() => setEditingSchedule({...editingSchedule, secondary: member.id})}
@@ -550,13 +572,13 @@ export function OnCallPage() {
                     <DropdownMenuTrigger asChild>
                       <Button variant="outline" className="w-full justify-start border-slate-600 text-white hover:bg-slate-700">
                         {editingSchedule.tertiary 
-                          ? teamMembers[selectedTeam]?.find(m => m.id === editingSchedule.tertiary)?.name
+                          ? teamMembers[selectedTeam]?.find((m: TeamMember) => m.id === editingSchedule.tertiary)?.name
                           : "Select member"
                         }
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent className="bg-slate-800 border-slate-600">
-                      {teamMembers[selectedTeam]?.map((member) => (
+                      {teamMembers[selectedTeam]?.map((member: TeamMember) => (
                         <DropdownMenuItem 
                           key={member.id}
                           onClick={() => setEditingSchedule({...editingSchedule, tertiary: member.id})}

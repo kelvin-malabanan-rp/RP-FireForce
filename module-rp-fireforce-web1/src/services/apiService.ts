@@ -15,7 +15,7 @@ export interface ApiError {
 }
 
 // Base API configuration
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://incident-webhook-api.rapidresponse.workers.dev';
 
 class ApiService {
   private api: AxiosInstance;
@@ -62,9 +62,22 @@ class ApiService {
         
         // Handle common error scenarios
         if (error.response?.status === 401) {
-          // Unauthorized - redirect to login or refresh token
-          localStorage.removeItem('authToken');
-          window.location.href = '/login';
+          // Don't clear auth on login endpoint failures
+          const isLoginRequest = error.config?.url?.includes('/api/auth/login');
+          
+          if (!isLoginRequest) {
+            // Unauthorized - clear auth data but let the app handle the redirect
+            console.warn('⚠️ 401 Unauthorized - clearing auth tokens');
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('isAuthenticated');
+            localStorage.removeItem('user');
+            localStorage.removeItem('userId');
+            localStorage.removeItem('userEmail');
+            // Don't force a redirect here - let the React app handle it naturally
+            // This allows the app to show the login page without a full page reload
+          } else {
+            console.warn('⚠️ Login failed - invalid credentials');
+          }
         }
         
         return Promise.reject(this.handleError(error));
