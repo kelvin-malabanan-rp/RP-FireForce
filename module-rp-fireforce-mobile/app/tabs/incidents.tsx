@@ -214,11 +214,13 @@ export default function IncidentsScreen() {
                 }
             }
 
+            // 1️⃣ Create the incident FIRST
             const response = await createIncident(incidentData);
 
             if (response.httpStatus === "OK" && response.data) {
                 const incident = response.data;
 
+                // 2️⃣ Create audit log for incident creation
                 const auditPayload = {
                     action: "CREATE_INCIDENT",
                     incidentId: incident.id,
@@ -236,15 +238,15 @@ export default function IncidentsScreen() {
                     },
                 };
 
-                try {
-                    const auditResponse = await createAuditLog(auditPayload);
-                    console.log("✅ Audit log created:", auditResponse);
-                } catch (auditError) {
-                    console.warn("⚠️ Failed to create audit log:", auditError);
-                }
+                // Fire and forget - don't wait
+                createAuditLog(auditPayload)
+                    .then(() => console.log("✅ Audit log created"))
+                    .catch(err => console.warn("⚠️ Failed to create audit log:", err));
 
-                await fetchAllIncidents();
+                // 3️⃣ Refresh incidents list
+                fetchAllIncidents();
 
+                // 4️⃣ Prepare notification data
                 const isBypassing = newIncident.bypassRotation;
                 let selectedEmails: string[] = [];
 
@@ -260,21 +262,23 @@ export default function IncidentsScreen() {
                     }
                 }
 
-                try {
-                    await sendNotificationToOnCallTeam({
-                        id: incident.id,
-                        title: incident.title,
-                        description: incident.description,
-                        severity: incident.severity,
-                        emergencyOverride: {
-                            enabled: isBypassing,
-                            userEmails: selectedEmails,
-                        },
-                    });
-                } catch (error) {
+                // 5️⃣ Send notifications in background - DON'T WAIT
+                sendNotificationToOnCallTeam({
+                    id: incident.id,
+                    title: incident.title,
+                    description: incident.description,
+                    severity: incident.severity,
+                    emergencyOverride: {
+                        enabled: isBypassing,
+                        userEmails: selectedEmails,
+                    },
+                }).then(result => {
+                    console.log("[push] ✅ Notifications sent:", result);
+                }).catch(error => {
                     console.error("[incident] Remote notification failed", error);
-                }
+                });
 
+                // 6️⃣ Cleanup & Show success immediately
                 resetIncidentForm();
                 setModalVisible(false);
 
@@ -285,8 +289,8 @@ export default function IncidentsScreen() {
                 Alert.alert(
                     "Success",
                     newIncident.bypassRotation
-                        ? `Incident created and ${notificationCount} people notified immediately`
-                        : "Incident created successfully"
+                        ? `Incident created! Notifying ${notificationCount} people in the background...`
+                        : "Incident created! On-call team will be notified..."
                 );
             } else {
                 throw new Error(response.message || "Failed to create incident");

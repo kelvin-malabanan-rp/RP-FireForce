@@ -5,7 +5,7 @@ import {
     OnCallScheduleResponse,
     OnCallTeamOfUser,
     ApiResponse,
-    AllCurrentOnCallResponse, EmergencyOverrideUser
+    AllCurrentOnCallResponse, EmergencyOverrideUser, AllCurrentOnCallByTeamResponse
 } from '@/types/oncall-types';
 import { BASE_URL_DEV } from "@/utils/backend-url";
 import {API_RESPONSE} from "@/types/incident-types";
@@ -190,9 +190,10 @@ export const getAllCurrentOnCall = async (
 ): Promise<API_RESPONSE<AllCurrentOnCallResponse>> => {
     try {
         const url = teamId
-            ? `${BASE_URL_DEV}/api/oncall/current/all?teamId=${teamId}`
-            : `${BASE_URL_DEV}/api/oncall/current/all`;
+            ? `${BASE_URL_DEV}/api/oncall/team?teamId=${teamId}`
+            : `${BASE_URL_DEV}/api/oncall/current`;
 
+        // ✅ Use the correct type - AllCurrentOnCallResponse (which is AllCurrentOnCallByRole)
         const response = await apiManager.get<API_RESPONSE<AllCurrentOnCallResponse>>(url);
         return response.data;
     } catch (error) {
