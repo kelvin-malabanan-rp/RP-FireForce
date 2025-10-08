@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, AlertTriangle, MapPin, FileText, Loader2, Users, Bell } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Card } from "../ui/card";
 import { incidentService, auditService } from "../../services";
+import { apiService } from "../../services/apiService";
 import type { CreateIncidentData } from "../../types";
 import { SuccessModal, ErrorModal } from "./NotificationModal";
 import { TeamUserSelector } from "./TeamUserSelector";
@@ -25,6 +26,7 @@ export function CreateIncidentModal({ isOpen, onClose, onSuccess }: CreateIncide
   });
   
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+  const [allUsers, setAllUsers] = useState<Array<{ id: string; email: string }>>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
@@ -54,6 +56,20 @@ export function CreateIncidentModal({ isOpen, onClose, onSuccess }: CreateIncide
     setError(null);
     onClose();
   };
+
+  // Load users once to map selected IDs -> emails for manual mode
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await apiService.get<any>("/api/users");
+        const arr = Array.isArray(res.data?.data) ? res.data.data : res.data || [];
+        const mapped = arr.map((u: any) => ({ id: u.id, email: u.email })).filter((u: any) => u.id && u.email);
+        setAllUsers(mapped);
+      } catch (e) {
+        // non-fatal
+      }
+    })();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -91,6 +107,17 @@ export function CreateIncidentModal({ isOpen, onClose, onSuccess }: CreateIncide
       // Add selected users if manual mode
       if (formData.notificationMode === 'manual' && selectedUsers.length > 0) {
         incidentData.notifyUsers = selectedUsers;
+        // Map selected IDs to emails to guide backend targeting
+        const emailSet = new Set<string>();
+        for (const id of selectedUsers) {
+          const u = allUsers.find(u => u.id === id);
+          if (u?.email) emailSet.add(u.email);
+        }
+        const emails = Array.from(emailSet);
+        if (emails.length > 0) {
+          // @ts-ignore allow backend to accept either field
+          (incidentData as any).notifyEmails = emails;
+        }
       }
 
       console.log('📝 Creating incident:', incidentData);

@@ -9,6 +9,8 @@ import { useNotifications } from "@/hooks/useNotifications";
 import { incidentService } from "@/services";
 
 export function GlobalAlertModal() {
+  console.log('🎬 GlobalAlertModal MOUNTED');
+  
   const { notifications, refresh, markAsRead } = useNotifications({ enabled: true });
   const [isOpen, setIsOpen] = useState(false);
   const [showEscalateReason, setShowEscalateReason] = useState(false);
@@ -17,57 +19,90 @@ export function GlobalAlertModal() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const alertAudioRef = typeof window !== "undefined" ? useRef<HTMLAudioElement | null>(new Audio("/sounds/alert.mp3")) : { current: null } as any;
 
-  const activeNotification = useMemo(() => notifications.find(n => n.id === activeId) || null, [notifications, activeId]);
+  const activeNotification = useMemo(() => {
+    const found = notifications.find(n => n.id === activeId) || null;
+    console.log('🔍 Active notification lookup:', activeId, '→', found);
+    return found;
+  }, [notifications, activeId]);
 
-  // Determine the latest targeted critical/high incident (only open for targeted)
+  // Main logic to detect and show alerts
   useEffect(() => {
-    if (!notifications || notifications.length === 0) return;
-    // Defer opening if a local modal (e.g., success modal) is active
-    if (typeof window !== 'undefined' && (window as any).suppressGlobalAlertModal) return;
-    const targeted = notifications.find(n => n.unread && n.category === 'incident' && (n.type === 'critical' || n.type === 'warning') && n.targeted === true);
-    if (targeted && !isOpen) { setActiveId(targeted.id); setIsOpen(true); }
-  }, [notifications]);
+    console.log('🔄 useEffect triggered - notifications:', notifications?.length, 'isOpen:', isOpen);
+    
+    if (!notifications || notifications.length === 0) {
+      console.log('⏭️ No notifications, skipping');
+      return;
+    }
 
-  // Play/pause sound with modal
+    // Check suppression flag
+    if (typeof window !== 'undefined' && (window as any).suppressGlobalAlertModal) {
+      console.log('🚫 Suppressed by global flag');
+      return;
+    }
+
+    // Find ANY unread incident notification (TEMPORARY - ignoring targeted field)
+    console.log('🔎 Looking for unread incident notifications...');
+    const target = notifications.find(n => {
+      const match = n.unread === true && n.category === 'incident';
+      console.log(`  - ${n.id}: unread=${n.unread}, category=${n.category}, match=${match}`);
+      return match;
+    });
+
+    console.log('🎯 Search result:', target ? `FOUND ${target.id}` : 'NONE');
+
+    if (target && !isOpen) {
+      console.log('🚨 OPENING MODAL for notification:', target.id);
+      setActiveId(target.id);
+      setIsOpen(true);
+    } else if (target && isOpen) {
+      console.log('⏸️ Modal already open');
+    }
+  }, [notifications, isOpen]);
+
+  // Sound management
   useEffect(() => {
     const audio = alertAudioRef.current;
     if (!audio) return;
+    
+    console.log('🔊 Sound effect - isOpen:', isOpen);
+    
     if (isOpen) {
-      try {
-        audio.loop = true;
-        audio.currentTime = 0;
-        audio.play();
-      } catch (_) {}
+      audio.loop = true;
+      audio.currentTime = 0;
+      audio.play().catch((e: any) => console.warn('Sound play failed:', e));
     } else {
-      try {
-        audio.pause();
-        audio.currentTime = 0;
-      } catch (_) {}
+      audio.pause();
+      audio.currentTime = 0;
     }
   }, [isOpen]);
 
   const stopSound = () => {
     const audio = alertAudioRef.current;
-    if (!audio) return;
-    try {
+    if (audio) {
       audio.pause();
       audio.currentTime = 0;
-    } catch (_) {}
+    }
   };
 
   const handleAcknowledge = async () => {
+    console.log('✅ Acknowledging');
     stopSound();
     setIsOpen(false);
     setShowEscalateReason(false);
     setEscalateReason("");
     setCustomReason("");
+    
     const userId = localStorage.getItem('userId') || '';
     const incidentId = activeNotification?.incidentId || activeNotification?.data?.incidentId;
+    
     try {
       if (incidentId && userId) {
         await incidentService.respondToIncident({ incidentId, action: 'acknowledge', userId });
       }
-    } catch (_) {}
+    } catch (err) {
+      console.error('Acknowledge failed:', err);
+    }
+    
     if (activeNotification) {
       markAsRead(activeNotification.id);
       refresh();
@@ -76,52 +111,106 @@ export function GlobalAlertModal() {
   };
 
   const handleConfirmEscalate = async () => {
+    console.log('🚨 Escalating');
     stopSound();
     setIsOpen(false);
+    
     const userId = localStorage.getItem('userId') || '';
     const incidentId = activeNotification?.incidentId || activeNotification?.data?.incidentId;
+    
     try {
       if (incidentId && userId) {
-        await incidentService.respondToIncident({ incidentId, action: 'escalate', userId });
+        await incidentService.respondToIncident({ incidentId, action: 'escalate', userId } as any);
       }
-    } catch (_) {}
+    } catch (err) {
+      console.error('Escalate failed:', err);
+    }
+    
     if (activeNotification) {
       markAsRead(activeNotification.id);
       refresh();
       setActiveId(null);
     }
+    
     setShowEscalateReason(false);
     setEscalateReason("");
     setCustomReason("");
   };
 
+  console.log('🎭 Render decision - isOpen:', isOpen, 'activeNotification:', !!activeNotification);
+
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-md" onInteractOutside={e => e.preventDefault()} onEscapeKeyDown={e => e.preventDefault()}>
+    <Dialog open={isOpen} onOpenChange={(open) => {
+      console.log('🔄 Dialog onOpenChange:', open);
+      setIsOpen(open);
+    }}>
+      <DialogContent 
+        className="bg-slate-900 border-slate-700 text-white max-w-md" 
+        onInteractOutside={e => e.preventDefault()} 
+        onEscapeKeyDown={e => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle className="text-xl font-bold flex items-center gap-2">
             <AlertCircle className="h-6 w-6 text-red-500" />
-            Notification Alert
+            Incident Alert
           </DialogTitle>
         </DialogHeader>
         <DialogDescription className="text-slate-400">
-          You have a new notification/alert. Please take action below.
+          You have been notified of a new incident. Please take action below.
         </DialogDescription>
+        
         <div className="space-y-4 py-2">
-          <div className="bg-slate-800 rounded-lg p-3 mb-2">
-            <div className="font-semibold text-lg text-red-400 mb-1">
-              {activeNotification ? `Incident: ${activeNotification.title}` : 'Incident Alert'}
+          {/* Incident Details */}
+          <div className="bg-slate-800 rounded-lg p-4 mb-2 border-l-4 border-red-500">
+            <div className="flex items-start justify-between mb-2">
+              <div className="font-semibold text-lg text-red-400">
+                {activeNotification?.title || 'Incident Alert'}
+              </div>
+              {activeNotification?.data?.severity && (
+                <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                  activeNotification.data.severity === 'critical' ? 'bg-red-600 text-white' :
+                  activeNotification.data.severity === 'high' ? 'bg-orange-600 text-white' :
+                  activeNotification.data.severity === 'medium' ? 'bg-yellow-600 text-white' :
+                  'bg-blue-600 text-white'
+                }`}>
+                  {activeNotification.data.severity.toUpperCase()}
+                </span>
+              )}
             </div>
-            <div className="text-sm text-slate-300">
-              {activeNotification ? activeNotification.message : 'You have a new incident notification. Please acknowledge or escalate.'}
+            
+            <div className="text-sm text-slate-300 mb-3">
+              {activeNotification?.message || 'You have a new incident notification.'}
             </div>
+            
+            {/* Additional Details */}
+            {activeNotification?.data?.location && (
+              <div className="text-xs text-slate-400 flex items-center gap-2 mt-2">
+                <span className="font-medium">Location:</span>
+                <span>{activeNotification.data.location}</span>
+              </div>
+            )}
+            
+            {activeNotification?.data?.reportedBy && (
+              <div className="text-xs text-slate-400 flex items-center gap-2 mt-1">
+                <span className="font-medium">Reported by:</span>
+                <span>{activeNotification.data.reportedBy}</span>
+              </div>
+            )}
           </div>
+          
+          {/* Action Buttons */}
           {!showEscalateReason ? (
             <div className="flex gap-3 mt-4">
-              <Button className="bg-green-600 hover:bg-green-700 text-white flex-1" onClick={handleAcknowledge}>
+              <Button 
+                className="bg-green-600 hover:bg-green-700 text-white flex-1" 
+                onClick={handleAcknowledge}
+              >
                 Acknowledge
               </Button>
-              <Button className="bg-red-600 hover:bg-red-700 text-white flex-1" onClick={() => setShowEscalateReason(true)}>
+              <Button 
+                className="bg-red-600 hover:bg-red-700 text-white flex-1" 
+                onClick={() => setShowEscalateReason(true)}
+              >
                 Escalate
               </Button>
             </div>
@@ -136,17 +225,37 @@ export function GlobalAlertModal() {
                   <SelectItem value="High Severity">High Severity</SelectItem>
                   <SelectItem value="No Response">No Response</SelectItem>
                   <SelectItem value="Requires Team Lead">Requires Team Lead</SelectItem>
+                  <SelectItem value="Beyond My Expertise">Beyond My Expertise</SelectItem>
                   <SelectItem value="Other">Other</SelectItem>
                 </SelectContent>
               </Select>
+              
               {escalateReason === 'Other' && (
-                <Input value={customReason} onChange={e => setCustomReason(e.target.value)} placeholder="Enter specific reason..." className="bg-slate-800 border-slate-600 text-white" />
+                <Input 
+                  value={customReason} 
+                  onChange={e => setCustomReason(e.target.value)} 
+                  placeholder="Enter specific reason..." 
+                  className="bg-slate-800 border-slate-600 text-white" 
+                />
               )}
+              
               <div className="flex gap-3 mt-2">
-                <Button variant="outline" className="text-white border-slate-600 hover:bg-slate-800 flex-1" onClick={() => { setShowEscalateReason(false); setEscalateReason(""); setCustomReason(""); }}>
+                <Button 
+                  variant="outline" 
+                  className="text-white border-slate-600 hover:bg-slate-800 flex-1" 
+                  onClick={() => { 
+                    setShowEscalateReason(false); 
+                    setEscalateReason(""); 
+                    setCustomReason(""); 
+                  }}
+                >
                   Cancel
                 </Button>
-                <Button className="bg-red-600 hover:bg-red-700 text-white flex-1" onClick={handleConfirmEscalate} disabled={!escalateReason || (escalateReason === 'Other' && !customReason)}>
+                <Button 
+                  className="bg-red-600 hover:bg-red-700 text-white flex-1" 
+                  onClick={handleConfirmEscalate} 
+                  disabled={!escalateReason || (escalateReason === 'Other' && !customReason.trim())}
+                >
                   Confirm Escalate
                 </Button>
               </div>
@@ -159,4 +268,3 @@ export function GlobalAlertModal() {
 }
 
 export default GlobalAlertModal;
-
