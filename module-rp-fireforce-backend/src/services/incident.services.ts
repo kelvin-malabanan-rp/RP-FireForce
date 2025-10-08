@@ -100,12 +100,12 @@ export class IncidentService {
 			severity: this.mapAlarmToSeverity(alarm),
 			status: 'open',
 			timestamp: new Date(alarm.StateChangeTime).toISOString(),
-			reportedBy: 'AWS CloudWatch',
+			reported_by: 'AWS CloudWatch',
 			location: alarm.Region || null,
-			awsAlarmName: alarm.AlarmName || null,
-			awsAccountId: alarm.AWSAccountId || null,
-			stateReason: alarm.StateReason || null,
-			metricName: null,
+			aws_alarm_name: alarm.AlarmName || null,
+			aws_account_id: alarm.AWSAccountId || null,
+			state_reason: alarm.StateReason || null,
+			metric_name: null,
 			aws_console_url: alarm.AlarmName ? this.generateAwsConsoleUrl(alarm) : null
 		};
 

@@ -16,11 +16,12 @@ import {
     createIncident,
     getAllIncidents
 } from "@/api/incident-controller";
-import { oncallController } from "@/api/oncall-schedule-controller";
+import {getAllCurrentOnCall} from "@/api/oncall-schedule-controller";
 import {
     CreateIncidentData,
-    IncidentUI
-} from "@/types/incident-types";
+    Team,
+    TeamMember,
+    IncidentUI} from "@/types/incident-types";
 import { FONT_FAMILY } from '@/constants/fonts';
 import { Ionicons } from "@expo/vector-icons";
 import IncidentList from "@/components/incident-list";
@@ -29,24 +30,10 @@ import { createAuditLog } from "@/api/audit-trail";
 import { usePushNotificationContext } from "@/context/push-notification-context";
 import {LinearGradient} from "expo-linear-gradient";
 
-type TeamMember = {
-    id: string;
-    email: string;
-    firstName: string;
-    lastName: string;
-    role?: string;
-};
-
-type Team = {
-    id: string;
-    name: string;
-    members: TeamMember[];
-};
-
 type NotificationMode = 'individual' | 'team';
 
 export default function IncidentsScreen() {
-    const { sendNotificationToOnCallTeam } = usePushNotificationContext();
+    const { sendNotificationToOnCallTeam, scheduleAutoReminder } = usePushNotificationContext(); // ✅ Add scheduleAutoReminder
     const [incidents, setIncidents] = useState<IncidentUI[]>([]);
     const [refreshing, setRefreshing] = useState(false);
     const [loading, setLoading] = useState(true);
@@ -115,25 +102,44 @@ export default function IncidentsScreen() {
 
     const fetchTeamMembersAndTeams = async () => {
         try {
-            const teams = await oncallController.getTeams();
-            setAvailableTeams(teams);
+            // ✅ Use getAllCurrentOnCall to get teams WITH actual member data
+            const onCallResponse = await getAllCurrentOnCall();
 
+            if (onCallResponse.httpStatus !== 'OK' || !onCallResponse.data) {
+                throw new Error('Failed to fetch on-call teams with members');
+            }
+
+            // Transform teams with full member details
+            const transformedTeams: Team[] = onCallResponse.data.map((teamData: any) => ({
+                id: teamData.teamId,
+                name: teamData.teamName,
+                members: (teamData.members || []).map((member: any) => ({
+                    id: member.userId,
+                    email: member.email,
+                    firstName: member.firstName || member.fullname?.split(' ')[0] || '',
+                    lastName: member.lastName || member.fullname?.split(' ')[1] || '',
+                    role: member.role
+                }))
+            }));
+
+            setAvailableTeams(transformedTeams);
+
+            // Flatten all team members
             const allMembers: TeamMember[] = [];
-            teams.forEach(team => {
-                team.members.forEach(member => {
+            transformedTeams.forEach((team: Team) => {
+                team.members.forEach((member: TeamMember) => { // ✅ Add type annotation
+                    // Avoid duplicates
                     if (!allMembers.find(m => m.id === member.id)) {
-                        allMembers.push({
-                            id: member.id,
-                            email: member.email,
-                            firstName: member.firstName,
-                            lastName: member.lastName,
-                            role: member.role
-                        });
+                        allMembers.push(member);
                     }
                 });
             });
 
             setAvailableUsers(allMembers);
+
+            console.log('[incident] ✅ Loaded teams:', transformedTeams.length);
+            console.log('[incident] ✅ Loaded users:', allMembers.length);
+
         } catch (error) {
             console.error('Failed to fetch team members:', error);
             Alert.alert('Error', 'Failed to load team members');
@@ -209,7 +215,7 @@ export default function IncidentsScreen() {
                 } else {
                     const teamUserIds = availableTeams
                         .filter(team => selectedTeams.includes(team.id))
-                        .flatMap(team => team.members.map(member => member.id));
+                        .flatMap(team => team.members.map((member: TeamMember) => member.id));
                     incidentData.notifyUsers = teamUserIds;
                 }
             }
@@ -245,6 +251,7 @@ export default function IncidentsScreen() {
 
                 await fetchAllIncidents();
 
+                // 5️⃣ Remote notification logic
                 const isBypassing = newIncident.bypassRotation;
                 let selectedEmails: string[] = [];
 
@@ -256,11 +263,12 @@ export default function IncidentsScreen() {
                     } else {
                         selectedEmails = availableTeams
                             .filter(team => selectedTeams.includes(team.id))
-                            .flatMap(team => team.members.map(member => member.email));
+                            .flatMap(team => team.members.map((member: TeamMember) => member.email));
                     }
                 }
 
                 try {
+                    // Send initial notifications
                     await sendNotificationToOnCallTeam({
                         id: incident.id,
                         title: incident.title,
@@ -270,11 +278,23 @@ export default function IncidentsScreen() {
                             enabled: isBypassing,
                             userEmails: selectedEmails,
                         },
+                    }, userId); // ✅ Pass userId for audit logging
+
+                    // ✅ Schedule auto-reminder for 1 minute later if incident still open
+                    await scheduleAutoReminder({
+                        id: incident.id,
+                        title: incident.title,
+                        description: incident.description,
+                        severity: incident.severity,
+                        teamId: incident.teamId,
+                        maxReminders: 3,      // ✅ 3 reminders max
+                        delaySeconds: 10       // ✅ 10 seconds interval
                     });
                 } catch (error) {
-                    console.error("[incident] Remote notification failed", error);
+                    console.error("[incident] ⚠️ Error sending notifications or scheduling reminder:", error);
                 }
 
+                // 6️⃣ Cleanup & UI feedback
                 resetIncidentForm();
                 setModalVisible(false);
 
@@ -285,8 +305,8 @@ export default function IncidentsScreen() {
                 Alert.alert(
                     "Success",
                     newIncident.bypassRotation
-                        ? `Incident created and ${notificationCount} people notified immediately`
-                        : "Incident created successfully"
+                        ? `Incident created and ${notificationCount} people notified immediately. Auto-reminder scheduled.`
+                        : "Incident created successfully. Auto-reminder scheduled."
                 );
             } else {
                 throw new Error(response.message || "Failed to create incident");

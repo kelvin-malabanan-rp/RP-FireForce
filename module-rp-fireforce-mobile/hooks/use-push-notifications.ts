@@ -7,7 +7,7 @@ import { Platform } from 'react-native';
 import { registerPushToken, respondToIncident } from '@/api/alert-controller';
 import { router } from 'expo-router';
 import { retrieveUserSession } from '@/constants/local-storage';
-import { getAllCurrentOnCall, getUsersForEmergencyOverride } from '@/api/oncall-schedule-controller';
+import {getAllCurrentOnCall, getUsersForEmergencyOverride, oncallController} from '@/api/oncall-schedule-controller';
 import {createAuditLog} from "@/api/audit-trail";
 import {getIncidentById} from "@/api/incident-controller";
 
@@ -66,7 +66,53 @@ export const usePushNotifications = () => {
         });
     };
 
-    // In your notification response handler
+    // ✅ Auto-schedule reminders when receiving new incident notifications
+    useEffect(() => {
+        const sub = Notifications.addNotificationReceivedListener(async (notification) => {
+            const data = notification.request.content.data as any;
+            const incidentId = data?.incidentId;
+            const notificationType = data?.type;
+
+            // Store notification ID
+            const notificationId = notification.request.identifier;
+            if (incidentId) {
+                console.log('[push] Notification received, storing ID:', notificationId);
+                setNotificationIds(prev => ({
+                    ...prev,
+                    [incidentId]: [...(prev[incidentId] || []), notificationId]
+                }));
+            }
+
+            console.log('[push] Incident ID:', incidentId);
+            console.log('[push] notificationType:', notificationType);
+            console.log('[push] data:', JSON.stringify(data, null, 2));
+
+            // ✅ Only schedule reminders for NEW incident notifications
+            if (incidentId && notificationType === 'incident_alert') { // This will now match!
+                console.log('[push] 🔔 New incident notification received, scheduling 3 auto-reminders');
+
+                await scheduleAutoReminder({
+                    id: incidentId,
+                    title: notification.request.content.title || 'Incident',
+                    description: notification.request.content.body || '',
+                    severity: data.severity || 'medium',
+                    teamId: data.teamId,
+                    maxReminders: 1,
+                    delaySeconds: 10
+                });
+
+                console.log('[push] ✅ Auto-reminders scheduled: 10s, 20s, 30s');
+
+                // ✅ Dismiss the initial notification
+                await Notifications.dismissNotificationAsync(notificationId);
+                console.log('[push] ✅ Initial notification dismissed');
+            }
+        });
+
+        return () => sub.remove();
+    }, []);
+
+    // In your notification response handle
     useEffect(() => {
         const sub = Notifications.addNotificationResponseReceivedListener(async (response) => {
             const { actionIdentifier } = response;
@@ -98,6 +144,7 @@ export const usePushNotifications = () => {
 
                     // Use the ACTUAL notification identifier, not your custom one
                     await Notifications.dismissNotificationAsync(notificationId);
+
                     // ✅ Fetch incident and send status notification
                     try {
                         const incidentResponse = await getIncidentById(incidentId);
@@ -398,7 +445,12 @@ export const usePushNotifications = () => {
                         sound: 'default',
                         title: `${incident.severity.toUpperCase()}: ${incident.title}`,
                         body: incident.description,
-                        data: { incidentId: incident.id, severity: incident.severity },
+                        data: {
+                            incidentId: incident.id,
+                            severity: incident.severity,
+                            type: 'incident_alert', // ✅ ADD THIS LINE
+                            teamId: incident.teamId  // ✅ ADD THIS LINE TOO
+                        },
                         channelId: getChannelBySeverity(incident.severity),
                         categoryId: 'incident-actions',
                         priority: incident.severity === 'critical' ? 'high' : 'default',
@@ -623,6 +675,349 @@ export const usePushNotifications = () => {
         }
     };
 
+    // ✅ Auto-reminder system - sends reminders every 10 seconds, max 3 times
+    const scheduleAutoReminder = async (incident: {
+        id: string;
+        title: string;
+        description: string;
+        severity: 'low' | 'medium' | 'high' | 'critical';
+        teamId?: string | null;
+        maxReminders?: number; // Default 3
+        delaySeconds?: number; // Default 10 seconds
+    }) => {
+        try {
+            const maxReminders = incident.maxReminders || 3;
+            const delaySeconds = incident.delaySeconds || 10;
+            const delayMilliseconds = delaySeconds * 1000;
+
+            console.log(`[push] Scheduling ${maxReminders} auto-reminders for incident ${incident.id} every ${delaySeconds} seconds`);
+
+            // Schedule multiple reminders
+            for (let i = 1; i <= maxReminders; i++) {
+                const delay = delayMilliseconds * i;
+
+                setTimeout(async () => {
+                    await checkAndSendReminder(incident, i, maxReminders);
+                }, delay);
+            }
+
+            return {
+                success: true,
+                totalReminders: maxReminders,
+                intervalSeconds: delaySeconds,
+                firstReminderAt: new Date(Date.now() + delayMilliseconds)
+            };
+        } catch (error) {
+            console.error('[push] Error scheduling auto-reminders:', error);
+            return { success: false, error };
+        }
+    };
+
+// ✅ Check incident status and send reminder if still open
+    const checkAndSendReminder = async (
+        incident: {
+            id: string;
+            title: string;
+            description: string;
+            severity: 'low' | 'medium' | 'high' | 'critical';
+            teamId?: string | null;
+        },
+        reminderNumber: number,
+        totalReminders: number
+    ) => {
+        try {
+            console.log(`[push] Checking incident status for reminder #${reminderNumber}/${totalReminders}:`, incident.id);
+
+            // Fetch current incident status
+            const incidentResponse = await getIncidentById(incident.id);
+
+            if (incidentResponse.httpStatus !== 'OK' || !incidentResponse.data) {
+                console.log('[push] Failed to fetch incident, skipping reminder');
+                return;
+            }
+
+            const currentIncident = incidentResponse.data;
+
+            // Only send reminder if incident is still open
+            if (currentIncident.status !== 'open') {
+                console.log('[push] Incident no longer open, stopping reminders. Current status:', currentIncident.status);
+                await clearStoredNotifications(incident.id);
+                return;
+            }
+
+            // ✅ Dismiss previous reminders before sending new one
+            if (reminderNumber > 1) {
+                console.log(`[push] Dismissing previous reminders for incident:`, incident.id);
+                await clearStoredNotifications(incident.id);
+            }
+
+            console.log(`[push] Incident still open, sending reminder #${reminderNumber}/${totalReminders}`);
+
+            // Get team members to remind
+            let membersToNotify: any[] = [];
+
+            if (incident.teamId) {
+                const response = await getAllCurrentOnCall(incident.teamId);
+                if (response.httpStatus === 'OK' && response.data) {
+                    response.data.forEach((team: any) => {
+                        membersToNotify.push(...team.members);
+                    });
+                }
+            } else {
+                const response = await getAllCurrentOnCall();
+                if (response.httpStatus === 'OK' && response.data) {
+                    response.data.forEach((team: any) => {
+                        membersToNotify.push(...team.members);
+                    });
+                }
+            }
+
+            if (!membersToNotify.length) {
+                console.warn('[push] No team members found to remind');
+                return;
+            }
+
+            let sentCount = 0;
+            let skippedCount = 0;
+
+            for (const member of membersToNotify) {
+                if (!member.pushToken) {
+                    skippedCount++;
+                    continue;
+                }
+
+                try {
+                    // Send reminder notification with reminder count
+                    const message = {
+                        to: member.pushToken,
+                        sound: 'default',
+                        title: `⏰ REMINDER #${reminderNumber}/${totalReminders}: ${incident.severity.toUpperCase()} - ${incident.title}`,
+                        body: `This incident still requires attention. ${incident.description}`,
+                        data: {
+                            incidentId: incident.id,
+                            severity: incident.severity,
+                            type: 'auto_reminder',
+                            reminderNumber: reminderNumber,
+                            totalReminders: totalReminders
+                        },
+                        channelId: getChannelBySeverity(incident.severity),
+                        categoryId: 'incident-actions',
+                        priority: incident.severity === 'critical' ? 'high' : 'default',
+                        badge: reminderNumber,
+                    };
+
+                    const pushResponse = await fetch('https://exp.host/--/api/v2/push/send', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(message),
+                    });
+
+                    if (pushResponse.ok) {
+                        sentCount++;
+                        console.log(`[push] Reminder #${reminderNumber} sent to:`, member.email);
+                    } else {
+                        console.warn(`[push] Failed to send reminder #${reminderNumber} to:`, member.email);
+                    }
+
+                } catch (err) {
+                    console.error(`[push] Error sending reminder #${reminderNumber} to:`, member.email, err);
+                }
+            }
+
+            console.log(`[push] Auto-reminder #${reminderNumber}/${totalReminders} sent: ${sentCount} notifications, ${skippedCount} skipped`);
+
+            // 🔔 Create audit log for auto-reminder
+            const session = await retrieveUserSession();
+            if (session?.id && incident.id) {
+                const auditPayload = {
+                    action: "AUTO_REMINDER_SENT",
+                    incidentId: incident.id,
+                    userId: session.id,
+                    description: `Automatic reminder #${reminderNumber}/${totalReminders} sent to ${sentCount} team member(s) - incident still open`,
+                    details: {
+                        incidentTitle: incident.title,
+                        severity: incident.severity,
+                        currentStatus: currentIncident.status,
+                        reminderNumber: reminderNumber,
+                        totalReminders: totalReminders,
+                        targetedUsers: membersToNotify.length,
+                        sentCount: sentCount,
+                        skippedCount: skippedCount,
+                        reminderTrigger: `auto_10sec_${reminderNumber}`
+                    },
+                    metadata: {
+                        device: Platform.OS,
+                        timestamp: new Date().toISOString(),
+                        notificationType: 'auto_reminder'
+                    }
+                };
+
+                try {
+                    await createAuditLog(auditPayload);
+                    console.log(`✅ Auto-reminder #${reminderNumber} audit log created`);
+                } catch (auditError) {
+                    console.error(`⚠️ Failed to create auto-reminder #${reminderNumber} audit log:`, auditError);
+                }
+            }
+
+            // ✅ CHECK IF THIS IS THE FINAL REMINDER - TRIGGER ESCALATION
+            if (reminderNumber === totalReminders) {
+                console.log(`[push] 🏁 Final reminder (#${reminderNumber}) sent for incident ${incident.id}`);
+
+                // Check one more time if still open before escalating
+                const finalCheck = await getIncidentById(incident.id);
+                if (finalCheck.httpStatus === 'OK' && finalCheck.data?.status === 'open') {
+                    console.log('[push] 🚨 Incident still open after all reminders - triggering escalation');
+
+                    // ✅ Trigger automatic escalation
+                    await triggerAutoEscalation(incident);
+                } else {
+                    console.log('[push] ✅ Incident resolved during reminder cycle - no escalation needed');
+                }
+            }
+
+            return { sent: sentCount, skipped: skippedCount };
+        } catch (error) {
+            console.error(`[push] Error in checkAndSendReminder #${reminderNumber}:`, error);
+            return { sent: 0, skipped: 0 };
+        }
+    };
+
+    // ✅ Trigger automatic escalation after all reminders exhausted
+    const triggerAutoEscalation = async (incident: {
+        id: string;
+        title: string;
+        description: string;
+        severity: 'low' | 'medium' | 'high' | 'critical';
+        teamId?: string | null;
+    }) => {
+        try {
+            console.log('[push] 🚨 Triggering auto-escalation for incident:', incident.id);
+
+            const session = await retrieveUserSession();
+            if (!session?.id) {
+                console.error('[push] Cannot escalate - no user session');
+                return;
+            }
+
+            const teamId = incident.teamId || 'team-1'; // Default team if none specified
+
+            // ✅ Use the oncallController.escalateIncident method
+            const escalateResult = await oncallController.escalateIncident({
+                teamId: teamId,
+                incidentId: incident.id,
+                reason: 'Auto-escalation: No response after 3 reminders (30 seconds)',
+                priority: incident.severity,
+                currentLevel: 0
+            });
+
+            if (escalateResult && escalateResult.success !== false) {
+                console.log('[push] ✅ Auto-escalation successful');
+
+                // Send escalation notifications
+                const escalatedUsers = escalateResult.object?.notifiedUsers ||
+                    escalateResult.notifiedUsers ||
+                    [];
+
+                if (escalatedUsers.length > 0) {
+                    await sendEscalationNotifications(incident, escalatedUsers);
+                }
+
+                // Create audit log
+                const auditPayload = {
+                    action: "AUTO_ESCALATION_TRIGGERED",
+                    incidentId: incident.id,
+                    userId: session.id,
+                    description: `Incident auto-escalated after 3 unanswered reminders (30 seconds)`,
+                    details: {
+                        incidentTitle: incident.title,
+                        severity: incident.severity,
+                        fromLevel: 0,
+                        toLevel: escalateResult.object?.escalatedToLevel || 1,
+                        notifiedCount: escalatedUsers.length,
+                        reason: 'No response after 3 reminders',
+                        teamId: teamId
+                    },
+                    metadata: {
+                        device: Platform.OS,
+                        timestamp: new Date().toISOString(),
+                        triggerType: 'auto_escalation'
+                    }
+                };
+
+                await createAuditLog(auditPayload);
+                console.log('✅ Auto-escalation audit log created');
+
+            } else {
+                console.error('[push] ❌ Auto-escalation failed:', escalateResult);
+            }
+
+        } catch (error) {
+            console.error('[push] Error triggering auto-escalation:', error);
+        }
+    };
+
+// ✅ Send escalation notifications to escalated users
+    const sendEscalationNotifications = async (
+        incident: {
+            id: string;
+            title: string;
+            description: string;
+            severity: 'low' | 'medium' | 'high' | 'critical';
+        },
+        escalatedUsers: any[]
+    ) => {
+        try {
+            console.log('[push] Sending escalation notifications to', escalatedUsers.length, 'users');
+
+            let sentCount = 0;
+
+            for (const user of escalatedUsers) {
+                if (!user.pushToken) {
+                    console.warn('[push] No push token for user:', user.email);
+                    continue;
+                }
+
+                try {
+                    const message = {
+                        to: user.pushToken,
+                        sound: 'default',
+                        title: `🚨 ESCALATED: ${incident.severity.toUpperCase()} - ${incident.title}`,
+                        body: `This incident has been escalated to you after no response. ${incident.description}`,
+                        data: {
+                            incidentId: incident.id,
+                            severity: incident.severity,
+                            type: 'escalation'
+                        },
+                        channelId: getChannelBySeverity(incident.severity),
+                        categoryId: 'incident-actions',
+                        priority: 'high',
+                        badge: 1,
+                    };
+
+                    const pushResponse = await fetch('https://exp.host/--/api/v2/push/send', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(message),
+                    });
+
+                    if (pushResponse.ok) {
+                        sentCount++;
+                        console.log('[push] Escalation notification sent to:', user.email);
+                    } else {
+                        console.warn('[push] Failed to send escalation to:', user.email);
+                    }
+                } catch (err) {
+                    console.error('[push] Error sending escalation to:', user.email, err);
+                }
+            }
+
+            console.log(`[push] ✅ Escalation notifications sent: ${sentCount}/${escalatedUsers.length}`);
+        } catch (error) {
+            console.error('[push] Error sending escalation notifications:', error);
+        }
+    };
+
     const clearIncidentNotifications = async (incidentId: string) => {
         console.log('[push] Clearing notification for incident:', incidentId);
         await Notifications.dismissNotificationAsync(`incident-${incidentId}`);
@@ -644,6 +1039,8 @@ export const usePushNotifications = () => {
         registerDevice,
         sendNotificationToOnCallTeam,
         sendStatusChangeNotification,
+        scheduleAutoReminder,
+        triggerAutoEscalation,
         clearIncidentNotifications,
         getNotificationSettings,
     };
