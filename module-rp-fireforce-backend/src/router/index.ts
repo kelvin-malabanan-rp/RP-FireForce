@@ -15,23 +15,32 @@ import {handleLogin, handleLogout} from "../handlers/auth.handlers";
 import {handleRegisterPushToken, handleSendTestAlert} from "../handlers/push-notification.handlers";
 import {handleFetchIncidentComment} from "../handlers/incident-comment.handlers";
 import {
-	handleCreateOverride,
+	handleCreateOnCallSchedule,
+	handleCreateOverride, handleDeleteOnCallSchedule,
 	handleEscalateIncident,
-	handleGetAllCurrentOnCall,
-	handleGetCurrentOnCall,
+	handleGetAllCurrentOnCall, handleGetAllSchedules,
+	handleGetCurrentOnCall, handleGetEscalationPolicy, handleGetOnCallCalendarData,
 	handleGetOnCallSchedule,
 	handleGetOnCallTeams,
-	handleGetScheduleConfig,
+	handleGetScheduleConfig, handleGetTeamDetails,
 	handleGetUsersForEmergencyOverride,
-	handleGetUserTeam,
+	handleGetUserTeam, handleUpdateOnCallSchedule,
 	handleUpdateScheduleConfig
 } from "../handlers/oncall.handler";
 import {handleGetAllUsers, handleGetUserById} from "../handlers/user-handlers";
 import {
 	handleCreateAuditLog,
 	handleGetAuditLogs,
-	handleGetAuditStats
+	handleGetAuditStats,
+	handleGetIncidentAuditTrail
 } from "../handlers/audit.handlers";
+import {
+	handleSendBulkEmail,
+	handleSendEscalationEmail,
+	handleSendIncidentAlertEmail,
+	handleSendReminderEmail,
+	handleSendStatusChangeEmail, handleSendTestEmail
+} from "../handlers/email.handlers";
 
 export class Router {
 	private env: Env;
@@ -163,6 +172,34 @@ export class Router {
 				return handleGetUserTeam(request, this.env, CORS_HEADERS);
 			}
 
+			if (path === '/api/oncall/schedule' && method === 'POST') {
+				return handleCreateOnCallSchedule(request, this.env, CORS_HEADERS);
+			}
+
+			if (path === '/api/oncall/schedule' && method === 'DELETE') {
+				return handleDeleteOnCallSchedule(request, this.env, CORS_HEADERS);
+			}
+
+			if (path === '/api/oncall/schedules/all' && method === 'GET') {
+				return handleGetAllSchedules(request, this.env, CORS_HEADERS);
+			}
+
+			if (path === '/api/oncall/escalation-policy' && method === 'GET') {
+				return handleGetEscalationPolicy(request, this.env, CORS_HEADERS);
+			}
+
+			if (path === '/api/oncall/calendar' && method === 'GET') {
+				return handleGetOnCallCalendarData(request, this.env, CORS_HEADERS);
+			}
+
+			if (path === '/api/oncall/team/details' && method === 'GET') {
+				return handleGetTeamDetails(request, this.env, CORS_HEADERS);
+			}
+
+			if (path === '/api/oncall/schedule' && method === 'PUT') {
+				return handleUpdateOnCallSchedule(request, this.env, CORS_HEADERS);
+			}
+
 			if (path === '/api/users/emergency-override' && method === 'POST') {
 				return handleGetUsersForEmergencyOverride(request, this.env, CORS_HEADERS);
 			}
@@ -188,9 +225,14 @@ export class Router {
 				return handleCreateAuditLog(request, this.env, CORS_HEADERS);
 			}
 
-			// Get audit logs with filtering
+			// Get all audit logs with filtering
 			if (path === '/api/audit/logs' && method === 'GET') {
 				return handleGetAuditLogs(request, this.env, CORS_HEADERS);
+			}
+
+			// Get audit trail for specific incident
+			if (path.match(/^\/api\/audit\/incidents\/[^/]+\/trail$/) && method === 'GET') {
+				return handleGetIncidentAuditTrail(request, this.env, CORS_HEADERS);
 			}
 
 			// Get audit statistics
@@ -198,30 +240,29 @@ export class Router {
 				return handleGetAuditStats(request, this.env, CORS_HEADERS);
 			}
 
-			// // Record notification response
-			// if (path.match(/^\/api\/audit\/notifications\/[^/]+\/response$/) && method === 'POST') {
-			// 	return recordNotificationResponseHandler(request, this.env, CORS_HEADERS);
-			// }
-			//
-			// // Get notification history for an incident
-			// if (path.match(/^\/api\/audit\/incidents\/[^/]+\/notifications$/) && method === 'GET') {
-			// 	return getNotificationHistoryHandler(request, this.env, CORS_HEADERS);
-			// }
-			//
-			// // Get audit trail for an incident
-			// if (path.match(/^\/api\/audit\/incidents\/[^/]+\/trail$/) && method === 'GET') {
-			// 	return getAuditTrailHandler(request, this.env, CORS_HEADERS);
-			// }
-			//
-			// // Get full incident audit (comprehensive)
-			// if (path.match(/^\/api\/audit\/incidents\/[^/]+\/full$/) && method === 'GET') {
-			// 	return getFullIncidentAuditHandler(request, this.env, CORS_HEADERS);
-			// }
-			//
-			// // Export audit trail as CSV
-			// if (path.match(/^\/api\/audit\/incidents\/[^/]+\/export\/csv$/) && method === 'GET') {
-			// 	return exportAuditTrailAsCSVHandler(request, this.env, CORS_HEADERS);
-			// }
+			if (path === '/api/email/incident-alert' && method === 'POST') {
+				return handleSendIncidentAlertEmail(request, this.env, CORS_HEADERS);
+			}
+
+			if (path === '/api/email/status-change' && method === 'POST') {
+				return handleSendStatusChangeEmail(request, this.env, CORS_HEADERS);
+			}
+
+			if (path === '/api/email/reminder' && method === 'POST') {
+				return handleSendReminderEmail(request, this.env, CORS_HEADERS);
+			}
+
+			if (path === '/api/email/escalation' && method === 'POST') {
+				return handleSendEscalationEmail(request, this.env, CORS_HEADERS);
+			}
+
+			if (path === '/api/email/bulk' && method === 'POST') {
+				return handleSendBulkEmail(request, this.env, CORS_HEADERS);
+			}
+
+			if (path === '/api/email/test' && method === 'POST') {
+				return handleSendTestEmail(request, this.env, CORS_HEADERS);
+			}
 
 			// 404 Not Found
 			return new Response(JSON.stringify({ error: 'Not found' }), {

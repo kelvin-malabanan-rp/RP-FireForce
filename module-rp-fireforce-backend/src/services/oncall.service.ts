@@ -768,6 +768,283 @@ export class OnCallService {
     `).bind(notificationId, alert.id, userId, type).run();
 	}
 
-	//Get Scheduled Oncall TODAY!!!!!
+	/**
+	 * Create a new on-call schedule
+	 */
+	async createSchedule(params: {
+		teamId: string;
+		name: string;
+		rotationType: 'daily' | 'weekly' | 'biweekly' | 'monthly';
+		rotationLengthHours: number;
+		rotationStartISO: string;
+		members: Array<{
+			userId: string;
+			role: 'primary' | 'backup' | 'escalation';
+			orderIndex: number;
+			isActive: boolean;
+		}>;
+	}): Promise<{ scheduleId: string; memberCount: number }> {
+		try {
+			const { teamId, name, rotationType, rotationLengthHours, rotationStartISO, members } = params;
 
+			// Generate schedule ID
+			const scheduleId = crypto.randomUUID();
+
+			// Create schedule record
+			await this.dbService.db.prepare(`
+            INSERT INTO oncall_schedules
+            (id, team_id, name, rotation_type, rotation_start, rotation_length_hours, is_active, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        `).bind(
+				scheduleId,
+				teamId,
+				name,
+				rotationType,
+				rotationStartISO,
+				rotationLengthHours
+			).run();
+
+			// Deactivate other schedules for this team (only one active at a time)
+			await this.dbService.db.prepare(`
+            UPDATE oncall_schedules
+            SET is_active = 0
+            WHERE team_id = ? AND id != ?
+        `).bind(teamId, scheduleId).run();
+
+			// Add team members
+			for (const member of members) {
+				const memberId = crypto.randomUUID();
+				await this.dbService.db.prepare(`
+                INSERT INTO oncall_team_members
+                (id, team_id, user_id, role, order_index, is_active, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            `).bind(
+					memberId,
+					teamId,
+					member.userId,
+					member.role,
+					member.orderIndex,
+					member.isActive ? 1 : 0
+				).run();
+			}
+
+			console.log('[oncall-service] ✅ Schedule created:', scheduleId);
+
+			return {
+				scheduleId,
+				memberCount: members.length
+			};
+		} catch (error) {
+			console.error('[oncall-service] Error creating schedule:', error);
+			throw error;
+		}
+	}
+
+	/**
+	 * Deactivate a schedule
+	 */
+	async deleteSchedule(scheduleId: string): Promise<void> {
+		try {
+			await this.dbService.db.prepare(`
+            UPDATE oncall_schedules
+            SET is_active = 0, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        `).bind(scheduleId).run();
+
+			console.log('[oncall-service] ✅ Schedule deactivated:', scheduleId);
+		} catch (error) {
+			console.error('[oncall-service] Error deactivating schedule:', error);
+			throw error;
+		}
+	}
+
+	/**
+	 * Get all schedules with optional filters
+	 */
+	async getAllSchedules(params?: {
+		teamId?: string;
+		includeInactive?: boolean;
+	}): Promise<any[]> {
+		try {
+			let sql = `
+            SELECT
+                s.*,
+                t.name as team_name,
+                t.timezone,
+                COUNT(DISTINCT tm.id) as member_count
+            FROM oncall_schedules s
+            JOIN oncall_teams t ON s.team_id = t.id
+            LEFT JOIN oncall_team_members tm ON tm.team_id = s.team_id
+            WHERE 1=1
+        `;
+
+			const queryParams: any[] = [];
+
+			if (params?.teamId) {
+				sql += ' AND s.team_id = ?';
+				queryParams.push(params.teamId);
+			}
+
+			if (!params?.includeInactive) {
+				sql += ' AND s.is_active = 1';
+			}
+
+			sql += ' GROUP BY s.id, t.name, t.timezone ORDER BY s.created_at DESC';
+
+			const { results } = await this.dbService.db.prepare(sql).bind(...queryParams).all();
+
+			return results as any[];
+		} catch (error) {
+			console.error('[oncall-service] Error getting all schedules:', error);
+			throw error;
+		}
+	}
+
+	/**
+	 * Get calendar data for teams
+	 */
+	async getCalendarData(days: number = 30, teamId?: string): Promise<any[]> {
+		try {
+			// Get all teams or specific team
+			const teams = await this.getOnCallTeams();
+
+			const filteredTeams = teamId
+				? teams.filter(t => t.id === teamId)
+				: teams;
+
+			// Build calendar data for each team
+			const calendarData = await Promise.all(
+				filteredTeams.map(async (team) => {
+					const schedule = await this.getOnCallSchedule(team.id, days);
+
+					return {
+						teamId: team.id,
+						teamName: team.name,
+						timezone: team.timezone,
+						members: team.members,
+						memberCount: team.members.length,
+						schedule: schedule
+					};
+				})
+			);
+
+			return calendarData;
+		} catch (error) {
+			console.error('[oncall-service] Error building calendar data:', error);
+			throw error;
+		}
+	}
+
+	/**
+	 * Update an existing on-call schedule
+	 */
+	async updateSchedule(params: {
+		scheduleId: string;
+		name?: string;
+		rotationType?: 'daily' | 'weekly' | 'biweekly' | 'monthly';
+		rotationLengthHours?: number;
+		rotationStartISO?: string;
+		isActive?: boolean;
+		members?: Array<{
+			userId: string;
+			role: 'primary' | 'backup' | 'escalation';
+			orderIndex: number;
+			isActive: boolean;
+		}>;
+	}): Promise<void> {
+		try {
+			const { scheduleId, name, rotationType, rotationLengthHours, rotationStartISO, isActive, members } = params;
+
+			// Build dynamic update query
+			const updates: string[] = [];
+			const queryParams: any[] = [];
+
+			if (name !== undefined) {
+				updates.push('name = ?');
+				queryParams.push(name);
+			}
+
+			if (rotationType !== undefined) {
+				updates.push('rotation_type = ?');
+				queryParams.push(rotationType);
+			}
+
+			if (rotationLengthHours !== undefined) {
+				updates.push('rotation_length_hours = ?');
+				queryParams.push(rotationLengthHours);
+			}
+
+			if (rotationStartISO !== undefined) {
+				updates.push('rotation_start = ?');
+				queryParams.push(rotationStartISO);
+			}
+
+			if (isActive !== undefined) {
+				updates.push('is_active = ?');
+				queryParams.push(isActive ? 1 : 0);
+			}
+
+			// Always update the updated_at timestamp
+			updates.push('updated_at = CURRENT_TIMESTAMP');
+
+			// Update schedule if there are changes
+			if (updates.length > 1) { // More than just updated_at
+				queryParams.push(scheduleId);
+
+				const sql = `
+                UPDATE oncall_schedules
+                SET ${updates.join(', ')}
+                WHERE id = ?
+            `;
+
+				await this.dbService.db.prepare(sql).bind(...queryParams).run();
+				console.log('[oncall-service] ✅ Schedule updated:', scheduleId);
+			}
+
+			// Update members if provided
+			if (members && Array.isArray(members)) {
+				// Get team_id from schedule
+				const schedule = await this.dbService.db.prepare(
+					'SELECT team_id FROM oncall_schedules WHERE id = ?'
+				).bind(scheduleId).first();
+
+				if (!schedule) {
+					throw new Error('Schedule not found');
+				}
+
+				const teamId = (schedule as any).team_id;
+
+				// Delete existing members for this team
+				await this.dbService.db.prepare(
+					'DELETE FROM oncall_team_members WHERE team_id = ?'
+				).bind(teamId).run();
+
+				// Insert new members
+				for (const member of members) {
+					const memberId = crypto.randomUUID();
+					await this.dbService.db.prepare(`
+                    INSERT INTO oncall_team_members
+                    (id, team_id, user_id, role, order_index, is_active, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                `).bind(
+						memberId,
+						teamId,
+						member.userId,
+						member.role,
+						member.orderIndex,
+						member.isActive ? 1 : 0
+					).run();
+				}
+
+				console.log('[oncall-service] ✅ Team members updated:', members.length);
+
+				// Refresh current assignments after member changes
+				await this.refreshCurrentAssignments(teamId);
+			}
+
+		} catch (error) {
+			console.error('[oncall-service] Error updating schedule:', error);
+			throw error;
+		}
+	}
 }

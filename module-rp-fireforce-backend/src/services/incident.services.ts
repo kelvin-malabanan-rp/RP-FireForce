@@ -112,14 +112,41 @@ export class IncidentService {
 		const result = await this.dbService.insertIncident(incident);
 		console.log('New incident created:', result.id);
 
+		// ✅ Get on-call users and send both push AND email notifications
 		try {
+			const onCallResponse = await this.oncallService.getAllCurrentOnCall();
+
+			if (onCallResponse && Array.isArray(onCallResponse)) {
+				for (const team of onCallResponse) {
+					for (const member of team.members || []) {
+						// Send email notification
+						try {
+							await this.emailService.sendIncidentAlert({
+								to: member.email,
+								incidentId: result.id,
+								title: incident.title!,
+								description: incident.description!,
+								severity: incident.severity!,
+								reportedBy: incident.reported_by!,
+								timestamp: incident.timestamp!
+							});
+							console.log('[email] ✅ Sent to:', member.email);
+						} catch (emailError) {
+							console.error('[email] ❌ Failed to send to:', member.email, emailError);
+						}
+					}
+				}
+			}
+
+			// Send push notifications
 			await this.pushService.sendIncidentAlert({
 				...incident,
 				id: result.id
 			} as Incident);
 			console.log('Push notifications sent for incident:', incident.title);
+
 		} catch (error) {
-			console.error('Failed to send push notifications:', error);
+			console.error('Failed to send notifications:', error);
 		}
 
 		return { action: 'created', incident: incident as Incident };
@@ -139,6 +166,28 @@ export class IncidentService {
 		`;
 		await this.dbService.db.prepare(sql).bind(resolvedBy ?? null, incidentId).run();
 
+		// Get incident details
+		const incident = await this.dbService.getIncidentById(incidentId);
+
+		// ✅ Send status change emails to all notified users
+		const notifiedUsers = await this.getNotifiedUsers(incidentId);
+		for (const user of notifiedUsers) {
+			try {
+				await this.emailService.sendStatusChangeEmail({
+					to: user.email,
+					incidentId: incident.id,
+					title: incident.title,
+					status: 'resolved',
+					changedBy: resolvedBy || 'System',
+					timestamp: new Date().toISOString()
+				});
+				console.log('[email] ✅ Resolution email sent to:', user.email);
+			} catch (emailError) {
+				console.error('[email] ❌ Failed to send resolution email:', emailError);
+			}
+		}
+
+		// Send push notifications
 		const notificationResult = await this.pushService.sendAllClear(incidentId);
 
 		return {
@@ -147,6 +196,18 @@ export class IncidentService {
 			notifiedCount: notificationResult?.notifiedCount || 0,
 			users: notificationResult?.users || []
 		};
+	}
+
+// ✅ Helper to get all users who were notified about an incident
+	private async getNotifiedUsers(incidentId: string): Promise<any[]> {
+		const result = await this.dbService.db.prepare(`
+        SELECT DISTINCT u.*
+        FROM incident_notifications n
+        JOIN users u ON n.user_id = u.id
+        WHERE n.incident_id = ?
+    `).bind(incidentId).all();
+
+		return result.results || [];
 	}
 
 	// ──────────────────────────────────────────────
@@ -180,6 +241,7 @@ export class IncidentService {
 
 		const result = await this.dbService.insertIncident(incidentData);
 
+		// ✅ Send notifications (both push and email)
 		if (data.notify_users && Array.isArray(data.notify_users) && data.notify_users.length > 0) {
 			await this.notifySpecificUsers(result.id, data.notify_users);
 		} else {
@@ -197,10 +259,21 @@ export class IncidentService {
 			const user = await this.dbService.getUserById(userId);
 			if (user) {
 				try {
-					await this.emailService.sendIncidentAlert(incident, user.email);
-					await this.trackNotification(incidentId, userId, 'initial');
+					// ✅ Send email
+					await this.emailService.sendIncidentAlert({
+						to: user.email,
+						incidentId: incident.id,
+						title: incident.title,
+						description: incident.description,
+						severity: incident.severity,
+						reportedBy: incident.reported_by,
+						timestamp: incident.timestamp
+					});
+
+					await this.trackNotification(incidentId, userId, 'email');
+					console.log('[email] ✅ Sent to:', user.email);
 				} catch (error) {
-					console.error(`Failed to notify user ${userId}:`, error);
+					console.error(`[email] ❌ Failed to notify user ${userId}:`, error);
 				}
 			}
 		}
@@ -214,29 +287,51 @@ export class IncidentService {
 		}
 
 		try {
-			const teams = await this.oncallService.getUserTeam(incident.reportedBy);
+			const teams = await this.oncallService.getUserTeam(incident.reported_by);
+
 			for (const team of teams) {
 				const current = await this.oncallService.getAllCurrentOnCall(team.id);
 
+				// Notify primary
 				if (current?.primary) {
 					try {
-						await this.emailService.sendIncidentAlert(incident, current.primary.email);
-						await this.trackNotification(incidentId, current.primary.id, 'initial');
+						await this.emailService.sendIncidentAlert({
+							to: current.primary.email,
+							incidentId: incident.id,
+							title: incident.title,
+							description: incident.description,
+							severity: incident.severity,
+							reportedBy: incident.reported_by,
+							timestamp: incident.timestamp
+						});
+						await this.trackNotification(incidentId, current.primary.id, 'email');
+						console.log('[email] ✅ Sent to primary:', current.primary.email);
 					} catch (err) {
-						console.error(`Failed to notify primary:`, err);
+						console.error(`[email] ❌ Failed to notify primary:`, err);
 					}
 				}
 
+				// Notify backup
 				if (current?.backup) {
 					try {
-						await this.emailService.sendIncidentAlert(incident, current.backup.email);
-						await this.trackNotification(incidentId, current.backup.id, 'initial');
+						await this.emailService.sendIncidentAlert({
+							to: current.backup.email,
+							incidentId: incident.id,
+							title: incident.title,
+							description: incident.description,
+							severity: incident.severity,
+							reportedBy: incident.reported_by,
+							timestamp: incident.timestamp
+						});
+						await this.trackNotification(incidentId, current.backup.id, 'email');
+						console.log('[email] ✅ Sent to backup:', current.backup.email);
 					} catch (err) {
-						console.error(`Failed to notify backup:`, err);
+						console.error(`[email] ❌ Failed to notify backup:`, err);
 					}
 				}
 			}
 
+			// Send push notifications
 			await this.pushService.sendIncidentAlert(incident);
 			console.log('Push notifications sent for incident:', incidentId);
 		} catch (error) {
@@ -247,9 +342,15 @@ export class IncidentService {
 	// ──────────────────────────────────────────────
 	private async trackNotification(incidentId: string, userId: string, type: string): Promise<void> {
 		await this.dbService.db.prepare(`
-			INSERT INTO incident_notifications (id, incident_id, user_id, notification_type, sent_at)
-			VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-		`).bind(crypto.randomUUID(), incidentId, userId, type).run();
+			INSERT INTO incident_notifications (id, incident_id, user_id, notification_type, kind, sent_at, delivered_at)
+			VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+		`).bind(
+			crypto.randomUUID(),
+			incidentId,
+			userId,
+			type,
+			'email'
+		).run();
 	}
 
 	// ──────────────────────────────────────────────

@@ -10,6 +10,7 @@ import { retrieveUserSession } from '@/constants/local-storage';
 import {getAllCurrentOnCall, getUsersForEmergencyOverride, oncallController} from '@/api/oncall-schedule-controller';
 import {createAuditLog} from "@/api/audit-trail";
 import {getIncidentById} from "@/api/incident-controller";
+import {sendEscalationEmail, sendReminderEmail} from "@/api/email-controller";
 
 export const usePushNotifications = () => {
     const [expoPushToken, setExpoPushToken] = useState<string | null>(null);
@@ -815,6 +816,23 @@ export const usePushNotifications = () => {
                     if (pushResponse.ok) {
                         sentCount++;
                         console.log(`[push] Reminder #${reminderNumber} sent to:`, member.email);
+
+                        // ✅ Also send email reminder
+                        try {
+                            await sendReminderEmail({
+                                to: member.email,
+                                incidentId: incident.id,
+                                title: incident.title,
+                                description: incident.description,
+                                severity: incident.severity,
+                                reminderNumber: reminderNumber,
+                                totalReminders: totalReminders
+                            });
+                            console.log(`[email] ✅ Reminder email sent to:`, member.email);
+                        } catch (emailError) {
+                            console.error(`[email] ❌ Email failed for:`, member.email, emailError);
+                            // Don't fail the reminder if email fails
+                        }
                     } else {
                         console.warn(`[push] Failed to send reminder #${reminderNumber} to:`, member.email);
                     }
@@ -1004,6 +1022,23 @@ export const usePushNotifications = () => {
                     if (pushResponse.ok) {
                         sentCount++;
                         console.log('[push] Escalation notification sent to:', user.email);
+
+                        // ✅ Also send escalation email
+                        try {
+                            await sendEscalationEmail({
+                                to: user.email,
+                                incidentId: incident.id,
+                                title: incident.title,
+                                description: incident.description,
+                                severity: incident.severity,
+                                escalatedFrom: 0,
+                                escalatedTo: 1,
+                                reason: 'No response after 3 reminders'
+                            });
+                            console.log(`[email] ✅ Escalation email sent to:`, user.email);
+                        } catch (emailError) {
+                            console.error(`[email] ❌ Escalation email failed for:`, user.email, emailError);
+                        }
                     } else {
                         console.warn('[push] Failed to send escalation to:', user.email);
                     }

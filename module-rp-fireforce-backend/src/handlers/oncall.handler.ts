@@ -112,7 +112,7 @@ export async function handleGetUserTeam(
 		const response: ApiResponse<typeof team> = {
 			httpStatus: "OK",
 			message: `Retrieved team successfully`,
-			data: team  // Single object, not array
+			data: team
 		};
 
 		console.log(`Retrieved team for user: ${userId}`);
@@ -165,7 +165,6 @@ export async function handleCreateOverride(request: Request, env: Env, headers: 
 
 		const svc = new OnCallService(env);
 
-		// Service locates the active assignment in the given window.
 		const active = await svc.findActiveAssignmentForWindow(
 			body.teamId,
 			body.role,
@@ -225,12 +224,6 @@ export async function handleEscalateIncident(request: Request, env: Env, headers
 	}
 }
 
-/* ------------------------- NEW: Schedule Config -------------------------- */
-
-/**
- * GET /api/oncall/schedule/config?teamId=...
- * Returns rotation settings + ordered members for Manage Schedule screen.
- */
 export async function handleGetScheduleConfig(url: URL, env: Env, headers: HeadersInit): Promise<Response> {
 	try {
 		const teamId = url.searchParams.get('teamId');
@@ -245,17 +238,6 @@ export async function handleGetScheduleConfig(url: URL, env: Env, headers: Heade
 	}
 }
 
-/**
- * PUT /api/oncall/schedule/config
- * Body:
- * {
- *   teamId: string,
- *   rotationType: 'daily'|'weekly'|'biweekly'|'monthly',
- *   rotationLengthHours: number,
- *   rotationStartISO: string,
- *   members: [{ userId, role, orderIndex, isActive }]
- * }
- */
 export async function handleUpdateScheduleConfig(request: Request, env: Env, headers: HeadersInit): Promise<Response> {
 	try {
 		const body = await request.json() as {
@@ -279,7 +261,6 @@ export async function handleUpdateScheduleConfig(request: Request, env: Env, hea
 			members: body.members,
 		});
 
-		// Optionally re-materialize current assignment after changes:
 		await svc.refreshCurrentAssignments(body.teamId).catch(() => { /* non-fatal */ });
 
 		return json({ success: true }, { headers });
@@ -289,8 +270,6 @@ export async function handleUpdateScheduleConfig(request: Request, env: Env, hea
 	}
 }
 
-
-// USER EMAIL FOR EMERGENCY OVERRIDE!!!
 export async function handleGetUsersForEmergencyOverride(
 	request: Request,
 	env: Env,
@@ -327,6 +306,453 @@ export async function handleGetUsersForEmergencyOverride(
 			httpStatus: "INTERNAL_SERVER_ERROR",
 			message: "Failed to get users for emergency override",
 			data: null
+		}, {
+			status: 500,
+			headers
+		});
+	}
+}
+
+// ✅ NEW: Get escalation policy for a team
+export async function handleGetEscalationPolicy(
+	request: Request,
+	env: Env,
+	headers: HeadersInit
+): Promise<Response> {
+	try {
+		const url = new URL(request.url);
+		const teamId = url.searchParams.get('teamId');
+
+		if (!teamId) {
+			return json({
+				success: false,
+				httpStatus: 'ERROR',
+				error: 'teamId is required'
+			}, {
+				status: 400,
+				headers
+			});
+		}
+
+		const svc = new OnCallService(env);
+		const policy = await svc.getEscalationPolicy(teamId);
+
+		if (!policy) {
+			return json({
+				success: false,
+				httpStatus: 'NOT_FOUND',
+				message: 'No active escalation policy found for this team'
+			}, {
+				status: 404,
+				headers
+			});
+		}
+
+		return json({
+			success: true,
+			httpStatus: 'OK',
+			data: policy
+		}, {
+			headers
+		});
+	} catch (err) {
+		console.error('Error getting escalation policy:', err);
+		return json({
+			success: false,
+			httpStatus: 'ERROR',
+			error: 'Failed to get escalation policy',
+			message: (err as Error).message
+		}, {
+			status: 500,
+			headers
+		});
+	}
+}
+
+// ✅ NEW: Get all on-call data for calendar view
+export async function handleGetOnCallCalendarData(
+	request: Request,
+	env: Env,
+	headers: HeadersInit
+): Promise<Response> {
+	try {
+		const url = new URL(request.url);
+		const days = parseInt(url.searchParams.get('days') || '30');
+		const teamId = url.searchParams.get('teamId') || undefined;
+
+		console.log('[oncall-handler] Getting calendar data for', days, 'days');
+
+		const svc = new OnCallService(env);
+
+		// Get all teams with their members
+		const teams = await svc.getOnCallTeams();
+
+		// Build calendar data for each team
+		const calendarData = await Promise.all(
+			teams.map(async (team) => {
+				// Skip if filtering by specific team and this isn't it
+				if (teamId && team.id !== teamId) return null;
+
+				// Get schedule for this team
+				const schedule = await svc.getOnCallSchedule(team.id, days);
+
+				return {
+					teamId: team.id,
+					teamName: team.name,
+					timezone: team.timezone,
+					members: team.members,
+					schedule: schedule
+				};
+			})
+		);
+
+		// Filter out null entries
+		const filteredData = calendarData.filter(data => data !== null);
+
+		return json({
+			success: true,
+			httpStatus: 'OK',
+			data: filteredData,
+			metadata: {
+				totalTeams: filteredData.length,
+				days: days,
+				generatedAt: new Date().toISOString()
+			}
+		}, {
+			headers
+		});
+	} catch (err) {
+		console.error('Error getting calendar data:', err);
+		return json({
+			success: false,
+			httpStatus: 'ERROR',
+			error: 'Failed to get calendar data',
+			message: (err as Error).message
+		}, {
+			status: 500,
+			headers
+		});
+	}
+}
+
+// ✅ NEW: Get detailed team with members and current assignments
+export async function handleGetTeamDetails(
+	request: Request,
+	env: Env,
+	headers: HeadersInit
+): Promise<Response> {
+	try {
+		const url = new URL(request.url);
+		const teamId = url.searchParams.get('teamId');
+
+		if (!teamId) {
+			return json({
+				success: false,
+				httpStatus: 'ERROR',
+				error: 'teamId is required'
+			}, {
+				status: 400,
+				headers
+			});
+		}
+
+		const svc = new OnCallService(env);
+
+		// Get team info
+		const teams = await svc.getOnCallTeams();
+		const team = teams.find(t => t.id === teamId);
+
+		if (!team) {
+			return json({
+				success: false,
+				httpStatus: 'NOT_FOUND',
+				error: 'Team not found'
+			}, {
+				status: 404,
+				headers
+			});
+		}
+
+		// Get current on-call for this team
+		const currentOnCall = await svc.getCurrentOnCallByTeamId(teamId);
+
+		// Get schedule config
+		const scheduleConfig = await svc.getScheduleConfig(teamId);
+
+		return json({
+			success: true,
+			httpStatus: 'OK',
+			data: {
+				team: {
+					id: team.id,
+					name: team.name,
+					timezone: team.timezone,
+					memberCount: team.members.length
+				},
+				members: team.members,
+				currentOnCall: currentOnCall,
+				scheduleConfig: scheduleConfig
+			}
+		}, {
+			headers
+		});
+	} catch (err) {
+		console.error('Error getting team details:', err);
+		return json({
+			success: false,
+			httpStatus: 'ERROR',
+			error: 'Failed to get team details',
+			message: (err as Error).message
+		}, {
+			status: 500,
+			headers
+		});
+	}
+}
+// handlers/oncall.handlers.ts
+
+// ✅ UPDATED: Create a new on-call schedule (using service)
+export async function handleCreateOnCallSchedule(
+	request: Request,
+	env: Env,
+	headers: HeadersInit
+): Promise<Response> {
+	try {
+		const body = await request.json() as {
+			teamId: string;
+			name?: string;
+			rotationType: 'daily' | 'weekly' | 'biweekly' | 'monthly';
+			rotationLengthHours: number;
+			rotationStartISO: string;
+			members: Array<{
+				userId: string;
+				role: 'primary' | 'backup' | 'escalation';
+				orderIndex: number;
+				isActive: boolean;
+			}>;
+		};
+
+		// Validation
+		if (!body?.teamId || !body?.rotationType || !body?.rotationLengthHours || !body?.rotationStartISO) {
+			return json({
+				success: false,
+				httpStatus: 'ERROR',
+				error: 'Missing required fields',
+				required: ['teamId', 'rotationType', 'rotationLengthHours', 'rotationStartISO']
+			}, {
+				status: 400,
+				headers
+			});
+		}
+
+		if (!Array.isArray(body.members) || body.members.length === 0) {
+			return json({
+				success: false,
+				httpStatus: 'ERROR',
+				error: 'At least one team member is required'
+			}, {
+				status: 400,
+				headers
+			});
+		}
+
+		console.log('[oncall-handler] Creating new schedule for team:', body.teamId);
+
+		const svc = new OnCallService(env);
+
+		const scheduleName = body.name || `${body.rotationType}-rotation-${Date.now()}`;
+
+		// ✅ Use service method instead of direct SQL
+		const result = await svc.createSchedule({
+			teamId: body.teamId,
+			name: scheduleName,
+			rotationType: body.rotationType,
+			rotationLengthHours: body.rotationLengthHours,
+			rotationStartISO: body.rotationStartISO,
+			members: body.members
+		});
+
+		// Generate initial current assignments
+		await svc.refreshCurrentAssignments(body.teamId);
+
+		return json({
+			success: true,
+			httpStatus: 'OK',
+			data: {
+				scheduleId: result.scheduleId,
+				teamId: body.teamId,
+				name: scheduleName,
+				rotationType: body.rotationType,
+				memberCount: result.memberCount
+			},
+			message: 'On-call schedule created successfully'
+		}, {
+			status: 201,
+			headers
+		});
+	} catch (err) {
+		console.error('Error creating on-call schedule:', err);
+		return json({
+			success: false,
+			httpStatus: 'ERROR',
+			error: 'Failed to create on-call schedule',
+			message: (err as Error).message
+		}, {
+			status: 500,
+			headers
+		});
+	}
+}
+
+// ✅ UPDATED: Delete schedule (using service)
+export async function handleDeleteOnCallSchedule(
+	request: Request,
+	env: Env,
+	headers: HeadersInit
+): Promise<Response> {
+	try {
+		const url = new URL(request.url);
+		const scheduleId = url.searchParams.get('scheduleId');
+
+		if (!scheduleId) {
+			return json({
+				success: false,
+				httpStatus: 'ERROR',
+				error: 'scheduleId is required'
+			}, {
+				status: 400,
+				headers
+			});
+		}
+
+		console.log('[oncall-handler] Deactivating schedule:', scheduleId);
+
+		const svc = new OnCallService(env);
+		await svc.deleteSchedule(scheduleId);
+
+		return json({
+			success: true,
+			httpStatus: 'OK',
+			message: 'Schedule deactivated successfully'
+		}, {
+			headers
+		});
+	} catch (err) {
+		console.error('Error deleting schedule:', err);
+		return json({
+			success: false,
+			httpStatus: 'ERROR',
+			error: 'Failed to delete schedule',
+			message: (err as Error).message
+		}, {
+			status: 500,
+			headers
+		});
+	}
+}
+
+// ✅ UPDATED: Get all schedules (using service)
+export async function handleGetAllSchedules(
+	request: Request,
+	env: Env,
+	headers: HeadersInit
+): Promise<Response> {
+	try {
+		const url = new URL(request.url);
+		const teamId = url.searchParams.get('teamId') || undefined;
+		const includeInactive = url.searchParams.get('includeInactive') === 'true';
+
+		const svc = new OnCallService(env);
+		const schedules = await svc.getAllSchedules({ teamId, includeInactive });
+
+		return json({
+			success: true,
+			httpStatus: 'OK',
+			data: schedules,
+			count: schedules.length
+		}, {
+			headers
+		});
+	} catch (err) {
+		console.error('Error getting all schedules:', err);
+		return json({
+			success: false,
+			httpStatus: 'ERROR',
+			error: 'Failed to get schedules',
+			message: (err as Error).message
+		}, {
+			status: 500,
+			headers
+		});
+	}
+}
+
+// ✅ NEW: Update an existing on-call schedule
+export async function handleUpdateOnCallSchedule(
+	request: Request,
+	env: Env,
+	headers: HeadersInit
+): Promise<Response> {
+	try {
+		const body = await request.json() as {
+			scheduleId: string;
+			name?: string;
+			rotationType?: 'daily' | 'weekly' | 'biweekly' | 'monthly';
+			rotationLengthHours?: number;
+			rotationStartISO?: string;
+			isActive?: boolean;
+			members?: Array<{
+				userId: string;
+				role: 'primary' | 'backup' | 'escalation';
+				orderIndex: number;
+				isActive: boolean;
+			}>;
+		};
+
+		// Validation
+		if (!body?.scheduleId) {
+			return json({
+				success: false,
+				httpStatus: 'ERROR',
+				error: 'scheduleId is required'
+			}, {
+				status: 400,
+				headers
+			});
+		}
+
+		// Check if at least one field to update is provided
+		if (!body.name && !body.rotationType && !body.rotationLengthHours &&
+			!body.rotationStartISO && body.isActive === undefined && !body.members) {
+			return json({
+				success: false,
+				httpStatus: 'ERROR',
+				error: 'At least one field to update is required'
+			}, {
+				status: 400,
+				headers
+			});
+		}
+
+		console.log('[oncall-handler] Updating schedule:', body.scheduleId);
+
+		const svc = new OnCallService(env);
+		await svc.updateSchedule(body);
+
+		return json({
+			success: true,
+			httpStatus: 'OK',
+			message: 'Schedule updated successfully'
+		}, {
+			headers
+		});
+	} catch (err) {
+		console.error('Error updating schedule:', err);
+		return json({
+			success: false,
+			httpStatus: 'ERROR',
+			error: 'Failed to update schedule',
+			message: (err as Error).message
 		}, {
 			status: 500,
 			headers

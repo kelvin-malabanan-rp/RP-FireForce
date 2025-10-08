@@ -217,5 +217,72 @@ export const getUsersForEmergencyOverride = async (
     }
 };
 
+
+/**
+ * Get calendar data for all teams
+ */
+export const getOnCallCalendarData = async (params?: {
+    days?: number;
+    teamId?: string;
+}): Promise<API_RESPONSE<any[]>> => {
+    try {
+        const queryParams = new URLSearchParams();
+        if (params?.days) queryParams.append('days', params.days.toString());
+        if (params?.teamId) queryParams.append('teamId', params.teamId);
+
+        const url = `${BASE_URL_DEV}/api/oncall/calendar${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+
+        const response = await apiManager.get<API_RESPONSE<any[]>>(url);
+        return response.data;
+    } catch (error) {
+        console.error("Error fetching calendar data:", error);
+        throw error;
+    }
+};
+
+/**
+ * Get detailed team information
+ */
+export const getTeamDetails = async (teamId: string): Promise<API_RESPONSE<any>> => {
+    try {
+        const response = await apiManager.get<API_RESPONSE<any>>(
+            `${BASE_URL_DEV}/api/oncall/team/details?teamId=${teamId}`
+        );
+        return response.data;
+    } catch (error) {
+        console.error("Error fetching team details:", error);
+        throw error;
+    }
+};
+
+/**
+ * Update on-call schedule
+ */
+export const updateOnCallSchedule = async (params: {
+    scheduleId: string;
+    name?: string;
+    rotationType?: 'daily' | 'weekly' | 'biweekly' | 'monthly';
+    rotationLengthHours?: number;
+    rotationStartISO?: string;
+    isActive?: boolean;
+    members?: Array<{
+        userId: string;
+        role: 'primary' | 'backup' | 'escalation';
+        orderIndex: number;
+        isActive: boolean;
+    }>;
+}): Promise<API_RESPONSE<any>> => {
+    try {
+        const response = await apiManager.put<API_RESPONSE<any>>(
+            `${BASE_URL_DEV}/api/oncall/schedule`,
+            params
+        );
+        return response.data;
+    } catch (error) {
+        console.error("Error updating schedule:", error);
+        throw error;
+    }
+};
+
 // Export singleton instance for convenience
 export const oncallController = OnCallController.getInstance();

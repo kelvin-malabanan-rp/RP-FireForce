@@ -92,6 +92,161 @@ export async function handleCreateAuditLog(
 	}
 }
 
+/**
+ * Get all audit logs with filtering
+ * GET /api/audit/logs
+ */
+export async function handleGetAuditLogs(
+	request: Request,
+	env: Env,
+	corsHeaders: Record<string, string>
+): Promise<Response> {
+	try {
+		const url = new URL(request.url);
+		const incidentId = url.searchParams.get('incidentId') || undefined;
+		const userId = url.searchParams.get('userId') || undefined;
+		const action = url.searchParams.get('action') || undefined;
+		const startDate = url.searchParams.get('startDate') || undefined;
+		const endDate = url.searchParams.get('endDate') || undefined;
+		const limit = parseInt(url.searchParams.get('limit') || '100');
+		const offset = parseInt(url.searchParams.get('offset') || '0');
+
+		const auditService = new AuditService(env);
+		const result = await auditService.getAuditLogs({
+			incidentId,
+			userId,
+			action,
+			startDate,
+			endDate,
+			limit,
+			offset
+		});
+
+		return new Response(
+			JSON.stringify({
+				success: true,
+				count: result.logs.length,
+				total: result.total,
+				limit,
+				offset,
+				logs: result.logs
+			}),
+			{
+				status: 200,
+				headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+			}
+		);
+	} catch (error) {
+		console.error('Error in handleGetAuditLogs:', error);
+		return new Response(
+			JSON.stringify({
+				error: 'Failed to retrieve audit logs',
+				details: error instanceof Error ? error.message : 'Unknown error'
+			}),
+			{
+				status: 500,
+				headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+			}
+		);
+	}
+}
+
+/**
+ * Get audit trail for a specific incident
+ * GET /api/audit/incidents/:incidentId/trail
+ */
+export async function handleGetIncidentAuditTrail(
+	request: Request,
+	env: Env,
+	corsHeaders: Record<string, string>
+): Promise<Response> {
+	try {
+		const url = new URL(request.url);
+		const pathParts = url.pathname.split('/');
+		const incidentId = pathParts[pathParts.indexOf('incidents') + 1];
+
+		if (!incidentId) {
+			return new Response(
+				JSON.stringify({ error: 'Incident ID is required' }),
+				{
+					status: 400,
+					headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+				}
+			);
+		}
+
+		const auditService = new AuditService(env);
+		const auditTrail = await auditService.getIncidentAuditTrail(incidentId);
+
+		return new Response(
+			JSON.stringify({
+				success: true,
+				count: auditTrail.length,
+				incident_id: incidentId,
+				audit_trail: auditTrail
+			}),
+			{
+				status: 200,
+				headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+			}
+		);
+	} catch (error) {
+		console.error('Error in handleGetIncidentAuditTrail:', error);
+		return new Response(
+			JSON.stringify({
+				error: 'Failed to retrieve audit trail',
+				details: error instanceof Error ? error.message : 'Unknown error'
+			}),
+			{
+				status: 500,
+				headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+			}
+		);
+	}
+}
+
+/**
+ * Get audit statistics
+ * GET /api/audit/stats
+ */
+export async function handleGetAuditStats(
+	request: Request,
+	env: Env,
+	corsHeaders: Record<string, string>
+): Promise<Response> {
+	try {
+		const url = new URL(request.url);
+		const startDate = url.searchParams.get('startDate') || undefined;
+		const endDate = url.searchParams.get('endDate') || undefined;
+
+		const auditService = new AuditService(env);
+		const stats = await auditService.getAuditStats(startDate, endDate);
+
+		return new Response(
+			JSON.stringify({
+				success: true,
+				stats
+			}),
+			{
+				status: 200,
+				headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+			}
+		);
+	} catch (error) {
+		console.error('Error in handleGetAuditStats:', error);
+		return new Response(
+			JSON.stringify({
+				error: 'Failed to retrieve audit statistics',
+				details: error instanceof Error ? error.message : 'Unknown error'
+			}),
+			{
+				status: 500,
+				headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+			}
+		);
+	}
+}
+
 
 // Get audit logs with filtering
 export async function handleGetAuditLogs(
@@ -106,7 +261,7 @@ export async function handleGetAuditLogs(
 		const incidentId = url.searchParams.get('incidentId');
 
 		let query = `
-			SELECT 
+			SELECT
 				al.*,
 				u.first_name || ' ' || u.last_name as user_name,
 				i.title as incident_title
@@ -116,7 +271,7 @@ export async function handleGetAuditLogs(
 		`;
 
 		const params: any[] = [];
-		
+
 		if (incidentId) {
 			query += ` WHERE al.incident_id = ?`;
 			params.push(incidentId);
@@ -190,7 +345,7 @@ export async function handleGetAuditStats(
 		}
 
 		const query = `
-			SELECT 
+			SELECT
 				COUNT(*) as total_logs,
 				COUNT(DISTINCT user_id) as unique_users,
 				COUNT(DISTINCT incident_id) as unique_incidents,
