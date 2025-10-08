@@ -93,65 +93,6 @@ export async function handleCreateAuditLog(
 }
 
 /**
- * Get all audit logs with filtering
- * GET /api/audit/logs
- */
-export async function handleGetAuditLogs(
-	request: Request,
-	env: Env,
-	corsHeaders: Record<string, string>
-): Promise<Response> {
-	try {
-		const url = new URL(request.url);
-		const incidentId = url.searchParams.get('incidentId') || undefined;
-		const userId = url.searchParams.get('userId') || undefined;
-		const action = url.searchParams.get('action') || undefined;
-		const startDate = url.searchParams.get('startDate') || undefined;
-		const endDate = url.searchParams.get('endDate') || undefined;
-		const limit = parseInt(url.searchParams.get('limit') || '100');
-		const offset = parseInt(url.searchParams.get('offset') || '0');
-
-		const auditService = new AuditService(env);
-		const result = await auditService.getAuditLogs({
-			incidentId,
-			userId,
-			action,
-			startDate,
-			endDate,
-			limit,
-			offset
-		});
-
-		return new Response(
-			JSON.stringify({
-				success: true,
-				count: result.logs.length,
-				total: result.total,
-				limit,
-				offset,
-				logs: result.logs
-			}),
-			{
-				status: 200,
-				headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-			}
-		);
-	} catch (error) {
-		console.error('Error in handleGetAuditLogs:', error);
-		return new Response(
-			JSON.stringify({
-				error: 'Failed to retrieve audit logs',
-				details: error instanceof Error ? error.message : 'Unknown error'
-			}),
-			{
-				status: 500,
-				headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-			}
-		);
-	}
-}
-
-/**
  * Get audit trail for a specific incident
  * GET /api/audit/incidents/:incidentId/trail
  */
@@ -204,49 +145,6 @@ export async function handleGetIncidentAuditTrail(
 		);
 	}
 }
-
-/**
- * Get audit statistics
- * GET /api/audit/stats
- */
-export async function handleGetAuditStats(
-	request: Request,
-	env: Env,
-	corsHeaders: Record<string, string>
-): Promise<Response> {
-	try {
-		const url = new URL(request.url);
-		const startDate = url.searchParams.get('startDate') || undefined;
-		const endDate = url.searchParams.get('endDate') || undefined;
-
-		const auditService = new AuditService(env);
-		const stats = await auditService.getAuditStats(startDate, endDate);
-
-		return new Response(
-			JSON.stringify({
-				success: true,
-				stats
-			}),
-			{
-				status: 200,
-				headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-			}
-		);
-	} catch (error) {
-		console.error('Error in handleGetAuditStats:', error);
-		return new Response(
-			JSON.stringify({
-				error: 'Failed to retrieve audit statistics',
-				details: error instanceof Error ? error.message : 'Unknown error'
-			}),
-			{
-				status: 500,
-				headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-			}
-		);
-	}
-}
-
 
 // Get audit logs with filtering
 export async function handleGetAuditLogs(
