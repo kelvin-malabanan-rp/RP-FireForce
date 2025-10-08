@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+// import { incidentService } from "incidents-service";
+
 import {
   ArrowLeft,
   User,
@@ -42,9 +44,21 @@ interface ChatMessage {
   similarIncidents?: any[];
 }
 
+// Extended Incident type with new fields
+interface ExtendedIncident extends Incident {
+  acknowledged_by?: string;
+  acknowledged_by_name?: string;
+  acknowledged_at?: string;
+  escalated_by?: string;
+  escalated_by_name?: string;
+  escalated_at?: string;
+  escalation_reason?: string;
+  escalation_level?: number;
+}
+
 export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageProps) {
   // State management
-  const [incident, setIncident] = useState<Incident | null>(null);
+  const [incident, setIncident] = useState<ExtendedIncident | null>(null);
   const [comments, setComments] = useState<IncidentComment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -189,8 +203,13 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
     setIsUpdatingStatus(true);
     try {
       const oldStatus = incident?.status || 'Unknown';
-      const response = await incidentService.updateIncidentStatus(incidentId, newStatus);
-      
+      const resolvedBy = localStorage.getItem('userEmail') || undefined;
+      console.log('[DEBUG] Update Incident Status Payload:', {
+        incidentId,
+        newStatus,
+        resolvedBy
+      });
+      const response = await incidentService.updateIncidentStatus(incidentId, newStatus, resolvedBy);
       if (response.success && response.data) {
         setIncident(response.data);
         setNewStatus('');
@@ -310,7 +329,6 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
             ? JSON.parse(localStorage.getItem('user')!).first_name + ' ' + JSON.parse(localStorage.getItem('user')!).last_name
             : 'Unknown User';
           
-          // Use default escalation levels (1 -> 2) since the Incident type doesn't track escalation_level
           await auditService.logIncidentEscalation(incident!, 1, 2, userId, userName);
           console.log('✅ Audit log created for incident escalation');
         } catch (auditError) {
@@ -523,7 +541,7 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
         animate={{ opacity: 1, y: 0 }}
         className="flex items-center justify-between"
       >
-        <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4">
           <Button
             onClick={onBack}
             className="gap-2 bg-gradient-to-r from-slate-600 to-slate-700 text-white hover:from-slate-700 hover:to-slate-800 shadow-md hover:shadow-lg transition-all"
@@ -532,7 +550,12 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
             Back
           </Button>
           <div>
-            <h1 className="text-2xl font-bold text-white">{incident.title}</h1>
+                <h1 className="text-2xl font-bold text-white flex items-center gap-3">
+                  {incident.title}
+                  {(incident.status === 'investigating' || incident.acknowledged_by) && (
+                    <Badge className="bg-green-600 text-white border-none">Acknowledged</Badge>
+                  )}
+                </h1>
             <div className="flex items-center gap-3 mt-2">
               <Badge className={getSeverityColor(incident.severity)}>
                 {incident.severity}
@@ -641,10 +664,8 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
                     >
                       <option value="">Select status...</option>
                       <option value="open">Open</option>
-                      <option value="acknowledged">Acknowledged</option>
                       <option value="investigating">Investigating</option>
                       <option value="resolved">Resolved</option>
-                      <option value="closed">Closed</option>
                     </select>
                     <Button
                       onClick={handleUpdateStatus}
@@ -688,6 +709,7 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
                   <p className="mt-2 text-white leading-relaxed">{incident.description}</p>
                 </motion.div>
 
+                {/* Incident Metadata Grid */}
                 <div className="grid grid-cols-2 gap-6">
                   <motion.div
                     initial={{ opacity: 0, y: 10 }}
@@ -714,6 +736,53 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
                     </label>
                     <p className="text-white font-medium">{formatDate(incident.timestamp)}</p>
                   </motion.div>
+
+                  {/* NEW: Assigned To / Handled By Section */}
+                  {(incident.acknowledged_by || incident.escalated_by) && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.52 }}
+                      className="col-span-2 p-4 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-lg border border-green-200 dark:border-green-800"
+                    >
+                      <label className="text-sm font-medium text-white flex items-center gap-2 mb-3">
+                        <CheckCircle className="h-4 w-4 text-green-500" />
+                        {incident.escalated_by ? 'Escalated By' : 'Handled By'}
+                      </label>
+                      <div className="flex items-center gap-3">
+                        {/* Avatar */}
+                        <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${getAvatarColor(
+                          incident.acknowledged_by_name || incident.escalated_by_name || 
+                          incident.acknowledged_by || incident.escalated_by
+                        )} flex items-center justify-center shadow-md`}>
+                          <span className="text-sm font-bold text-white">
+                            {getInitials(
+                              incident.acknowledged_by_name || incident.escalated_by_name || 
+                              incident.acknowledged_by || incident.escalated_by
+                            )}
+                          </span>
+                        </div>
+                        
+                        {/* User Info */}
+                        <div className="flex flex-col">
+                          <span className="text-white font-semibold">
+                            {incident.acknowledged_by_name || incident.escalated_by_name || 
+                             incident.acknowledged_by || incident.escalated_by || 'Unknown User'}
+                          </span>
+                          {(incident.acknowledged_at || incident.escalated_at) && (
+                            <span className="text-xs text-slate-500 dark:text-slate-400">
+                              {incident.escalated_by ? 'Escalated' : 'Acknowledged'} {getRelativeTime(incident.acknowledged_at || incident.escalated_at || '')}
+                            </span>
+                          )}
+                          {incident.escalation_reason && (
+                            <span className="text-xs text-orange-600 dark:text-orange-400 mt-1 flex items-center gap-1">
+                              <span className="font-medium">Reason:</span> {incident.escalation_reason}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
 
                   {incident.location && (
                     <motion.div

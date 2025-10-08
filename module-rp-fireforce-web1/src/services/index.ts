@@ -198,11 +198,13 @@ export const incidentService = {
    * Update incident status
    * API: PUT /api/incidents/{id}/status
    */
-  updateIncidentStatus: async (incidentId: string, status: string): Promise<ApiResponse<Incident>> => {
+  updateIncidentStatus: async (incidentId: string, newStatus: string, resolvedBy?: string): Promise<ApiResponse<Incident>> => {
     try {
-      const response = await apiService.put<any>(`/api/incidents/${incidentId}/status`, { status });
+      const response = await apiService.put<any>(
+        '/api/incidents-status',
+        { incidentId, newStatus, resolvedBy }
+      );
       const apiData = response.data;
-      
       if (apiData && apiData.data) {
         return {
           data: apiData.data,

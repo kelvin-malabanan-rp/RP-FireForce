@@ -37,6 +37,7 @@ export interface AuditStats {
   unique_incidents: number;
   action_breakdown: Record<string, number>;
   recent_activity_trend: number;
+  top_users?: any[];
 }
 
 class AuditService {
@@ -81,7 +82,7 @@ class AuditService {
     limit?: number;
     offset?: number;
     incidentId?: string;
-  } = {}): Promise<{ logs: AuditLog[]; total: number }> {
+  } = {}): Promise<{ logs: AuditLog[]; total: number; limit?: number; offset?: number }> {
     try {
       const params = new URLSearchParams();
       if (options.limit) params.append('limit', options.limit.toString());
@@ -96,10 +97,13 @@ class AuditService {
 
       const result = await response.json();
 
+      // Match backend response structure
       if (result.httpStatus === 'OK' && result.data) {
         return {
           logs: result.data.logs || [],
           total: result.data.total || 0,
+          limit: result.data.limit,
+          offset: result.data.offset
         };
       }
 
@@ -127,6 +131,7 @@ class AuditService {
 
       const result = await response.json();
 
+      // Match backend response structure
       if (result.httpStatus === 'OK' && result.data) {
         return result.data;
       }

@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
+import { auditService } from '../../services/auditService';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://incident-webhook-api.rapidresponse.workers.dev';
 import {
   FileText,
   Search,
@@ -15,7 +17,6 @@ import {
   RefreshCw,
   ChevronLeft,
   ChevronRight,
-  Calendar
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Input } from "../ui/input";
@@ -38,23 +39,19 @@ import {
 } from "../ui/dialog";
 import { Label } from "../ui/label";
 
-// API Base URL
-const BASE_URL = "https://incident-webhook-api.rapidresponse.workers.dev";
-
 interface AuditLog {
   id: string;
   incident_id?: string;
   user_id?: string;
   action: string;
   description?: string;
-  details?: string | any; // Can be JSON string or object
+  details?: string | any;
   old_value?: string | null;
   new_value?: string | null;
-  metadata?: string | any; // Can be JSON string or object
+  metadata?: string | any;
   ip_address?: string | null;
   user_agent?: string | null;
   created_at: string;
-  // Populated fields from API
   first_name?: string;
   last_name?: string;
   email?: string;
@@ -62,40 +59,26 @@ interface AuditLog {
   incident_title?: string;
 }
 
-interface NotificationResponse {
-  id: string;
-  notification_id: string;
-  incident_id: string;
-  user_id: string;
-  response: string;
-  response_time: number;
-  responded_at: string;
-  // Populated fields
-  user_name?: string;
-}
-
-interface AuditStats {
-  total_logs: number;
-  unique_users: number;
-  unique_incidents: number;
-  action_breakdown: Record<string, number>;
-  recent_activity_trend: number;
-}
-
 export function AuditTrailPage() {
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  // All audit logs from API
+  const [allAuditLogs, setAllAuditLogs] = useState<AuditLog[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  
+  // Filters
   const [searchQuery, setSearchQuery] = useState("");
   const [actionFilter, setActionFilter] = useState<string>("all");
   const [incidentFilter, setIncidentFilter] = useState<string>("");
   const [userFilter, setUserFilter] = useState<string>("all");
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
-  const [limit] = useState(10);
-  const [offset, setOffset] = useState(0);
-  const [total, setTotal] = useState(0);
-  const [stats, setStats] = useState<any>(null);
+  
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(10);
+  
+  // Stats
   const [topUsers, setTopUsers] = useState<any[]>([]);
+  const [uniqueActions, setUniqueActions] = useState<string[]>([]);
   
   // Export Modal State
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
@@ -109,52 +92,28 @@ export function AuditTrailPage() {
   useEffect(() => {
     loadAuditLogs();
     loadStats();
-  }, [offset, actionFilter, incidentFilter, userFilter, startDate, endDate]);
+  }, []);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [actionFilter, incidentFilter, userFilter, startDate, endDate, searchQuery]);
 
   const loadAuditLogs = async () => {
     setIsLoading(true);
     try {
-      // Build query parameters
-      let queryParams = `limit=${limit}&offset=${offset}`;
+      // Fetch all logs from API (no limit/offset since backend returns all)
+      const result = await auditService.getAuditLogs({});
+      setAllAuditLogs(result.logs || []);
       
-      if (incidentFilter) {
-        queryParams += `&incidentId=${incidentFilter}`;
+      // Extract unique actions
+      if (result.logs && result.logs.length > 0) {
+        const actions = Array.from(new Set(result.logs.map(log => log.action)));
+        setUniqueActions(actions);
       }
-      
-      if (userFilter && userFilter !== 'all') {
-        queryParams += `&userId=${userFilter}`;
-      }
-      
-      if (actionFilter && actionFilter !== 'all') {
-        queryParams += `&action=${actionFilter}`;
-      }
-      
-      if (startDate) {
-        queryParams += `&startDate=${startDate}`;
-      }
-      
-      if (endDate) {
-        queryParams += `&endDate=${endDate}`;
-      }
-      
-      const response = await fetch(
-        `${BASE_URL}/api/audit/logs?${queryParams}`
-      );
-      
-      if (!response.ok) {
-        console.error("Failed to fetch audit logs:", response.status);
-        setAuditLogs([]);
-        setIsLoading(false);
-        return;
-      }
-      
-      const result = await response.json();
-      // API returns logs directly in the response, not nested in data
-      setAuditLogs(result.logs || []);
-      setTotal(result.total || 0);
     } catch (error) {
       console.error("Error loading audit logs:", error);
-      setAuditLogs([]);
+      setAllAuditLogs([]);
     } finally {
       setIsLoading(false);
     }
@@ -162,53 +121,113 @@ export function AuditTrailPage() {
 
   const loadStats = async () => {
     try {
-      const response = await fetch(`${BASE_URL}/api/audit/stats`);
-      
-      if (!response.ok) {
-        console.warn("Failed to fetch audit stats:", response.status);
-        return;
+      const stats = await auditService.getAuditStats(startDate, endDate);
+      if (stats && stats.top_users) {
+        setTopUsers(stats.top_users || []);
       }
       
-      const result = await response.json();
-      if (result.success && result.stats) {
-        setStats(result.stats);
-        setTopUsers(result.stats.top_users || []);
+      if (stats && stats.action_breakdown) {
+        const actions = Object.keys(stats.action_breakdown);
+        if (actions.length > 0) {
+          setUniqueActions(prev => {
+            const combined = Array.from(new Set([...prev, ...actions]));
+            return combined;
+          });
+        }
       }
     } catch (error) {
       console.warn("Error loading stats:", error);
     }
   };
 
+  // Apply all filters to the logs
+  const getFilteredLogs = () => {
+    let filtered = [...allAuditLogs];
+
+    // Search filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(log =>
+        log.action.toLowerCase().includes(query) ||
+        log.description?.toLowerCase().includes(query) ||
+        log.user_name?.toLowerCase().includes(query) ||
+        log.first_name?.toLowerCase().includes(query) ||
+        log.last_name?.toLowerCase().includes(query) ||
+        log.incident_title?.toLowerCase().includes(query)
+      );
+    }
+
+    // Action filter
+    if (actionFilter && actionFilter !== 'all') {
+      filtered = filtered.filter(log => log.action === actionFilter);
+    }
+
+    // User filter
+    if (userFilter && userFilter !== 'all') {
+      filtered = filtered.filter(log => log.user_id === userFilter);
+    }
+
+    // Incident filter
+    if (incidentFilter) {
+      filtered = filtered.filter(log => 
+        log.incident_id?.toLowerCase().includes(incidentFilter.toLowerCase())
+      );
+    }
+
+    // Date range filter
+    if (startDate) {
+      const start = new Date(startDate);
+      start.setHours(0, 0, 0, 0);
+      filtered = filtered.filter(log => {
+        const logDate = new Date(log.created_at);
+        return logDate >= start;
+      });
+    }
+
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      filtered = filtered.filter(log => {
+        const logDate = new Date(log.created_at);
+        return logDate <= end;
+      });
+    }
+
+    return filtered;
+  };
+
+  // Get paginated logs for current page
+  const getPaginatedLogs = () => {
+    const filtered = getFilteredLogs();
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return filtered.slice(startIndex, endIndex);
+  };
+
+  const filteredLogs = getFilteredLogs();
+  const displayedLogs = getPaginatedLogs();
+  const totalPages = Math.ceil(filteredLogs.length / itemsPerPage);
+
   const handleExportCSV = async () => {
     setIsExporting(true);
     try {
-      // Build query parameters for export
       let queryParams = [];
-      
-      if (exportIncidentFilter) {
-        queryParams.push(`incidentId=${exportIncidentFilter}`);
-      }
-      
-      if (exportUserFilter && exportUserFilter !== 'all') {
-        queryParams.push(`userId=${exportUserFilter}`);
-      }
-      
-      if (exportActionFilter && exportActionFilter !== 'all') {
-        queryParams.push(`action=${exportActionFilter}`);
-      }
-      
-      if (exportStartDate) {
-        queryParams.push(`startDate=${exportStartDate}`);
-      }
-      
-      if (exportEndDate) {
-        queryParams.push(`endDate=${exportEndDate}`);
-      }
-      
+      if (exportIncidentFilter) queryParams.push(`incidentId=${exportIncidentFilter}`);
+      if (exportUserFilter && exportUserFilter !== 'all') queryParams.push(`userId=${exportUserFilter}`);
+      if (exportActionFilter && exportActionFilter !== 'all') queryParams.push(`action=${exportActionFilter}`);
+      if (exportStartDate) queryParams.push(`startDate=${exportStartDate}`);
+      if (exportEndDate) queryParams.push(`endDate=${exportEndDate}`);
       const queryString = queryParams.length > 0 ? `?${queryParams.join('&')}` : '';
-      const url = `${BASE_URL}/api/audit/logs/export/csv${queryString}`;
+      const url = `/api/audit/logs/export/csv${queryString}`;
       
-      const response = await fetch(url);
+      const token = localStorage.getItem('authToken');
+      const headers = new Headers();
+      if (token) headers.append('Authorization', `Bearer ${token}`);
+      const response = await fetch(`${API_BASE_URL}${url}`, {
+        method: 'GET',
+        headers
+      });
+      
       if (!response.ok) {
         alert("Failed to export CSV. The endpoint may not be available yet.");
         setIsExporting(false);
@@ -220,20 +239,16 @@ export function AuditTrailPage() {
       const a = document.createElement('a');
       a.href = downloadUrl;
       
-      // Generate filename with filters
       const filters = [];
       if (exportStartDate) filters.push(`from-${exportStartDate}`);
       if (exportEndDate) filters.push(`to-${exportEndDate}`);
       if (exportActionFilter !== 'all') filters.push(exportActionFilter);
       const filterString = filters.length > 0 ? `-${filters.join('-')}` : '';
-      
       a.download = `audit-trail${filterString}-${new Date().toISOString().split('T')[0]}.csv`;
       document.body.appendChild(a);
       a.click();
       a.remove();
       window.URL.revokeObjectURL(downloadUrl);
-      
-      // Close modal and reset filters
       setIsExportModalOpen(false);
       alert("CSV export completed successfully!");
     } catch (error) {
@@ -288,22 +303,6 @@ export function AuditTrailPage() {
     });
   };
 
-  // Filter logs
-  const filteredLogs = auditLogs.filter(log => {
-    const matchesSearch = 
-      log.action.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      log.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      log.user_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      log.incident_title?.toLowerCase().includes(searchQuery.toLowerCase());
-
-    const matchesFilter = actionFilter === 'all' || log.action === actionFilter;
-
-    return matchesSearch && matchesFilter;
-  });
-
-  // Get unique actions for filter
-  const uniqueActions = Array.from(new Set(auditLogs.map(log => log.action)));
-
   const getRelativeTime = (dateString: string) => {
     const now = new Date();
     const date = new Date(dateString);
@@ -315,6 +314,24 @@ export function AuditTrailPage() {
     if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d ago`;
     
     return formatDate(dateString);
+  };
+
+  const handlePreviousPage = () => {
+    setCurrentPage(prev => Math.max(1, prev - 1));
+  };
+
+  const handleNextPage = () => {
+    setCurrentPage(prev => Math.min(totalPages, prev + 1));
+  };
+
+  const clearFilters = () => {
+    setActionFilter('all');
+    setUserFilter('all');
+    setIncidentFilter('');
+    setSearchQuery('');
+    setStartDate('');
+    setEndDate('');
+    setCurrentPage(1);
   };
 
   return (
@@ -389,10 +406,7 @@ export function AuditTrailPage() {
                   <Label className="text-sm text-slate-400 mb-1">Action</Label>
                   <Select
                     value={actionFilter}
-                    onValueChange={(value: string) => {
-                      setActionFilter(value);
-                      setOffset(0);
-                    }}
+                    onValueChange={setActionFilter}
                   >
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder="All Actions" />
@@ -411,10 +425,7 @@ export function AuditTrailPage() {
                   <Label className="text-sm text-slate-400 mb-1">User</Label>
                   <Select
                     value={userFilter}
-                    onValueChange={(value: string) => {
-                      setUserFilter(value);
-                      setOffset(0);
-                    }}
+                    onValueChange={setUserFilter}
                   >
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder="All Users" />
@@ -433,10 +444,7 @@ export function AuditTrailPage() {
                   <Label className="text-sm text-slate-400 mb-1">Incident ID</Label>
                   <Input
                     value={incidentFilter}
-                    onChange={(e) => {
-                      setIncidentFilter(e.target.value);
-                      setOffset(0);
-                    }}
+                    onChange={(e) => setIncidentFilter(e.target.value)}
                     placeholder="Incident ID..."
                     className="border-slate-200 dark:border-slate-700 focus:border-purple-500 dark:focus:border-purple-400 text-white"
                   />
@@ -450,10 +458,7 @@ export function AuditTrailPage() {
                   <Input
                     type="date"
                     value={startDate}
-                    onChange={(e) => {
-                      setStartDate(e.target.value);
-                      setOffset(0);
-                    }}
+                    onChange={(e) => setStartDate(e.target.value)}
                     className="border-slate-200 dark:border-slate-700 focus:border-purple-500 dark:focus:border-purple-400 text-white"
                   />
                 </div>
@@ -462,26 +467,15 @@ export function AuditTrailPage() {
                   <Input
                     type="date"
                     value={endDate}
-                    onChange={(e) => {
-                      setEndDate(e.target.value);
-                      setOffset(0);
-                    }}
+                    onChange={(e) => setEndDate(e.target.value)}
                     className="border-slate-200 dark:border-slate-700 focus:border-purple-500 dark:focus:border-purple-400 text-white"
                   />
                 </div>
                 <div className="flex justify-end">
-                  {(actionFilter !== 'all' || userFilter !== 'all' || incidentFilter || startDate || endDate) && (
+                  {(actionFilter !== 'all' || userFilter !== 'all' || incidentFilter || startDate || endDate || searchQuery) && (
                     <Button
                       variant="outline"
-                      onClick={() => {
-                        setActionFilter('all');
-                        setUserFilter('all');
-                        setIncidentFilter('');
-                        setSearchQuery('');
-                        setStartDate('');
-                        setEndDate('');
-                        setOffset(0);
-                      }}
+                      onClick={clearFilters}
                       className="text-white border-slate-600 hover:bg-slate-800"
                     >
                       <XCircle className="h-4 w-4 mr-2" />
@@ -509,7 +503,7 @@ export function AuditTrailPage() {
               </div>
               Activity Log
               <Badge variant="secondary" className="ml-2">
-                {filteredLogs.length} events
+                {filteredLogs.length} {filteredLogs.length === 1 ? 'event' : 'events'}
               </Badge>
             </CardTitle>
           </CardHeader>
@@ -518,7 +512,7 @@ export function AuditTrailPage() {
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
               </div>
-            ) : filteredLogs.length === 0 ? (
+            ) : displayedLogs.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12">
                 <FileText className="h-12 w-12 text-slate-300 dark:text-slate-600 mb-3" />
                 <p className="text-slate-600 dark:text-slate-300">No audit logs found</p>
@@ -528,7 +522,7 @@ export function AuditTrailPage() {
               </div>
             ) : (
               <div className="divide-y divide-slate-100 dark:divide-slate-800">
-                {filteredLogs.map((log, index) => (
+                {displayedLogs.map((log, index) => (
                   <motion.div
                     key={log.id}
                     initial={{ opacity: 0, x: -20 }}
@@ -537,12 +531,10 @@ export function AuditTrailPage() {
                     className="p-6 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
                   >
                     <div className="flex items-start gap-4">
-                      {/* Icon */}
                       <div className="flex-shrink-0 mt-1">
                         {getActionIcon(log.action)}
                       </div>
 
-                      {/* Content */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between gap-4">
                           <div className="flex-1">
@@ -575,7 +567,6 @@ export function AuditTrailPage() {
                             )}
                           </div>
 
-                          {/* Metadata */}
                           <div className="flex flex-col items-end gap-1 text-xs text-slate-500 dark:text-slate-400">
                             <div className="flex items-center gap-1">
                               <User className="h-3 w-3" />
@@ -602,7 +593,7 @@ export function AuditTrailPage() {
       </motion.div>
 
       {/* Pagination Controls */}
-      {!isLoading && filteredLogs.length > 0 && (
+      {!isLoading && displayedLogs.length > 0 && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -610,15 +601,15 @@ export function AuditTrailPage() {
           className="flex items-center justify-between"
         >
           <div className="text-sm text-slate-600 dark:text-slate-400">
-            Showing {offset + 1} - {Math.min(offset + limit, total)} of {total} logs
+            Showing {((currentPage - 1) * itemsPerPage) + 1} - {Math.min(currentPage * itemsPerPage, filteredLogs.length)} of {filteredLogs.length} logs
           </div>
           
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setOffset(Math.max(0, offset - limit))}
-              disabled={offset === 0}
+              onClick={handlePreviousPage}
+              disabled={currentPage === 1}
               className="text-white border-slate-600 hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <ChevronLeft className="h-4 w-4 mr-1" />
@@ -626,14 +617,14 @@ export function AuditTrailPage() {
             </Button>
             
             <div className="text-sm text-slate-600 dark:text-slate-400">
-              Page {Math.floor(offset / limit) + 1} of {Math.ceil(total / limit)}
+              Page {currentPage} of {totalPages || 1}
             </div>
             
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setOffset(offset + limit)}
-              disabled={offset + limit >= total}
+              onClick={handleNextPage}
+              disabled={currentPage >= totalPages}
               className="text-white border-slate-600 hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Next
@@ -657,7 +648,6 @@ export function AuditTrailPage() {
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            {/* Date Range */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label className="text-sm text-slate-300">Start Date</Label>
@@ -679,7 +669,6 @@ export function AuditTrailPage() {
               </div>
             </div>
 
-            {/* Action Filter */}
             <div className="space-y-2">
               <Label className="text-sm text-slate-300">Filter by Action</Label>
               <Select
@@ -700,7 +689,6 @@ export function AuditTrailPage() {
               </Select>
             </div>
 
-            {/* User Filter */}
             <div className="space-y-2">
               <Label className="text-sm text-slate-300">Filter by User</Label>
               <Select
@@ -721,7 +709,6 @@ export function AuditTrailPage() {
               </Select>
             </div>
 
-            {/* Incident ID Filter */}
             <div className="space-y-2">
               <Label className="text-sm text-slate-300">Filter by Incident ID (Optional)</Label>
               <Input
@@ -732,7 +719,6 @@ export function AuditTrailPage() {
               />
             </div>
 
-            {/* Preview Info */}
             <div className="bg-blue-900/20 border border-blue-700/50 rounded-lg p-4">
               <div className="flex items-start gap-3">
                 <Info className="h-5 w-5 text-blue-400 flex-shrink-0 mt-0.5" />
@@ -754,7 +740,6 @@ export function AuditTrailPage() {
               variant="outline"
               onClick={() => {
                 setIsExportModalOpen(false);
-                // Reset export filters
                 setExportStartDate('');
                 setExportEndDate('');
                 setExportActionFilter('all');

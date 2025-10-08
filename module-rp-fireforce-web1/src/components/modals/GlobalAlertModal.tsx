@@ -85,12 +85,8 @@ export function GlobalAlertModal() {
   };
 
   const handleAcknowledge = async () => {
-    console.log('✅ Acknowledging');
+    console.log('✅ Acknowledging incident');
     stopSound();
-    setIsOpen(false);
-    setShowEscalateReason(false);
-    setEscalateReason("");
-    setCustomReason("");
     
     const userId = localStorage.getItem('userId') || '';
     const incidentId = activeNotification?.incidentId || activeNotification?.data?.incidentId;
@@ -98,43 +94,54 @@ export function GlobalAlertModal() {
     try {
       if (incidentId && userId) {
         await incidentService.respondToIncident({ incidentId, action: 'acknowledge', userId });
+        console.log('✅ Incident acknowledged successfully');
       }
     } catch (err) {
-      console.error('Acknowledge failed:', err);
+      console.error('❌ Acknowledge failed:', err);
     }
     
+    // Mark as read and close modal
     if (activeNotification) {
       markAsRead(activeNotification.id);
-      refresh();
       setActiveId(null);
+      setIsOpen(false);
+      refresh();
     }
   };
 
   const handleConfirmEscalate = async () => {
-    console.log('🚨 Escalating');
+    console.log('🚨 Escalating incident with reason:', escalateReason === 'Other' ? customReason : escalateReason);
     stopSound();
-    setIsOpen(false);
     
     const userId = localStorage.getItem('userId') || '';
     const incidentId = activeNotification?.incidentId || activeNotification?.data?.incidentId;
+    const reason = escalateReason === 'Other' ? customReason : escalateReason;
     
     try {
       if (incidentId && userId) {
-        await incidentService.respondToIncident({ incidentId, action: 'escalate', userId } as any);
+        // Send escalation with reason
+        await incidentService.respondToIncident({ 
+          incidentId, 
+          action: 'escalate', 
+          userId,
+          reason  // Backend should accept this
+        } as any);
+        console.log('✅ Incident escalated successfully with reason:', reason);
       }
     } catch (err) {
-      console.error('Escalate failed:', err);
+      console.error('❌ Escalate failed:', err);
     }
     
+    // Mark as read and close modal
     if (activeNotification) {
       markAsRead(activeNotification.id);
-      refresh();
       setActiveId(null);
+      setIsOpen(false);
+      setShowEscalateReason(false);
+      setEscalateReason("");
+      setCustomReason("");
+      refresh();
     }
-    
-    setShowEscalateReason(false);
-    setEscalateReason("");
-    setCustomReason("");
   };
 
   console.log('🎭 Render decision - isOpen:', isOpen, 'activeNotification:', !!activeNotification);
@@ -222,11 +229,14 @@ export function GlobalAlertModal() {
                   <SelectValue placeholder="Choose reason" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="High Severity">High Severity</SelectItem>
-                  <SelectItem value="No Response">No Response</SelectItem>
-                  <SelectItem value="Requires Team Lead">Requires Team Lead</SelectItem>
+                  <SelectItem value="Out for Vacation">Out for Vacation</SelectItem>
+                  <SelectItem value="Currently Unavailable">Currently Unavailable</SelectItem>
                   <SelectItem value="Beyond My Expertise">Beyond My Expertise</SelectItem>
-                  <SelectItem value="Other">Other</SelectItem>
+                  <SelectItem value="Requires Team Lead">Requires Team Lead</SelectItem>
+                  <SelectItem value="High Severity - Need Support">High Severity - Need Support</SelectItem>
+                  <SelectItem value="No Response from Primary">No Response from Primary</SelectItem>
+                  <SelectItem value="Off Duty">Off Duty</SelectItem>
+                  <SelectItem value="Other">Other (Specify)</SelectItem>
                 </SelectContent>
               </Select>
               

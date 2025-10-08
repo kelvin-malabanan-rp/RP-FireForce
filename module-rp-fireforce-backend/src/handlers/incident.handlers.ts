@@ -496,13 +496,16 @@ export async function handleUpdateIncidentStatus(
 	corsHeaders: Record<string, string>
 ): Promise<Response> {
 	try {
-		const { incidentId, newStatus, resolvedBy } = (await request.json()) as {
+		const body = await request.json();
+		const { incidentId, newStatus, resolvedBy } = body as {
 			incidentId: string;
 			newStatus: string;
 			resolvedBy?: string;
 		};
+		console.log('[DEBUG] Update Incident Status Request:', JSON.stringify(body));
 
 		if (!incidentId || !newStatus) {
+			console.error('[DEBUG] Missing incidentId or newStatus:', { incidentId, newStatus });
 			const errorResponse: ApiResponse<null> = {
 				httpStatus: "ERROR",
 				message: "incidentId and newStatus are required",
@@ -535,6 +538,7 @@ export async function handleUpdateIncidentStatus(
 			data: result
 		};
 
+		console.log('[DEBUG] Update Incident Status Success:', JSON.stringify(successResponse));
 		return new Response(JSON.stringify(successResponse), {
 			status: 200,
 			headers: {
@@ -544,7 +548,7 @@ export async function handleUpdateIncidentStatus(
 		});
 
 	} catch (err) {
-		console.error("Error updating incident status:", err);
+		console.error('[DEBUG] Error updating incident status:', err);
 
 		if (err instanceof Error && err.message.includes('not found')) {
 			const notFoundResponse: ApiResponse<null> = {
@@ -576,6 +580,7 @@ export async function handleUpdateIncidentStatus(
 			});
 		}
 
+		console.error('[DEBUG] General error response:', err);
 		const errorResponse: ApiResponse<null> = {
 			httpStatus: "ERROR",
 			message: "Failed to update incident status",
