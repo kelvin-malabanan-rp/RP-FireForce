@@ -15,12 +15,12 @@ export function BarChart({ data, maxValue, height = 200 }: BarChartProps) {
   
   return (
     <div className="w-full" style={{ height }}>
-      <div className="flex items-end justify-between h-full gap-2 px-4 py-2">
+      <div className="flex items-end justify-center h-full gap-4 px-4 py-2">
         {data.map((item, index) => {
           const barHeight = (item.value / max) * (height - 60);
           
           return (
-            <div key={item.label} className="flex flex-col items-center flex-1 max-w-16">
+            <div key={item.label} className="flex flex-col items-center w-20">
               {/* Value label on top */}
               <motion.div
                 initial={{ opacity: 0, y: -10 }}

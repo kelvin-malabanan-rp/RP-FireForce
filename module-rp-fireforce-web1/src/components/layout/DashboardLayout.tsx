@@ -1,16 +1,19 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { OnCallPage } from '../dashboard/OnCallPageClean';
 import { motion, AnimatePresence } from "framer-motion";
 import { DashboardTopNav } from "./DashboardTopNav";
 import { DashboardSideNav } from "./DashboardSideNav";
-import { cn } from "../../lib/utils";
+// import { cn } from "../../lib/utils";
 
 // Import dashboard pages - using dynamic imports to avoid module resolution issues
 import { DashboardOverview } from "../dashboard/DashboardOverview";
 import { AnalyticsPage } from "../dashboard/AnalyticsPage";
-import { IncidentsPage } from "../dashboard/IncidentsPageNew";
+import { IncidentsPage } from "../dashboard/IncidentsPage";
 import { SettingsPage } from "../dashboard/SettingsPage";
 import { TeamsPage } from "../dashboard/TeamsPage";
+import { AuditTrailPage } from "../dashboard/AuditTrailPage";
+import { GlobalAlertModal } from "../modals/GlobalAlertModal";
+
 
 
 interface DashboardLayoutProps {
@@ -18,12 +21,22 @@ interface DashboardLayoutProps {
 }
 
 export function DashboardLayout({ onLogout }: DashboardLayoutProps) {
-  const [currentPage, setCurrentPage] = useState("dashboard");
+  // Load current page from localStorage or default to dashboard
+  const [currentPage, setCurrentPage] = useState(() => {
+    return localStorage.getItem('currentPage') || 'dashboard';
+  });
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  // Save current page to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('currentPage', currentPage);
+  }, [currentPage]);
 
   const handleNavigation = (page: string) => {
     if (page === "logout") {
-      // Handle logout logic here
+      // Clear stored page on logout
+      localStorage.removeItem('currentPage');
+      localStorage.removeItem('selectedIncidentId');
       onLogout();
       return;
     }
@@ -58,7 +71,7 @@ export function DashboardLayout({ onLogout }: DashboardLayoutProps) {
             variants={pageVariants}
             transition={pageTransition}
           >
-            <DashboardOverview />
+            <DashboardOverview onNavigateToIncident={() => setCurrentPage('incidents')} />
           </motion.div>
         );
       case "analytics":
@@ -113,6 +126,19 @@ export function DashboardLayout({ onLogout }: DashboardLayoutProps) {
             <TeamsPage />
           </motion.div>
         );
+      case "audit-trail":
+        return (
+          <motion.div
+            key="audit-trail"
+            initial="initial"
+            animate="in"
+            exit="out"
+            variants={pageVariants}
+            transition={pageTransition}
+          >
+            <AuditTrailPage />
+          </motion.div>
+        );
       case "settings":
         return (
           <motion.div
@@ -144,6 +170,8 @@ export function DashboardLayout({ onLogout }: DashboardLayoutProps) {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Global alert modal */}
+      <GlobalAlertModal />
       {/* Top Navigation */}
       <DashboardTopNav 
         onMenuToggle={toggleSidebar} 

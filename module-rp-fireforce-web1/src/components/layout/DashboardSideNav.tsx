@@ -1,4 +1,5 @@
 import { motion, AnimatePresence } from "framer-motion";
+import { useState, useEffect } from "react";
 import { 
   TrendingUp,
   Shield,
@@ -8,9 +9,8 @@ import {
   Flame,
   Activity,
   Command,
-  Radar,
-  Crown,
-  Sparkles
+  Sparkles,
+  FileText
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { Separator } from "../ui/separator";
@@ -31,6 +31,45 @@ interface DashboardSideNavProps {
 }
 
 export function DashboardSideNav({ isOpen, onNavigate, onToggle, currentPage }: DashboardSideNavProps) {
+  const [userName, setUserName] = useState<string>('');
+  const [userRole, setUserRole] = useState<string>('Team Member');
+
+  // Load user info from localStorage
+  useEffect(() => {
+    const storedFirstName = localStorage.getItem('firstName');
+    const storedLastName = localStorage.getItem('lastName');
+    const storedUserRole = localStorage.getItem('userRole');
+
+    // Build full name from firstName and lastName
+    if (storedFirstName && storedLastName) {
+      setUserName(`${storedFirstName} ${storedLastName}`);
+    } else if (storedFirstName) {
+      setUserName(storedFirstName);
+    } else if (storedLastName) {
+      setUserName(storedLastName);
+    } else {
+      // Fallback to email or default
+      const storedEmail = localStorage.getItem('userEmail');
+      if (storedEmail) {
+        setUserName(storedEmail.split('@')[0]);
+      } else {
+        setUserName('User');
+      }
+    }
+
+    if (storedUserRole) {
+      setUserRole(storedUserRole);
+    }
+  }, []);
+
+  const getInitials = (name: string) => {
+    const parts = name.trim().split(' ');
+    if (parts.length >= 2) {
+      return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+    }
+    return name.slice(0, 2).toUpperCase();
+  };
+
   const navigationItems: SideNavItem[] = [
     {
       title: "Dashboard",
@@ -61,6 +100,12 @@ export function DashboardSideNav({ isOpen, onNavigate, onToggle, currentPage }: 
       icon: Users,
       href: "teams",
       isActive: currentPage === "teams"
+    },
+    {
+      title: "Audit Trail",
+      icon: FileText,
+      href: "audit-trail",
+      isActive: currentPage === "audit-trail"
     }
   ];
 
@@ -295,13 +340,26 @@ export function DashboardSideNav({ isOpen, onNavigate, onToggle, currentPage }: 
             >
               <div className="bg-gradient-to-r from-orange-50 to-red-50 dark:from-orange-950 dark:to-red-950 rounded-xl p-3 border border-orange-200 dark:border-orange-800">
                 <div className="flex items-center gap-3">
-                  <div className="relative">
-                    <div className="w-3 h-3 bg-orange-500 rounded-full" />
-                    <div className="absolute inset-0 w-3 h-3 bg-orange-500 rounded-full animate-ping opacity-75" />
+                  {/* User Avatar with Initials */}
+                  <div className="relative flex-shrink-0">
+                    <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-red-600 rounded-full flex items-center justify-center shadow-md">
+                      <span className="text-sm font-bold text-white">
+                        {getInitials(userName)}
+                      </span>
+                    </div>
+                    {/* Online Status Indicator */}
+                    <div className="absolute -bottom-0.5 -right-0.5">
+                      <div className="w-3 h-3 bg-green-500 rounded-full border-2 border-orange-50 dark:border-orange-950" />
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-orange-800 dark:text-orange-200">John Doe</p>
-                    <p className="text-xs text-orange-600 dark:text-orange-300">Senior SRE Engineer</p>
+                  {/* User Info */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-orange-900 dark:text-orange-100 truncate">
+                      {userName || 'User'}
+                    </p>
+                    <p className="text-xs text-orange-700 dark:text-orange-300 truncate">
+                      {userRole}
+                    </p>
                   </div>
                 </div>
               </div>

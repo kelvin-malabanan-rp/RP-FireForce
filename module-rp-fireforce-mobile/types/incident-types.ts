@@ -17,6 +17,20 @@ export interface IncidentUI {
     updatedAt?: string;
 }
 
+export type TeamMember = {
+    id: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+    role?: string;
+};
+
+export type Team = {
+    id: string;
+    name: string;
+    members: TeamMember[];
+};
+
 export interface API_RESPONSE<T = any> {
     httpStatus: string;
     message: string;

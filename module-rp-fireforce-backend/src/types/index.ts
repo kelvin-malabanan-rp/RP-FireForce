@@ -8,6 +8,8 @@ export interface Env {
 	FIREBASE_PROJECT_ID: string;
 	FIREBASE_CLIENT_EMAIL: string;
 	FIREBASE_PRIVATE_KEY: string;
+	SENDER_EMAIL: string;
+	MAILCHANNELS_API_KEY: string
 	DB: D1Database;
 	incident_management: D1Database;
 	AWS_REGION: string;

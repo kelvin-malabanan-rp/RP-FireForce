@@ -20,7 +20,7 @@ import {Ionicons} from "@expo/vector-icons";
 
 export const LoginComponent = ({ onLogin }: LoginProps) => {
     const [formData, setFormData] = useState<LoginData>({
-        email: "kelvin.malabanan@rocketpartners.io",
+        email: "keannu.brillante@rocketpartners.io",
         password: "password123",
     });
     const [isLoading, setIsLoading] = useState<boolean>(false);

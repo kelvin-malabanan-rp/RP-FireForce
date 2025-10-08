@@ -3,9 +3,10 @@ import { useState } from "react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
-import { Eye, EyeOff, Loader2, Shield, Zap, ArrowRight, Sparkles, Lock, User } from "lucide-react";
+import { Eye, EyeOff, Loader2, Zap, ArrowRight, Lock, User } from "lucide-react";
 import { AnimatedContainer, fadeInUp } from "../components/animations/variants";
 import { ParticleNetwork } from "../components/animations/ParticleNetwork";
+import { authService } from "../services";
 
 interface LoginPageProps {
   onLogin: () => void;
@@ -23,17 +24,22 @@ export function LoginPage({ onLogin }: LoginPageProps) {
     setLoading(true);
     setError("");
     
-    // Simulate API call
-    setTimeout(() => {
-      if (email === "demo@fireforce.com" && password === "demo123") {
-        console.log("Login successful!");
-        setLoading(false);
-        onLogin(); // Call the onLogin callback to navigate to dashboard
+    try {
+      // Call the actual auth service
+      const response = await authService.login({ email, password });
+      
+      if (response.success) {
+        console.log("✅ Login successful!", response.data);
+        onLogin(); // Navigate to dashboard
       } else {
-        setError("Invalid email or password");
-        setLoading(false);
+        setError("Login failed. Please try again.");
       }
-    }, 1500);
+    } catch (err: any) {
+      console.error("❌ Login error:", err);
+      setError(err.message || "Invalid email or password");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -130,18 +136,6 @@ export function LoginPage({ onLogin }: LoginPageProps) {
               <div className="absolute -top-10 -left-10 w-20 h-20 bg-gradient-to-r from-orange-500/20 to-red-500/20 rounded-full blur-xl animate-pulse" />
               <div className="absolute top-20 -right-5 w-32 h-32 bg-gradient-to-r from-pink-500/10 to-purple-500/10 rounded-full blur-2xl animate-pulse" style={{ animationDelay: '1s' }} />
               
-              <motion.div
-                initial={{ y: 20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.4 }}
-                className="inline-flex items-center px-6 py-3 rounded-full bg-gradient-to-r from-orange-500/20 to-red-600/20 border border-orange-500/30 mb-8 backdrop-blur-sm relative overflow-hidden"
-              >
-                <div className="absolute inset-0 bg-gradient-to-r from-orange-500/10 to-red-500/10 animate-pulse" />
-                <Shield className="mr-3 h-5 w-5 text-orange-400 animate-pulse" />
-                <span className="text-orange-300 font-medium relative z-10">Secure Access Portal</span>
-                <Sparkles className="ml-3 h-4 w-4 text-yellow-400 animate-pulse" />
-              </motion.div>
-              
               <motion.h1 
                 className="text-5xl lg:text-7xl font-bold mb-6 relative"
                 initial={{ y: 30, opacity: 0 }}
@@ -177,35 +171,6 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                 Experience the power of innovation. Login to access your dashboard and unleash the full potential of our platform.
               </motion.p>
               
-              <motion.div 
-                className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start"
-                initial={{ y: 20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 1.0 }}
-              >
-                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                  <Button 
-                    variant="outline" 
-                    size="lg" 
-                    className="border-white/30 text-white hover:bg-white/10 backdrop-blur-sm relative overflow-hidden group h-12 px-8"
-                  >
-                    <div className="absolute inset-0 bg-gradient-to-r from-orange-500/20 to-red-500/20 transform scale-x-0 group-hover:scale-x-100 transition-transform origin-left duration-300" />
-                    <span className="relative z-10">Explore Platform</span>
-                    <ArrowRight className="ml-2 h-4 w-4 relative z-10 group-hover:translate-x-1 transition-transform" />
-                  </Button>
-                </motion.div>
-                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                  <Button 
-                    size="lg" 
-                    className="bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-600 hover:to-red-700 shadow-lg shadow-orange-500/25 h-12 px-8"
-                  >
-                    Watch Demo
-                    <Sparkles className="ml-2 h-4 w-4" />
-                  </Button>
-                </motion.div>
-              </motion.div>
-
-
             </motion.div>
           </AnimatedContainer>
 

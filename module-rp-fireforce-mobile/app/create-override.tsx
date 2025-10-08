@@ -13,7 +13,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePickerModal from "react-native-modal-datetime-picker";
-import { oncallController } from '@/api/oncall-schedule-controller';
+import {getAllCurrentOnCall, oncallController} from '@/api/oncall-schedule-controller';
 import { OnCallUser } from '@/types/oncall-types';
 import { FONT_FAMILY } from '@/constants/fonts';
 import {LinearGradient} from "expo-linear-gradient";
@@ -39,18 +39,43 @@ export default function CreateOverrideScreen() {
 
     const loadTeamMembers = async () => {
         try {
-            const teams = await oncallController.getTeams();
-            const team = teams.find(t => t.id === teamId);
+            // ✅ Use getAllCurrentOnCall to get teams WITH actual members
+            const response = await getAllCurrentOnCall(teamId);
 
-            if (team && team.members && Array.isArray(team.members)) {
-                setAvailableUsers(team.members);
+            if (response.httpStatus === 'OK' && response.data) {
+                // Extract all members from all teams (or just the specific team)
+                const allMembers: OnCallUser[] = [];
+
+                response.data.forEach((team: any) => {
+                    if (team.teamId === teamId || !teamId) {
+                        team.members.forEach((member: any) => {
+                            allMembers.push({
+                                id: member.userId,
+                                firstName: member.firstName || member.fullname?.split(' ')[0] || '',
+                                lastName: member.lastName || member.fullname?.split(' ')[1] || '',
+                                email: member.email,
+                                role: member.role,
+                                // ... other fields
+                            });
+                        });
+                    }
+                });
+
+                // Remove duplicates
+                const uniqueUsers = allMembers.filter((user, index, self) =>
+                    index === self.findIndex(u => u.id === user.id)
+                );
+
+                setAvailableUsers(uniqueUsers);
+                console.log('[override] Loaded users:', uniqueUsers.length);
             } else {
-                console.log('Team members not found or invalid format:', team);
+                console.log('[override] No on-call data found');
                 setAvailableUsers([]);
             }
         } catch (error) {
             console.error('Error loading team members:', error);
             setAvailableUsers([]);
+            Alert.alert('Error', 'Failed to load team members');
         }
     };
 
@@ -65,9 +90,14 @@ export default function CreateOverrideScreen() {
             return;
         }
 
+        if (!teamId) {
+            Alert.alert('Error', 'Team ID is missing');
+            return;
+        }
+
         setLoading(true);
         try {
-            await oncallController.createOverride({
+            console.log('[override] Creating override with params:', {
                 teamId,
                 userId: selectedUser,
                 role,
@@ -76,11 +106,29 @@ export default function CreateOverrideScreen() {
                 reason,
             });
 
+            const result = await oncallController.createOverride({
+                teamId,
+                userId: selectedUser,
+                role,
+                startTime: startDate.toISOString(),
+                endTime: endDate.toISOString(),
+                reason,
+            });
+
+            console.log('[override] ✅ Override created successfully:', result);
+
             Alert.alert('Success', 'Override created successfully', [
                 { text: 'OK', onPress: () => router.back() }
             ]);
         } catch (error) {
-            Alert.alert('Error', 'Failed to create override');
+            console.error('[override] ❌ Error creating override:', error);
+
+            // More detailed error message
+            const errorMessage = error instanceof Error
+                ? error.message
+                : 'Failed to create override';
+
+            Alert.alert('Error', errorMessage);
         } finally {
             setLoading(false);
         }
