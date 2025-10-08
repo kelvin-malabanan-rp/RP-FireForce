@@ -19,15 +19,13 @@ export function GlobalAlertModal() {
 
   const activeNotification = useMemo(() => notifications.find(n => n.id === activeId) || null, [notifications, activeId]);
 
-  // Determine the latest targeted critical/high incident (fallback to any critical/high unread)
+  // Determine the latest targeted critical/high incident (only open for targeted)
   useEffect(() => {
     if (!notifications || notifications.length === 0) return;
     // Defer opening if a local modal (e.g., success modal) is active
     if (typeof window !== 'undefined' && (window as any).suppressGlobalAlertModal) return;
     const targeted = notifications.find(n => n.unread && n.category === 'incident' && (n.type === 'critical' || n.type === 'warning') && n.targeted === true);
-    const fallback = notifications.find(n => n.unread && n.category === 'incident' && (n.type === 'critical' || n.type === 'warning'));
-    const latest = targeted || fallback || null;
-    if (latest && !isOpen) { setActiveId(latest.id); setIsOpen(true); }
+    if (targeted && !isOpen) { setActiveId(targeted.id); setIsOpen(true); }
   }, [notifications]);
 
   // Play/pause sound with modal

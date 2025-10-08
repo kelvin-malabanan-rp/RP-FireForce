@@ -251,6 +251,10 @@ export function useNotifications(options: UseNotificationsOptions = {}) {
       if (!notif || !notif.id) return;
       // prevent duplicates
       if (seenIdsRef.current.has(notif.id)) return;
+      // Ensure targeting matches current user to avoid cross-account alerts
+      const currentUserId = getCurrentUserId();
+      const isTargetedToMe = notif.targeted === true || (notif.recipientId && currentUserId && notif.recipientId === currentUserId);
+      if (!isTargetedToMe) return;
       setNotifications(prev => [notif, ...prev]);
       seenIdsRef.current.add(notif.id);
       saveSeenIds();
