@@ -9,6 +9,7 @@ export interface IncidentAlertEmailPayload {
     severity: string;
     reportedBy: string;
     timestamp: string;
+    role?: string; // ✅ ADD OPTIONAL ROLE FIELD
 }
 
 export interface StatusChangeEmailPayload {

@@ -11,7 +11,7 @@ import { BASE_URL_DEV } from '@/utils/backend-url';
 import {getAllCurrentOnCall, getUsersForEmergencyOverride, oncallController} from '@/api/oncall-schedule-controller';
 import {createAuditLog} from "@/api/audit-trail";
 import {getIncidentById} from "@/api/incident-controller";
-import {sendEscalationEmail, sendReminderEmail} from "@/api/email-controller";
+import {sendEscalationEmail, sendIncidentAlertEmail, sendReminderEmail} from "@/api/email-controller";
 
 export const usePushNotifications = () => {
     const [expoPushToken, setExpoPushToken] = useState<string | null>(null);
@@ -89,7 +89,7 @@ export const usePushNotifications = () => {
             console.log('[push] data:', JSON.stringify(data, null, 2));
 
             // ✅ Only schedule reminders for NEW incident notifications
-            if (incidentId && notificationType === 'incident_alert') { // This will now match!
+            if (incidentId && notificationType === 'incident_alert') {
                 console.log('[push] 🔔 New incident notification received, scheduling 3 auto-reminders');
 
                 await scheduleAutoReminder({
@@ -350,7 +350,32 @@ export const usePushNotifications = () => {
         let sentCount = 0, failedCount = 0, skippedCount = 0;
         const results: any[] = [];
 
+        // ✅ Deduplicate by email - send ONE email per unique email address
+        const uniqueEmails = new Set<string>();
+
         for (const member of members) {
+            // ✅ SEND EMAIL FIRST - Only once per unique email
+            if (!uniqueEmails.has(member.email)) {
+                uniqueEmails.add(member.email);
+
+                try {
+                    await sendIncidentAlertEmail({
+                        to: member.email,
+                        incidentId: incident.id,
+                        title: incident.title,
+                        description: incident.description,
+                        severity: incident.severity,
+                        reportedBy: incident.reportedBy || 'System',
+                        timestamp: new Date().toISOString(),
+                        role: roleType
+                    });
+                    console.log(`[email] ✅ Incident alert email sent to:`, member.email, `(${roleType})`);
+                } catch (emailError) {
+                    console.error(`[email] ❌ Email failed for:`, member.email, emailError);
+                }
+            }
+
+            // Then send push notification (one per device/token)
             if (!member.pushToken) {
                 skippedCount++;
                 results.push({
@@ -368,9 +393,14 @@ export const usePushNotifications = () => {
                 const message = {
                     to: member.pushToken,
                     sound: 'default',
-                    title: `${incident.severity.toUpperCase()}: ${incident.title}`,
+                    title: `[${roleType.toUpperCase()}] ${incident.severity.toUpperCase()}: ${incident.title}`,
                     body: incident.description,
-                    data: { incidentId: incident.id, severity: incident.severity },
+                    data: {
+                        incidentId: incident.id,
+                        severity: incident.severity,
+                        type: 'incident_alert',
+                        role: roleType
+                    },
                     channelId: getChannelBySeverity(incident.severity),
                     categoryId: 'incident-actions',
                     priority: incident.severity === 'critical' ? 'high' : 'default',
@@ -764,7 +794,7 @@ export const usePushNotifications = () => {
         }
     };
 
-// ✅ Check incident status and send reminder if still open
+    // ✅ Check incident status and send reminder if still open
     const checkAndSendReminder = async (
         incident: {
             id: string;
@@ -807,20 +837,15 @@ export const usePushNotifications = () => {
             // Get team members to remind
             let membersToNotify: any[] = [];
 
-            if (incident.teamId) {
-                const response = await getAllCurrentOnCall(incident.teamId);
-                if (response.httpStatus === 'OK' && response.data) {
-                    response.data.forEach((team: any) => {
-                        membersToNotify.push(...team.members);
-                    });
-                }
-            } else {
-                const response = await getAllCurrentOnCall();
-                if (response.httpStatus === 'OK' && response.data) {
-                    response.data.forEach((team: any) => {
-                        membersToNotify.push(...team.members);
-                    });
-                }
+            const response = await getAllCurrentOnCall(incident.teamId);
+
+            if (response.httpStatus === 'OK' && response.data) {
+                // ✅ Handle the {primary: [], backup: [], escalation: []} format
+                membersToNotify = [
+                    ...(response.data.primary || []),
+                    ...(response.data.backup || []),
+                    ...(response.data.escalation || [])
+                ];
             }
 
             if (!membersToNotify.length) {
@@ -830,26 +855,48 @@ export const usePushNotifications = () => {
 
             let sentCount = 0;
             let skippedCount = 0;
+            const uniqueEmails = new Set<string>();
 
             for (const member of membersToNotify) {
+                // ✅ Send email once per unique email
+                if (!uniqueEmails.has(member.email)) {
+                    uniqueEmails.add(member.email);
+
+                    try {
+                        await sendReminderEmail({
+                            to: member.email,
+                            incidentId: incident.id,
+                            title: incident.title,
+                            description: incident.description,
+                            severity: incident.severity,
+                            reminderNumber: reminderNumber,
+                            totalReminders: totalReminders
+                        });
+                        console.log(`[email] ✅ Reminder email sent to:`, member.email);
+                    } catch (emailError) {
+                        console.error(`[email] ❌ Email failed for:`, member.email, emailError);
+                    }
+                }
+
                 if (!member.pushToken) {
                     skippedCount++;
                     continue;
                 }
 
                 try {
-                    // Send reminder notification with reminder count
+                    // ✅ ADD ROLE TO REMINDER NOTIFICATION TITLE
                     const message = {
                         to: member.pushToken,
                         sound: 'default',
-                        title: `⏰ REMINDER #${reminderNumber}/${totalReminders}: ${incident.severity.toUpperCase()} - ${incident.title}`,
+                        title: `[${member.role?.toUpperCase() || 'TEAM'}] ⏰ REMINDER #${reminderNumber}/${totalReminders}: ${incident.severity.toUpperCase()} - ${incident.title}`,
                         body: `This incident still requires attention. ${incident.description}`,
                         data: {
                             incidentId: incident.id,
                             severity: incident.severity,
                             type: 'auto_reminder',
                             reminderNumber: reminderNumber,
-                            totalReminders: totalReminders
+                            totalReminders: totalReminders,
+                            role: member.role // ✅ ADD ROLE TO DATA
                         },
                         channelId: getChannelBySeverity(incident.severity),
                         categoryId: 'incident-actions',
@@ -865,24 +912,7 @@ export const usePushNotifications = () => {
 
                     if (pushResponse.ok) {
                         sentCount++;
-                        console.log(`[push] Reminder #${reminderNumber} sent to:`, member.email);
-
-                        // ✅ Also send email reminder
-                        try {
-                            await sendReminderEmail({
-                                to: member.email,
-                                incidentId: incident.id,
-                                title: incident.title,
-                                description: incident.description,
-                                severity: incident.severity,
-                                reminderNumber: reminderNumber,
-                                totalReminders: totalReminders
-                            });
-                            console.log(`[email] ✅ Reminder email sent to:`, member.email);
-                        } catch (emailError) {
-                            console.error(`[email] ❌ Email failed for:`, member.email, emailError);
-                            // Don't fail the reminder if email fails
-                        }
+                        console.log(`[push] Reminder #${reminderNumber} sent to:`, member.email, `(${member.role})`);
                     } else {
                         console.warn(`[push] Failed to send reminder #${reminderNumber} to:`, member.email);
                     }
@@ -1025,7 +1055,7 @@ export const usePushNotifications = () => {
         }
     };
 
-// ✅ Send escalation notifications to escalated users
+    // ✅ Send escalation notifications to escalated users
     const sendEscalationNotifications = async (
         incident: {
             id: string;
@@ -1039,8 +1069,30 @@ export const usePushNotifications = () => {
             console.log('[push] Sending escalation notifications to', escalatedUsers.length, 'users');
 
             let sentCount = 0;
+            const uniqueEmails = new Set<string>();
 
             for (const user of escalatedUsers) {
+                // ✅ Send email once per unique email
+                if (!uniqueEmails.has(user.email)) {
+                    uniqueEmails.add(user.email);
+
+                    try {
+                        await sendEscalationEmail({
+                            to: user.email,
+                            incidentId: incident.id,
+                            title: incident.title,
+                            description: incident.description,
+                            severity: incident.severity,
+                            escalatedFrom: 0,
+                            escalatedTo: 1,
+                            reason: 'No response after 3 reminders'
+                        });
+                        console.log(`[email] ✅ Escalation email sent to:`, user.email);
+                    } catch (emailError) {
+                        console.error(`[email] ❌ Escalation email failed for:`, user.email, emailError);
+                    }
+                }
+
                 if (!user.pushToken) {
                     console.warn('[push] No push token for user:', user.email);
                     continue;
@@ -1050,12 +1102,13 @@ export const usePushNotifications = () => {
                     const message = {
                         to: user.pushToken,
                         sound: 'default',
-                        title: `🚨 ESCALATED: ${incident.severity.toUpperCase()} - ${incident.title}`,
+                        title: `[ESCALATION] 🚨 ESCALATED: ${incident.severity.toUpperCase()} - ${incident.title}`,
                         body: `This incident has been escalated to you after no response. ${incident.description}`,
                         data: {
                             incidentId: incident.id,
                             severity: incident.severity,
-                            type: 'escalation'
+                            type: 'escalation',
+                            role: 'escalation' // ✅ ADD ROLE TO DATA
                         },
                         channelId: getChannelBySeverity(incident.severity),
                         categoryId: 'incident-actions',
@@ -1072,23 +1125,6 @@ export const usePushNotifications = () => {
                     if (pushResponse.ok) {
                         sentCount++;
                         console.log('[push] Escalation notification sent to:', user.email);
-
-                        // ✅ Also send escalation email
-                        try {
-                            await sendEscalationEmail({
-                                to: user.email,
-                                incidentId: incident.id,
-                                title: incident.title,
-                                description: incident.description,
-                                severity: incident.severity,
-                                escalatedFrom: 0,
-                                escalatedTo: 1,
-                                reason: 'No response after 3 reminders'
-                            });
-                            console.log(`[email] ✅ Escalation email sent to:`, user.email);
-                        } catch (emailError) {
-                            console.error(`[email] ❌ Escalation email failed for:`, user.email, emailError);
-                        }
                     } else {
                         console.warn('[push] Failed to send escalation to:', user.email);
                     }

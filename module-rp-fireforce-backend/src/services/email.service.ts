@@ -10,21 +10,16 @@ export interface EmailTemplate {
 
 export class EmailService {
 	private env: Env;
-	private logoBase64: string;
 
 	constructor(env: Env) {
 		this.env = env;
-		// Base64 encoded logo - you'll need to replace this with your actual base64 encoded rp-fireforce-white.png
-		// To get the base64: https://www.base64-image.de/ or use: btoa(imageData)
-		this.logoBase64 = 'data:image/png;base64,YOUR_BASE64_STRING_HERE';
-
 	}
 
 	/**
 	 * Get logo as base64 data URL
 	 */
 	private getLogoDataUrl(): string {
-		return 'https://your-cdn-url.com/rp-fireforce-white.png';
+		return 'https://i.postimg.cc/Y9pP0btx/Gemini-Generated-Image-n40l9yn40l9yn40l-1.png';
 	}
 
 	/**
@@ -82,6 +77,7 @@ export class EmailService {
 		severity: string;
 		reportedBy: string;
 		timestamp: string;
+		role?: string;
 	}): Promise<boolean> {
 		const severityColors = {
 			critical: { color: '#DC2626', label: 'CRITICAL' },
@@ -90,6 +86,15 @@ export class EmailService {
 			low: { color: '#84CC16', label: 'LOW' },
 		};
 		const config = severityColors[params.severity as keyof typeof severityColors] || severityColors.medium;
+
+		// Role colors
+		const roleColors = {
+			primary: { color: '#3B82F6', label: 'PRIMARY', icon: '👤' },
+			backup: { color: '#F59E0B', label: 'BACKUP', icon: '🔄' },
+			escalation: { color: '#EF4444', label: 'ESCALATION', icon: '⚡' },
+			emergency: { color: '#DC2626', label: 'EMERGENCY', icon: '🚨' },
+		};
+		const roleConfig = params.role ? roleColors[params.role as keyof typeof roleColors] : null;
 
 		const htmlBody = `
 <!DOCTYPE html>
@@ -111,7 +116,7 @@ export class EmailService {
                             <table cellpadding="0" cellspacing="0">
                                 <tr>
                                     <td style="padding-right: 12px; vertical-align: middle;">
-                                        <img src="${this.getLogoDataUrl()}" alt="FireForce" style="width: 40px; height: 40px; display: block;" />
+                                        <img src="${this.getLogoDataUrl()}" alt="FireForce" style="width: 70px; height: 70px; display: block;" />
                                     </td>
                                     <td style="vertical-align: middle;">
                                         <h1 style="margin: 0; color: #ffffff; font-size: 18px; font-weight: 600;">
@@ -126,13 +131,28 @@ export class EmailService {
                         </td>
                     </tr>
 
-                    <!-- Alert Badge -->
+                    <!-- Alert Badge with Role -->
                     <tr>
                         <td style="padding: 20px 30px 0 30px;">
-                            <table cellpadding="0" cellspacing="0" style="background-color: ${config.color}; border-radius: 6px; padding: 8px 16px;">
+                            <table cellpadding="0" cellspacing="0" width="100%">
                                 <tr>
-                                    <td style="color: #ffffff; font-size: 12px; font-weight: 700; letter-spacing: 0.5px;">
-                                        🚨 ${config.label} INCIDENT
+                                    <td>
+                                        <table cellpadding="0" cellspacing="0" style="display: inline-block; background-color: ${config.color}; border-radius: 6px; padding: 8px 16px; margin-right: 8px;">
+                                            <tr>
+                                                <td style="color: #ffffff; font-size: 12px; font-weight: 700; letter-spacing: 0.5px;">
+                                                    🚨 ${config.label} INCIDENT
+                                                </td>
+                                            </tr>
+                                        </table>
+                                        ${roleConfig ? `
+                                        <table cellpadding="0" cellspacing="0" style="display: inline-block; background-color: ${roleConfig.color}; border-radius: 6px; padding: 8px 16px;">
+                                            <tr>
+                                                <td style="color: #ffffff; font-size: 12px; font-weight: 700; letter-spacing: 0.5px;">
+                                                    ${roleConfig.icon} ${roleConfig.label}
+                                                </td>
+                                            </tr>
+                                        </table>
+                                        ` : ''}
                                     </td>
                                 </tr>
                             </table>
@@ -159,8 +179,14 @@ export class EmailService {
                                     <td style="padding: 12px 16px; font-weight: 600; color: #94a3b8; font-size: 13px; background-color: #0f172a; border-bottom: 1px solid #334155;">Severity</td>
                                     <td style="padding: 12px 16px; color: ${config.color}; font-weight: 700; font-size: 13px; text-transform: uppercase; border-bottom: 1px solid #334155;">${params.severity}</td>
                                 </tr>
+                                ${roleConfig ? `
                                 <tr style="background-color: #0f172a;">
-                                    <td style="padding: 12px 16px; font-weight: 600; color: #94a3b8; font-size: 13px; border-bottom: 1px solid #334155;">Reported By</td>
+                                    <td style="padding: 12px 16px; font-weight: 600; color: #94a3b8; font-size: 13px; border-bottom: 1px solid #334155;">Your Role</td>
+                                    <td style="padding: 12px 16px; color: ${roleConfig.color}; font-weight: 700; font-size: 13px; text-transform: uppercase; border-bottom: 1px solid #334155;">${roleConfig.icon} ${roleConfig.label}</td>
+                                </tr>
+                                ` : ''}
+                                <tr ${roleConfig ? '' : 'style="background-color: #0f172a;"'}>
+                                    <td style="padding: 12px 16px; font-weight: 600; color: #94a3b8; font-size: 13px; ${roleConfig ? 'background-color: #0f172a;' : ''} border-bottom: 1px solid #334155;">Reported By</td>
                                     <td style="padding: 12px 16px; color: #e2e8f0; font-size: 13px; border-bottom: 1px solid #334155;">${params.reportedBy}</td>
                                 </tr>
                                 <tr>
@@ -171,7 +197,7 @@ export class EmailService {
 
                             <!-- Action Button -->
                             <div style="margin-top: 24px; text-align: center;">
-                                <a href="https://your-app-url.com/incidents/${params.incidentId}"
+                                <a href="http://localhost:5173/incidents?id=${params.incidentId}"
                                    style="display: inline-block; background: linear-gradient(to right, #f97316, #dc2626); color: #ffffff; text-decoration: none; padding: 12px 32px; border-radius: 6px; font-weight: 600; font-size: 14px;">
                                     View Incident →
                                 </a>
@@ -199,7 +225,7 @@ export class EmailService {
         `;
 
 		const textBody = `
-🚨 ${params.severity.toUpperCase()} INCIDENT
+🚨 ${params.severity.toUpperCase()} INCIDENT${roleConfig ? ` - ${roleConfig.icon} ${roleConfig.label}` : ''}
 
 ${params.title}
 
@@ -207,10 +233,10 @@ ${params.description}
 
 Incident ID: ${params.incidentId}
 Severity: ${params.severity.toUpperCase()}
-Reported By: ${params.reportedBy}
+${roleConfig ? `Your Role: ${roleConfig.icon} ${roleConfig.label}\n` : ''}Reported By: ${params.reportedBy}
 Time: ${new Date(params.timestamp).toLocaleString()}
 
-View incident: https://your-app-url.com/incidents/${params.incidentId}
+View incident: http://localhost:5173/incidents?id=${params.incidentId}
 
 ---
 FireForce Incident Management System
@@ -219,7 +245,7 @@ This is an automated notification.
 
 		return this.sendEmail({
 			to: params.to,
-			subject: `🚨 ${params.severity.toUpperCase()}: ${params.title}`,
+			subject: `🚨 ${params.severity.toUpperCase()}: ${params.title}${roleConfig ? ` [${roleConfig.label}]` : ''}`,
 			htmlBody,
 			textBody,
 		});
@@ -261,7 +287,7 @@ This is an automated notification.
                             <table cellpadding="0" cellspacing="0">
                                 <tr>
                                     <td style="padding-right: 12px; vertical-align: middle;">
-                                        <img src="${this.getLogoDataUrl()}" alt="FireForce" style="width: 40px; height: 40px; display: block;" />
+                                        <img src="${this.getLogoDataUrl()}" alt="FireForce" style="width: 70px; height: 70px; display: block;" />
                                     </td>
                                     <td style="vertical-align: middle;">
                                         <h1 style="margin: 0; color: #ffffff; font-size: 18px; font-weight: 600;">
@@ -324,7 +350,7 @@ This is an automated notification.
 
                             <!-- Action Button -->
                             <div style="margin-top: 24px; text-align: center;">
-                                <a href="https://your-app-url.com/incidents/${params.incidentId}"
+                                <a href="http://localhost:5173/incidents?id=${params.incidentId}"
                                    style="display: inline-block; background: linear-gradient(to right, #f97316, #dc2626); color: #ffffff; text-decoration: none; padding: 12px 32px; border-radius: 6px; font-weight: 600; font-size: 14px;">
                                     View Details →
                                 </a>
@@ -363,7 +389,7 @@ Status: ${params.status.toUpperCase()}
 Changed By: ${params.changedBy}
 Time: ${new Date(params.timestamp).toLocaleString()}
 
-View incident: https://your-app-url.com/incidents/${params.incidentId}
+View incident: http://localhost:5173/incidents?id=${params.incidentId}
 
 ---
 FireForce Incident Management System
@@ -409,7 +435,7 @@ FireForce Incident Management System
                             <table cellpadding="0" cellspacing="0">
                                 <tr>
                                     <td style="padding-right: 12px; vertical-align: middle;">
-                                        <img src="${this.getLogoDataUrl()}" alt="FireForce" style="width: 40px; height: 40px; display: block;" />
+                                        <img src="${this.getLogoDataUrl()}" alt="FireForce" style="width: 70px; height: 70px; display: block;" />
                                     </td>
                                     <td style="vertical-align: middle;">
                                         <h1 style="margin: 0; color: #ffffff; font-size: 18px; font-weight: 600;">
@@ -475,7 +501,7 @@ FireForce Incident Management System
 
                             <!-- Action Button -->
                             <div style="margin-top: 24px; text-align: center;">
-                                <a href="https://your-app-url.com/incidents/${params.incidentId}"
+                                <a href="http://localhost:5173/incidents?id=${params.incidentId}"
                                    style="display: inline-block; background: linear-gradient(to right, #f97316, #dc2626); color: #ffffff; text-decoration: none; padding: 12px 32px; border-radius: 6px; font-weight: 600; font-size: 14px;">
                                     Respond Now →
                                 </a>
@@ -517,7 +543,7 @@ Please acknowledge or respond to this incident.
 Incident ID: ${params.incidentId}
 Severity: ${params.severity.toUpperCase()}
 
-View incident: https://your-app-url.com/incidents/${params.incidentId}
+View incident: http://localhost:5173/incidents?id=${params.incidentId}
 
 ---
 FireForce Incident Management System
