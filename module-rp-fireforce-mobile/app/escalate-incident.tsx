@@ -9,15 +9,15 @@ import {
     Alert,
     TextInput,
     ActivityIndicator,
+    Modal,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { Picker } from '@react-native-picker/picker';
 import { oncallController } from '@/api/oncall-schedule-controller';
 import { FONT_FAMILY } from "@/constants/fonts";
 import { BASE_URL_DEV } from '@/utils/backend-url';
-import {LinearGradient} from "expo-linear-gradient";
+import { LinearGradient } from "expo-linear-gradient";
 
 type IncidentLite = { id: string; title: string };
 
@@ -33,6 +33,7 @@ export default function EscalateIncidentScreen() {
     const [incidents, setIncidents] = useState<IncidentLite[]>([]);
     const [loadingIncidents, setLoadingIncidents] = useState(true);
     const [loading, setLoading] = useState(false);
+    const [showIncidentModal, setShowIncidentModal] = useState(false);
 
     // Fetch incidents for dropdown
     useEffect(() => {
@@ -138,30 +139,22 @@ export default function EscalateIncidentScreen() {
                             <TextInput
                                 style={styles.input}
                                 placeholder="Enter incident ID"
+                                placeholderTextColor="#6B7280"
                                 value={selectedIncident}
                                 onChangeText={setSelectedIncident}
                                 autoCapitalize="none"
                             />
                         </>
                     ) : (
-                        <View style={styles.pickerContainer}>
-                            <Picker
-                                selectedValue={selectedIncident}
-                                onValueChange={(val) => setSelectedIncident(String(val))}
-                                style={styles.picker}
-                                dropdownIconColor="#111827"
-                                mode="dropdown"
-                            >
-                                {incidents.map((inc) => (
-                                    <Picker.Item
-                                        key={inc.id}
-                                        label={inc.title}
-                                        value={inc.id}
-                                        color="#111827"
-                                    />
-                                ))}
-                            </Picker>
-                        </View>
+                        <TouchableOpacity
+                            style={styles.selectButton}
+                            onPress={() => setShowIncidentModal(true)}
+                        >
+                            <Text style={styles.selectButtonText} numberOfLines={1}>
+                                {incidents.find(i => i.id === selectedIncident)?.title || 'Select an incident'}
+                            </Text>
+                            <Ionicons name="chevron-down" size={20} color="#94A3B8" />
+                        </TouchableOpacity>
                     )}
                 </View>
 
@@ -179,7 +172,7 @@ export default function EscalateIncidentScreen() {
                                         styles.priorityButton,
                                         {
                                             borderColor: color,
-                                            flex: isActive ? 1.5 : 1, // ✅ Selected button is bigger
+                                            flex: isActive ? 1.5 : 1,
                                         },
                                         isActive && { backgroundColor: `${color}22`, borderWidth: 2 },
                                     ]}
@@ -215,6 +208,7 @@ export default function EscalateIncidentScreen() {
                     <TextInput
                         style={[styles.input, styles.textArea]}
                         placeholder="Describe why this incident needs escalation..."
+                        placeholderTextColor="#6B7280"
                         value={reason}
                         onChangeText={setReason}
                         multiline
@@ -249,6 +243,50 @@ export default function EscalateIncidentScreen() {
                     </LinearGradient>
                 </TouchableOpacity>
             </ScrollView>
+
+            {/* Incident Selection Modal */}
+            <Modal
+                visible={showIncidentModal}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setShowIncidentModal(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Select Incident</Text>
+                            <TouchableOpacity onPress={() => setShowIncidentModal(false)}>
+                                <Ionicons name="close" size={24} color="#94A3B8" />
+                            </TouchableOpacity>
+                        </View>
+                        <ScrollView style={styles.modalList}>
+                            {incidents.map((incident) => (
+                                <TouchableOpacity
+                                    key={incident.id}
+                                    style={[
+                                        styles.modalItem,
+                                        selectedIncident === incident.id && styles.modalItemSelected
+                                    ]}
+                                    onPress={() => {
+                                        setSelectedIncident(incident.id);
+                                        setShowIncidentModal(false);
+                                    }}
+                                >
+                                    <Text style={[
+                                        styles.modalItemText,
+                                        selectedIncident === incident.id && styles.modalItemTextSelected
+                                    ]}>
+                                        {incident.title}
+                                    </Text>
+                                    {selectedIncident === incident.id && (
+                                        <Ionicons name="checkmark" size={20} color="#F97316" />
+                                    )}
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+                    </View>
+                </View>
+            </Modal>
         </SafeAreaView>
     );
 }
@@ -304,18 +342,77 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
     },
-    pickerContainer: {
-        borderWidth: 1,
-        borderColor: '#334155',
+    selectButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
         backgroundColor: 'rgba(15, 23, 42, 0.6)',
         borderRadius: 8,
-        overflow: 'hidden',
-        height: 50,
-        justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: '#334155',
+        padding: 12,
+        minHeight: 50,
     },
-    picker: {
+    selectButtonText: {
+        flex: 1,
+        fontSize: 16,
         color: '#FFFFFF',
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
+    },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.7)',
+        justifyContent: 'flex-end',
+    },
+    modalContent: {
+        backgroundColor: '#1E293B',
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+        maxHeight: '70%',
+        borderTopWidth: 1,
+        borderTopColor: '#334155',
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: '#334155',
+    },
+    modalTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#FFFFFF',
+        fontFamily: FONT_FAMILY.POPPINS_BOLD,
+    },
+    modalList: {
+        padding: 8,
+    },
+    modalItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: 16,
+        borderRadius: 8,
+        marginVertical: 4,
+        backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    },
+    modalItemSelected: {
+        backgroundColor: 'rgba(249, 115, 22, 0.15)',
+        borderWidth: 1,
+        borderColor: '#F97316',
+    },
+    modalItemText: {
+        flex: 1,
+        fontSize: 16,
+        color: '#FFFFFF',
+        fontFamily: FONT_FAMILY.POPPINS_REGULAR,
+    },
+    modalItemTextSelected: {
+        color: '#F97316',
+        fontWeight: '600',
+        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
     priorityContainer: {
         flexDirection: 'row',
@@ -324,9 +421,9 @@ const styles = StyleSheet.create({
     priorityButton: {
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'center', // ✅ Center content
+        justifyContent: 'center',
         paddingVertical: 10,
-        paddingHorizontal: 8, // ✅ Reduced padding
+        paddingHorizontal: 8,
         borderRadius: 8,
         borderWidth: 1,
         backgroundColor: 'rgba(15, 23, 42, 0.6)',
@@ -335,10 +432,10 @@ const styles = StyleSheet.create({
         width: 10,
         height: 10,
         borderRadius: 6,
-        marginRight: 6, // ✅ Reduced margin
+        marginRight: 6,
     },
     priorityText: {
-        fontSize: 13, // ✅ Slightly smaller
+        fontSize: 13,
         fontWeight: '600',
         color: '#94A3B8',
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,

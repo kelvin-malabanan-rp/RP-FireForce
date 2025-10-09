@@ -251,35 +251,43 @@ export const usePushNotifications = () => {
 
     const createNotificationChannels = async () => {
         if (Platform.OS !== 'android') return;
+
         for (const id of Object.values(CHANNELS)) {
             try {
                 await Notifications.deleteNotificationChannelAsync(id);
             } catch {}
         }
+
+        // ✅ Use different sound files with pre-set volume levels
         await Notifications.setNotificationChannelAsync(CHANNELS.critical, {
             name: 'Critical Alerts',
             importance: Notifications.AndroidImportance.MAX,
-            sound: 'alarm_sound',
+            sound: 'alarm_critical', // ✅ Loudest audio file
             enableVibrate: true,
-            vibrationPattern: [0, 500, 200, 500, 200, 500],
+            vibrationPattern: [0, 1000, 500, 1000, 500, 1000], // ✅ Longer vibration
+            bypassDnd: true, // ✅ Bypass Do Not Disturb
         });
+
         await Notifications.setNotificationChannelAsync(CHANNELS.high, {
             name: 'High Priority',
             importance: Notifications.AndroidImportance.HIGH,
-            sound: 'alarm_sound',
+            sound: 'alarm_high', // ✅ Loud audio file
             enableVibrate: true,
             vibrationPattern: [0, 250, 250, 250],
         });
+
         await Notifications.setNotificationChannelAsync(CHANNELS.medium, {
             name: 'Medium Priority',
             importance: Notifications.AndroidImportance.DEFAULT,
-            sound: 'alarm_sound',
+            sound: 'alarm_medium', // ✅ Medium audio file
             enableVibrate: true,
+            vibrationPattern: [0, 250, 250],
         });
+
         await Notifications.setNotificationChannelAsync(CHANNELS.default, {
             name: 'Default',
             importance: Notifications.AndroidImportance.DEFAULT,
-            sound: 'alarm_sound',
+            sound: 'alarm_low', // ✅ Quiet audio file
         });
     };
 

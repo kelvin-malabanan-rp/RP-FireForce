@@ -51,6 +51,10 @@
           "defaultChannel": "default-v4",
           "sounds": [
             "./assets/sounds/alarm_sound.mp3",
+            "./assets/sounds/alarm_critical.mp3",
+            "./assets/sounds/alarm_high.mp3",
+            "./assets/sounds/alarm_medium.mp3",
+            "./assets/sounds/alarm_low.mp3",
             "./assets/sounds/alarm_sound_ios.wav"
           ]
         }

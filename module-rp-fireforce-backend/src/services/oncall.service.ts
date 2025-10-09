@@ -465,89 +465,123 @@ export class OnCallService {
 	}
 
 	// ---------- Escalation encapsulated ----------
-
 	async escalateIncident(args: {
 		teamId: string;
 		incidentId: string;
 		reason: string;
 		priority: 'low' | 'medium' | 'high' | 'critical';
-		currentLevel: number;
+		currentLevel?: number; // ✅ Make optional with default
 	}) {
-		const now = new Date().toISOString();
+		try {
+			const now = new Date().toISOString();
+			const currentLevel = args.currentLevel || 0;
 
-		// 1) next escalation target
-		let target = await this.dbService.db.prepare(`
-			SELECT ec.level, ec.user_id, u.email, u.first_name, u.last_name, u.phone_number
-			FROM escalation_chains ec
-					 JOIN users u ON ec.user_id = u.id
-			WHERE ec.team_id = ? AND ec.level > ? AND ec.is_active = 1
-			ORDER BY ec.level
-			LIMIT 1
-		`).bind(args.teamId, args.currentLevel).first();
+			console.log(`[oncall] Escalating incident ${args.incidentId} for team ${args.teamId}, current level: ${currentLevel}`);
 
-		if (!target) {
-			// try team lead/manager
-			const lead = await this.dbService.db.prepare(`
-				SELECT u.id as user_id, u.email, u.first_name, u.last_name, u.phone_number
-				FROM team_members tm
-						 JOIN users u ON tm.user_id = u.id
-				WHERE tm.team_id = ? AND tm.role IN ('lead','manager') AND tm.is_active = 1
-				LIMIT 1
-			`).bind(args.teamId).first();
+			// 1) next escalation target
+			let target = await this.dbService.db.prepare(`
+            SELECT ec.level, ec.user_id, u.email, u.first_name, u.last_name, u.phone_number
+            FROM escalation_chains ec
+            JOIN users u ON ec.user_id = u.id
+            WHERE ec.team_id = ? AND ec.level > ? AND ec.is_active = 1
+            ORDER BY ec.level
+            LIMIT 1
+        `).bind(args.teamId, currentLevel).first();
 
-			if (!lead) {
-				const current = await this.getCurrentOnCallByTeamId(args.teamId);
-				if (!current?.primary) throw new Error('No escalation path available');
-				target = { user_id: current.primary.id, email: current.primary.email, first_name: current.primary.firstName, last_name: current.primary.lastName, phone_number: current.primary.phoneNumber, level: 999 } as any;
-			} else {
-				target = { ...(lead as any), level: 999 };
+			if (!target) {
+				console.log(`[oncall] No escalation chain found, trying team lead for team ${args.teamId}`);
+
+				// try team lead/manager
+				const lead = await this.dbService.db.prepare(`
+                SELECT u.id as user_id, u.email, u.first_name, u.last_name, u.phone_number
+                FROM team_members tm
+                JOIN users u ON tm.user_id = u.id
+                WHERE tm.team_id = ? AND tm.role IN ('lead','manager') AND tm.is_active = 1
+                LIMIT 1
+            `).bind(args.teamId).first();
+
+				if (!lead) {
+					console.log(`[oncall] No team lead found, falling back to current on-call for team ${args.teamId}`);
+
+					const current = await this.getCurrentOnCallByTeamId(args.teamId);
+					if (!current?.primary) {
+						throw new Error('No escalation path available - no escalation chain, team lead, or current on-call found');
+					}
+
+					target = {
+						user_id: current.primary.id,
+						email: current.primary.email,
+						first_name: current.primary.firstName,
+						last_name: current.primary.lastName,
+						phone_number: current.primary.phoneNumber,
+						level: 999
+					} as any;
+				} else {
+					target = { ...(lead as any), level: 999 };
+				}
 			}
-		}
 
-		// 2) write escalation record
-		const escId = crypto.randomUUID();
-		await this.dbService.db.prepare(`
-			INSERT INTO incident_escalations
-			(id, incident_id, team_id, escalated_to_user_id, escalation_level, reason, priority, created_at, status)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active')
-		`).bind(
-			escId, args.incidentId, args.teamId, (target as any).user_id,
-			(target as any).level, args.reason, args.priority, now
-		).run();
-
-		// 3) update incident
-		await this.dbService.db.prepare(`
-			UPDATE incidents
-			SET escalation_level = ?,
-				updated_at = ?,
-				priority = CASE
-							   WHEN ? = 'critical' THEN 'critical'
-							   WHEN priority = 'critical' THEN 'critical'
-							   ELSE ?
-					END
-			WHERE id = ?
-		`).bind(
-			(target as any).level, now, args.priority, args.priority, args.incidentId
-		).run();
-
-		const policy = await this.getEscalationPolicy(args.teamId);
-
-		return {
-			id: escId,
-			incidentId: args.incidentId,
-			teamId: args.teamId,
-			escalatedTo: {
+			console.log(`[oncall] Escalation target:`, {
 				userId: (target as any).user_id,
 				email: (target as any).email,
-				name: `${(target as any).first_name} ${(target as any).last_name}`,
 				level: (target as any).level
-			},
-			reason: args.reason,
-			priority: args.priority,
-			timestamp: now,
-			status: 'active',
-			escalationPolicy: policy
-		};
+			});
+
+			// 2) write escalation record
+			const escId = crypto.randomUUID();
+			await this.dbService.db.prepare(`
+            INSERT INTO incident_escalations
+            (id, incident_id, team_id, escalated_to_user_id, escalation_level, reason, priority, created_at, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active')
+        `).bind(
+				escId, args.incidentId, args.teamId, (target as any).user_id,
+				(target as any).level, args.reason, args.priority, now
+			).run();
+
+			console.log(`[oncall] Created escalation record ${escId}`);
+
+			// 3) update incident
+			await this.dbService.db.prepare(`
+            UPDATE incidents
+            SET escalation_level = ?,
+                updated_at = ?,
+                priority = CASE
+                    WHEN ? = 'critical' THEN 'critical'
+                    WHEN priority = 'critical' THEN 'critical'
+                    ELSE ?
+                END
+            WHERE id = ?
+        `).bind(
+				(target as any).level, now, args.priority, args.priority, args.incidentId
+			).run();
+
+			console.log(`[oncall] Updated incident ${args.incidentId}`);
+
+			// ✅ REMOVED: Don't fetch escalation policy at all
+			const result = {
+				id: escId,
+				incidentId: args.incidentId,
+				teamId: args.teamId,
+				escalatedTo: {
+					userId: (target as any).user_id,
+					email: (target as any).email,
+					name: `${(target as any).first_name} ${(target as any).last_name}`,
+					level: (target as any).level
+				},
+				reason: args.reason,
+				priority: args.priority,
+				timestamp: now,
+				status: 'active',
+				// ✅ REMOVED: escalationPolicy field
+			};
+
+			console.log(`[oncall] ✅ Escalation completed successfully`);
+			return result;
+
+		} catch (error) {
+			console.error(`[oncall] ❌ Escalation failed:`, error);
+			throw error;
+		}
 	}
 
 	// ---------------- NEW: Manage Schedule ----------------
