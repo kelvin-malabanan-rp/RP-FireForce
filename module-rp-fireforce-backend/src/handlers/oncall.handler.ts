@@ -1,60 +1,117 @@
 // handlers/oncall.handlers.ts
-import {ApiResponse, Env} from '../types';
+import {ApiResponse, CurrentOnCall, Env} from '../types';
 import { OnCallService } from '../services/oncall.service';
 
 const json = (obj: any, init?: ResponseInit) =>
 	new Response(JSON.stringify(obj), { headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) }, ...init });
 
-export async function handleGetCurrentOnCall(url: URL, env: Env, headers: HeadersInit): Promise<Response> {
-	try {
-		const teamId = url.searchParams.get('teamId') || undefined;
-		const svc = new OnCallService(env);
-		const current = await svc.getCurrentOnCallByTeamId(teamId);
-		if (!current) return json({ success: false, error: 'No active on-call found' }, { status: 404, headers });
-		return json({ success: true, object: current }, { headers });
-	} catch (err) {
-		console.error('Error getting current on-call:', err);
-		return json({ success: false, error: 'Failed to get current on-call', message: (err as Error).message }, { status: 500, headers });
-	}
-}
-
-export async function handleGetAllCurrentOnCall(
-	url: URL,
+export async function handleGetCurrentOnCallByTeamId(
+	request: Request,
 	env: Env,
-	headers: HeadersInit
+	corsHeaders: Record<string, string>
 ): Promise<Response> {
 	try {
-		const teamId = url.searchParams.get('teamId') || undefined;
-		const svc = new OnCallService(env);
-		const current = await svc.getAllCurrentOnCall(teamId);
+		const url = new URL(request.url);
+		const teamId = url.searchParams.get('teamId');
 
-		if (!current) {
-			return json({
-				httpStatus: "NOT_FOUND",
-				message: "No active on-call assignments found",
+		if (!teamId) {
+			const errorResponse: ApiResponse<null> = {
+				httpStatus: "ERROR",
+				message: "teamId is required",
 				data: null
-			}, {
-				status: 404,
-				headers
+			};
+			return new Response(JSON.stringify(errorResponse), {
+				status: 400,
+				headers: { ...corsHeaders, "Content-Type": "application/json" }
 			});
 		}
 
-		return json({
+		const svc = new OnCallService(env);
+		const current = await svc.getCurrentOnCallByTeamId(teamId);
+
+		if (!current) {
+			const errorResponse: ApiResponse<null> = {
+				httpStatus: "ERROR",
+				message: "No active on-call found for this team",
+				data: null
+			};
+			return new Response(JSON.stringify(errorResponse), {
+				status: 404,
+				headers: { ...corsHeaders, "Content-Type": "application/json" }
+			});
+		}
+
+		const successResponse: ApiResponse<CurrentOnCall> = {
+			httpStatus: "OK",
+			message: "Current on-call retrieved successfully",
+			data: current
+		};
+
+		return new Response(JSON.stringify(successResponse), {
+			status: 200,
+			headers: { ...corsHeaders, "Content-Type": "application/json" }
+		});
+	} catch (err) {
+		console.error('Error getting current on-call:', err);
+
+		const errorResponse: ApiResponse<null> = {
+			httpStatus: "ERROR",
+			message: (err as Error).message || 'Failed to get current on-call',
+			data: null
+		};
+
+		return new Response(JSON.stringify(errorResponse), {
+			status: 500,
+			headers: { ...corsHeaders, "Content-Type": "application/json" }
+		});
+	}
+}
+
+// ALL CURRENT ON CALL USERS
+export async function handleGetAllCurrentOnCall(
+	request: Request,
+	env: Env,
+	corsHeaders: Record<string, string>
+): Promise<Response> {
+	try {
+		const svc = new OnCallService(env);
+		const current = await svc.getAllCurrentOnCall();
+
+		// ✅ Fix: Check if the object exists and has data
+		if (!current || (!current.primary && !current.backup && !current.escalation)) {
+			const errorResponse: ApiResponse<null> = {
+				httpStatus: "ERROR",
+				message: "No active on-call assignments found",
+				data: null
+			};
+			return new Response(JSON.stringify(errorResponse), {
+				status: 404,
+				headers: { ...corsHeaders, "Content-Type": "application/json" }
+			});
+		}
+
+		const successResponse: ApiResponse<any> = { // ✅ Change from any[] to any
 			httpStatus: "OK",
 			message: "Retrieved current on-call assignments successfully",
-			data: current
-		}, {
-			headers
+			data: current // ✅ This is now { primary: [], backup: [], escalation: [] }
+		};
+
+		return new Response(JSON.stringify(successResponse), {
+			status: 200,
+			headers: { ...corsHeaders, "Content-Type": "application/json" }
 		});
 	} catch (err) {
 		console.error('Error getting all current on-call:', err);
-		return json({
-			httpStatus: "INTERNAL_SERVER_ERROR",
-			message: "Failed to get current on-call assignments",
+
+		const errorResponse: ApiResponse<null> = {
+			httpStatus: "ERROR",
+			message: (err as Error).message || "Failed to get current on-call assignments",
 			data: null
-		}, {
+		};
+
+		return new Response(JSON.stringify(errorResponse), {
 			status: 500,
-			headers
+			headers: { ...corsHeaders, "Content-Type": "application/json" }
 		});
 	}
 }

@@ -18,8 +18,11 @@ import {
 	handleCreateOnCallSchedule,
 	handleCreateOverride, handleDeleteOnCallSchedule,
 	handleEscalateIncident,
-	handleGetAllCurrentOnCall, handleGetAllSchedules,
-	handleGetCurrentOnCall, handleGetEscalationPolicy, handleGetOnCallCalendarData,
+	handleGetAllCurrentOnCall,
+	handleGetCurrentOnCallByTeamId,
+	handleGetAllSchedules,
+	handleGetEscalationPolicy,
+	handleGetOnCallCalendarData,
 	handleGetOnCallSchedule,
 	handleGetOnCallTeams,
 	handleGetScheduleConfig, handleGetTeamDetails,
@@ -143,13 +146,12 @@ export class Router {
 			}
 
 			// OnCall Routes
-			if (path === '/api/oncall/current' && method === 'GET') {
-				return handleGetCurrentOnCall(url, this.env, CORS_HEADERS);
+			if (path === '/api/oncall/team' && method === 'GET') {
+				return handleGetCurrentOnCallByTeamId(request, this.env, CORS_HEADERS);
 			}
 
-			if (path === '/api/oncall/current/all' && method === 'GET') {
-				const url = new URL(request.url);
-				return handleGetAllCurrentOnCall(url, this.env, CORS_HEADERS);
+			if (path === '/api/oncall/current' && method === 'GET') {
+				return handleGetAllCurrentOnCall(request, this.env, CORS_HEADERS);
 			}
 
 			if (path === '/api/oncall/schedule' && method === 'GET') {

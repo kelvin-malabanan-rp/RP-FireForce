@@ -106,46 +106,176 @@ export function useNotifications(options: UseNotificationsOptions = {}) {
 
   // Check for new incidents
   const checkNewIncidents = useCallback(async (): Promise<Notification[]> => {
+    console.log('[notifications] 🔍 Checking for new incidents...');
+    
     try {
       const response = await incidentService.getAllIncidents();
       const incidents = response.data || [];
       const currentUserId = getCurrentUserId();
 
+      console.log('[notifications] Fetched incidents:', incidents.length);
+      console.log('[notifications] Current user ID:', currentUserId);
+
+      if (!currentUserId) {
+        console.warn('[notifications] No user ID found, skipping incident check');
+        return [];
+      }
+
       // Filter incidents created after last check
-      const newIncidents = incidents.filter((incident: Incident) => {
+      const recentIncidents = incidents.filter((incident: Incident) => {
         const incidentDate = getIncidentTimestamp(incident);
         const notSeen = !seenIdsRef.current.has(`incident-${incident.id}`);
+        
         // Consider incident new if unseen and recent (last 30 minutes)
         const THIRTY_MIN = 30 * 60 * 1000;
         const isRecent = Date.now() - incidentDate.getTime() <= THIRTY_MIN;
+        
         return notSeen && isRecent;
       });
 
-      // Create notifications
-      return newIncidents.map((incident: Incident) => ({
-        id: `incident-${incident.id}`,
-        incidentId: incident.id,
-        title: `New ${incident.severity} Incident`,
-        message: incident.title || 'New incident reported',
-        time: getRelativeTime(getIncidentTimestamp(incident).toISOString()),
-        timestamp: getIncidentTimestamp(incident).toISOString(),
-        type: getNotificationType(incident.severity),
-        category: 'incident' as const,
-        unread: true,
-        severity: incident.severity,
-        data: {
+      // ✅ NEW: Filter by targeting
+      const targetedIncidents: Incident[] = [];
+      const incidentsToCheckOnCall: Incident[] = [];
+
+      console.log('[notifications] Recent incidents to process:', recentIncidents.length);
+
+      for (const incident of recentIncidents) {
+        // Check if directly assigned
+        const isAssignedToMe = (incident as any).assigned_to === currentUserId;
+        
+        // Check if in manual notify list - check multiple possible field names
+        const notifyUsers = (incident as any).notifyUsers || 
+                           (incident as any).notify_users || 
+                           (incident as any).notified_users ||
+                           [];
+        const isManuallyNotified = Array.isArray(notifyUsers) && notifyUsers.includes(currentUserId);
+        
+        // ✅ Check if there are ANY manual selections
+        const hasManualSelections = Array.isArray(notifyUsers) && notifyUsers.length > 0;
+        
+        // ✅ IMPORTANT: If manual selections exist, ONLY show to selected users
+        const hasTeamId = !!(incident as any).team_id;
+        
+        console.log(`[notifications] Incident ${incident.id}:`, {
+          assigned: isAssignedToMe,
+          manuallyNotified: isManuallyNotified,
+          notifyUsersArray: notifyUsers,
+          hasManualSelections: hasManualSelections,
+          teamId: (incident as any).team_id,
+          hasTeamId
+        });
+        
+        // Priority 1: If manually notified, always include
+        if (isManuallyNotified) {
+          targetedIncidents.push(incident);
+        }
+        // Priority 2: If assigned to me, include
+        else if (isAssignedToMe) {
+          targetedIncidents.push(incident);
+        }
+        // Priority 3: Only check on-call if NO manual selections exist
+        else if (!hasManualSelections) {
+          if (hasTeamId) {
+            incidentsToCheckOnCall.push(incident);
+          } else if ((incident as any).status === 'open') {
+            // No teamId and no manual selection - add to on-call check list
+            incidentsToCheckOnCall.push(incident);
+          }
+        }
+        // If has manual selections but we're not in the list, skip it
+      }
+
+      // ✅ TEMPORARY WORKAROUND: Since backend doesn't save notifyUsers or teamId,
+      // show all recent open incidents to users who are currently on-call
+      console.log('[notifications] Applying temporary workaround - checking if user is on-call');
+      
+      try {
+        // Dynamically import to avoid circular dependency
+        const { onCallService } = await import('../services/oncallService');
+        
+        // Get user's team
+        const userTeamResponse = await onCallService.getUserTeam(currentUserId);
+        
+        console.log('[notifications] User team response:', userTeamResponse);
+        
+        if (userTeamResponse?.httpStatus === 'OK' && userTeamResponse.data) {
+          const userTeamId = userTeamResponse.data.id;
+          console.log('[notifications] User team ID:', userTeamId);
+          
+          // Get current on-call for user's team
+          const onCallResponse = await onCallService.getCurrentOnCallByTeam(userTeamId);
+          
+          console.log('[notifications] On-call response:', onCallResponse);
+          
+          if (onCallResponse?.httpStatus === 'OK' && onCallResponse.data) {
+            const onCallAssignment = onCallResponse.data;
+            
+            // Check if current user is primary, backup, or escalation
+            const isPrimary = onCallAssignment.primary?.id === currentUserId;
+            const isBackup = onCallAssignment.backup?.id === currentUserId;
+            const isEscalation = onCallAssignment.escalation?.some(e => e.id === currentUserId);
+            
+            const isOnCall = isPrimary || isBackup || isEscalation;
+            
+            console.log('[notifications] On-call check:', { isPrimary, isBackup, isEscalation, isOnCall });
+            
+            if (isOnCall) {
+              // Show all recent open incidents since backend doesn't provide targeting
+              const openIncidents = recentIncidents.filter(
+                inc => (inc as any).status === 'open'
+              );
+              console.log('[notifications] User is on-call! Adding', openIncidents.length, 'open incidents');
+              targetedIncidents.push(...openIncidents);
+            } else {
+              console.log('[notifications] User is NOT on-call, no incidents to show');
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[notifications] Failed to check on-call status:', err);
+      }
+
+      console.log('[notifications] Targeted incidents (direct):', targetedIncidents.length);
+      console.log('[notifications] Incidents to check on-call:', incidentsToCheckOnCall.length);
+
+      // Create notifications only for targeted incidents
+      console.log('[notifications] 📊 Final targeted incidents:', targetedIncidents.length);
+      
+      const finalNotifications = targetedIncidents.map((incident: Incident) => {
+        const isAssigned = (incident as any).assigned_to === currentUserId;
+        const notifyUsers = (incident as any).notifyUsers || (incident as any).notify_users || [];
+        const isManuallyNotified = Array.isArray(notifyUsers) && notifyUsers.includes(currentUserId);
+        
+        return {
+          id: `incident-${incident.id}`,
           incidentId: incident.id,
+          title: `New ${incident.severity} Incident`,
+          message: incident.title || 'New incident reported',
+          time: getRelativeTime(getIncidentTimestamp(incident).toISOString()),
+          timestamp: getIncidentTimestamp(incident).toISOString(),
+          type: getNotificationType(incident.severity),
+          category: 'incident' as const,
+          unread: true,
           severity: incident.severity,
-          status: incident.status
-        },
-        recipientId: (incident as any).assigned_to,
-        targeted: !!(currentUserId && (incident as any).assigned_to && (incident as any).assigned_to === currentUserId)
-      }));
+          data: {
+            incidentId: incident.id,
+            severity: incident.severity,
+            status: incident.status,
+            location: (incident as any).location,
+            reportedBy: (incident as any).reported_by
+          },
+          recipientId: currentUserId,
+          targeted: isAssigned || isManuallyNotified
+        };
+      });
+      
+      console.log('[notifications] ✅ Created notifications:', finalNotifications.length);
+      return finalNotifications;
     } catch (error) {
       console.error('Error fetching incidents:', error);
       return [];
     }
-  }, [getRelativeTime, getNotificationType, getCurrentUserId]);
+  }, [getRelativeTime, getNotificationType, getCurrentUserId, getIncidentTimestamp]);
 
   // Check for new comments
   const checkNewComments = useCallback(async (): Promise<Notification[]> => {
@@ -266,7 +396,7 @@ export function useNotifications(options: UseNotificationsOptions = {}) {
       window.removeEventListener('notifications:refresh', handleRefresh as EventListener);
       window.removeEventListener('notifications:push', handlePush as EventListener);
     };
-  }, [pollNotifications, saveSeenIds]);
+  }, [pollNotifications, saveSeenIds, getCurrentUserId]);
 
   // Mark notification as read
   const markAsRead = useCallback((notificationId: string) => {

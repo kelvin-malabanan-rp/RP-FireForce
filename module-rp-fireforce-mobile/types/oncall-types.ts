@@ -121,11 +121,14 @@ export interface GetScheduleParams {
     endDate?: string;
 }
 
+// ✅ New: Grouped by role across all teams
 export interface OnCallMemberWithToken {
     userId: string;
     fullname: string;
     email: string;
-    role: "primary" | "backup" | "escalation";
+    teamId: string;
+    teamName: string;
+    timezone: string;
     startTime: string;
     endTime: string;
     pushTokenId: string | null;
@@ -134,15 +137,27 @@ export interface OnCallMemberWithToken {
     deviceType: string | null;
 }
 
+export interface AllCurrentOnCallByRole {
+    primary: OnCallMemberWithToken[];
+    backup: OnCallMemberWithToken[];
+    escalation: OnCallMemberWithToken[];
+}
+
+// ✅ Update the response type
+export type AllCurrentOnCallResponse = AllCurrentOnCallByRole;
+
+// ✅ Keep the old interface for backward compatibility if needed
 export interface OnCallTeamCurrent {
     teamId: string;
     teamName: string;
     timezone: string;
     today: string;
-    members: OnCallMemberWithToken[];
+    primary: OnCallMemberWithToken[];
+    backup: OnCallMemberWithToken[];
+    escalation: OnCallMemberWithToken[];
 }
 
-export type AllCurrentOnCallResponse = OnCallTeamCurrent[];
+export type AllCurrentOnCallByTeamResponse = OnCallTeamCurrent[];
 
 export interface EmergencyOverrideUser {
     id: string;

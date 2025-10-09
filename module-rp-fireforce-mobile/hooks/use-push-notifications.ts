@@ -1,4 +1,4 @@
-// hooks/usePushNotifications.ts
+// hooks/use-push-notifications.ts
 import { useState, useEffect } from 'react';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
@@ -7,6 +7,7 @@ import { Platform } from 'react-native';
 import { registerPushToken, respondToIncident } from '@/api/alert-controller';
 import { router } from 'expo-router';
 import { retrieveUserSession } from '@/constants/local-storage';
+import { BASE_URL_DEV } from '@/utils/backend-url';
 import {getAllCurrentOnCall, getUsersForEmergencyOverride, oncallController} from '@/api/oncall-schedule-controller';
 import {createAuditLog} from "@/api/audit-trail";
 import {getIncidentById} from "@/api/incident-controller";
@@ -59,7 +60,6 @@ export const usePushNotifications = () => {
             await Notifications.dismissNotificationAsync(id);
         }
 
-        // Clean up stored IDs
         setNotificationIds(prev => {
             const updated = { ...prev };
             delete updated[incidentId];
@@ -119,10 +119,7 @@ export const usePushNotifications = () => {
             const { actionIdentifier } = response;
             const data = response.notification.request.content.data as any;
             const incidentId = data?.incidentId || data?.data?.incidentId;
-
-            // Get the ACTUAL notification identifier
             const notificationId = response.notification.request.identifier;
-            console.log('[push] Notification ID:', notificationId);
 
             if (!incidentId) {
                 console.error('[push] No incident ID in notification data');
@@ -142,8 +139,6 @@ export const usePushNotifications = () => {
                 try {
                     await respondToIncident(incidentId, 'acknowledge', session.id);
                     console.log('[push] Successfully acknowledged incident');
-
-                    // Use the ACTUAL notification identifier, not your custom one
                     await Notifications.dismissNotificationAsync(notificationId);
 
                     // ✅ Fetch incident and send status notification
@@ -176,20 +171,13 @@ export const usePushNotifications = () => {
                 try {
                     await respondToIncident(incidentId, 'decline', session.id);
                     console.log('[push] Successfully declined incident');
-
-                    // Use the ACTUAL notification identifier
                     await Notifications.dismissNotificationAsync(notificationId);
-
                 } catch (error) {
                     console.error('[push] Error declining:', error);
                 }
             } else {
-                // Default tap
                 console.log('[push] User tapped notification', incidentId);
-
-                // Dismiss using actual identifier
                 await Notifications.dismissNotificationAsync(notificationId);
-
                 router.push({
                     pathname: '/inner-incident-page',
                     params: { incidentId },
@@ -205,7 +193,6 @@ export const usePushNotifications = () => {
         setupNotifications();
     }, []);
 
-    // Register action categories
     const ensureCategoriesAsync = async () => {
         await Notifications.setNotificationCategoryAsync('incident-actions', [
             {
@@ -232,7 +219,6 @@ export const usePushNotifications = () => {
                     } as Notifications.NotificationBehavior),
             });
 
-
             const { status } = await Notifications.requestPermissionsAsync({
                 ios: {
                     allowAlert: true,
@@ -256,7 +242,6 @@ export const usePushNotifications = () => {
         }
     };
 
-    // Notification channels
     const CHANNELS = {
         critical: 'critical-alerts-v4',
         high: 'high-priority-v4',
@@ -307,7 +292,6 @@ export const usePushNotifications = () => {
                     ? CHANNELS.medium
                     : CHANNELS.default;
 
-    // Device registration
     const registerDevice = async () => {
         if (!Device.isDevice) {
             console.warn('[push] physical device required');
@@ -355,7 +339,174 @@ export const usePushNotifications = () => {
         }
     };
 
-    // ✅ Corrected: Normal rotation + emergency override logic
+    // ==================== HELPER FUNCTIONS ====================
+
+    // ✅ Helper 1: Send notifications to a group of members
+    const sendNotificationsToMembers = async (
+        members: any[],
+        incident: any,
+        roleType: string
+    ) => {
+        let sentCount = 0, failedCount = 0, skippedCount = 0;
+        const results: any[] = [];
+
+        for (const member of members) {
+            if (!member.pushToken) {
+                skippedCount++;
+                results.push({
+                    userId: member.userId,
+                    fullname: member.fullname,
+                    email: member.email,
+                    role: roleType,
+                    status: 'skipped',
+                    reason: 'No push token'
+                });
+                continue;
+            }
+
+            try {
+                const message = {
+                    to: member.pushToken,
+                    sound: 'default',
+                    title: `${incident.severity.toUpperCase()}: ${incident.title}`,
+                    body: incident.description,
+                    data: { incidentId: incident.id, severity: incident.severity },
+                    channelId: getChannelBySeverity(incident.severity),
+                    categoryId: 'incident-actions',
+                    priority: incident.severity === 'critical' ? 'high' : 'default',
+                };
+
+                const pushResponse = await fetch('https://exp.host/--/api/v2/push/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(message),
+                });
+
+                if (pushResponse.ok) {
+                    sentCount++;
+                    results.push({
+                        userId: member.userId,
+                        fullname: member.fullname,
+                        email: member.email,
+                        role: roleType,
+                        status: 'sent',
+                        pushToken: member.pushToken
+                    });
+                } else {
+                    failedCount++;
+                    const errorText = await pushResponse.text();
+                    results.push({
+                        userId: member.userId,
+                        fullname: member.fullname,
+                        email: member.email,
+                        role: roleType,
+                        status: 'failed',
+                        error: errorText
+                    });
+                }
+            } catch (err) {
+                failedCount++;
+                results.push({
+                    userId: member.userId,
+                    fullname: member.fullname,
+                    email: member.email,
+                    role: roleType,
+                    status: 'failed',
+                    error: String(err)
+                });
+            }
+        }
+
+        console.log(`[push] ${roleType.toUpperCase()}: Sent: ${sentCount}, Failed: ${failedCount}, Skipped: ${skippedCount}`);
+        return { sent: sentCount, failed: failedCount, skipped: skippedCount, results };
+    };
+
+    // ✅ Helper 2: Wait for acknowledgment
+    const waitForAcknowledgment = async (incidentId: string, timeoutMs: number): Promise<boolean> => {
+        return new Promise((resolve) => {
+            const startTime = Date.now();
+
+            const checkInterval = setInterval(async () => {
+                try {
+                    const response = await fetch(`${BASE_URL_DEV}/api/incidents/${incidentId}`);
+                    const data = await response.json();
+
+                    if (data.data?.status === 'investigating' || data.data?.status === 'resolved') {
+                        clearInterval(checkInterval);
+                        console.log('[push] ✅ Incident acknowledged, stopping escalation');
+                        resolve(true);
+                        return;
+                    }
+
+                    if (Date.now() - startTime >= timeoutMs) {
+                        clearInterval(checkInterval);
+                        console.log('[push] ⏰ Timeout reached, escalating...');
+                        resolve(false);
+                    }
+                } catch (error) {
+                    console.error('[push] Error checking acknowledgment:', error);
+                }
+            }, 3000);
+        });
+    };
+
+    // ✅ Helper 3: Create audit log
+    const createNotificationAuditLog = async (
+        incident: any,
+        userId: string,
+        sentCount: number,
+        failedCount: number,
+        skippedCount: number,
+        results: any[],
+        isEmergency: boolean
+    ) => {
+        const totalTargeted = results.length;
+        const notificationMode = isEmergency ? 'Emergency Override' : 'Escalation-Based Rotation';
+
+        const auditPayload = {
+            action: "SEND_PUSH_NOTIFICATION",
+            incidentId: incident.id,
+            userId: userId,
+            description: isEmergency
+                ? `Push notifications sent via Emergency Override to ${totalTargeted} selected users (${sentCount} sent, ${failedCount} failed, ${skippedCount} skipped)`
+                : `Push notifications sent via Escalation (${totalTargeted} users: ${sentCount} sent, ${failedCount} failed, ${skippedCount} skipped)`,
+            details: {
+                incidentTitle: incident.title,
+                severity: incident.severity,
+                notificationMode: notificationMode,
+                teamId: incident.teamId || 'global',
+                emergencyOverride: isEmergency,
+                targetedUsers: totalTargeted,
+                sentCount: sentCount,
+                failedCount: failedCount,
+                skippedCount: skippedCount,
+                recipients: results.map(r => ({
+                    userId: r.userId,
+                    fullname: r.fullname,
+                    email: r.email,
+                    role: r.role,
+                    status: r.status
+                }))
+            },
+            metadata: {
+                device: Platform.OS,
+                timestamp: new Date().toISOString(),
+                notificationType: 'push',
+                channelId: getChannelBySeverity(incident.severity),
+            }
+        };
+
+        try {
+            const auditResponse = await createAuditLog(auditPayload);
+            console.log("✅ Notification audit log created:", auditResponse);
+        } catch (auditError: any) {
+            console.error("⚠️ Failed to create notification audit log:", auditError);
+        }
+    };
+
+    // ==================== MAIN FUNCTIONS ====================
+
+    // ✅ Main: Escalation-based notification (Primary → Backup → Escalation)
     const sendNotificationToOnCallTeam = async (
         incident: {
             id: string;
@@ -368,17 +519,13 @@ export const usePushNotifications = () => {
         currentUserId?: string | null
     ) => {
         try {
-            // ✅ Use the passed userId OR fallback to the hook's id state
             const userId = currentUserId || id;
 
-            // ✅ Validate userId before proceeding
             if (!userId) {
                 console.error('[push] ❌ Cannot create audit log: User session not loaded');
-                console.warn('[push] ⚠️ Sending notifications anyway, but audit log will be skipped');
             }
 
             console.log('[push] Preparing to send notifications for incident:', incident.title);
-            console.log('[push] Using userId for audit:', userId);
 
             const emergency = incident.emergencyOverride;
             const isEmergency =
@@ -387,182 +534,105 @@ export const usePushNotifications = () => {
                 Array.isArray(emergency.userEmails) &&
                 emergency.userEmails.length > 0;
 
-            let membersToNotify: any[] = [];
+            let primaryMembers: any[] = [];
+            let backupMembers: any[] = [];
+            let escalationMembers: any[] = [];
+            let allMembersToNotify: any[] = [];
 
+            // Handle emergency override
             if (isEmergency && emergency.userEmails) {
                 console.log('[push] Emergency override active:', emergency.userEmails);
                 const response = await getUsersForEmergencyOverride(emergency.userEmails);
                 if (response.httpStatus === 'OK' && response.data) {
-                    membersToNotify = response.data;
-                } else {
-                    console.error('[push] Failed to load emergency override users');
-                }
-            } else if (incident.teamId) {
-                console.log('[push] Using normal on-call rotation');
-                const response = await getAllCurrentOnCall(incident.teamId);
-                if (response.httpStatus === 'OK' && response.data) {
-                    response.data.forEach((team: any) => {
-                        membersToNotify.push(...team.members);
-                    });
-                } else {
-                    console.error('[push] No on-call assignments found for today');
+                    allMembersToNotify = response.data;
                 }
             } else {
-                console.warn('[push] No teamId provided, fallback to global rotation');
+                console.log('[push] Using escalation-based on-call rotation');
                 const response = await getAllCurrentOnCall();
+
+                console.log('[push] API Response:', response);
+
                 if (response.httpStatus === 'OK' && response.data) {
-                    response.data.forEach((team: any) => {
-                        membersToNotify.push(...team.members);
-                    });
+                    // ✅ Data is now { primary: [], backup: [], escalation: [] }
+                    primaryMembers = response.data.primary || [];
+                    backupMembers = response.data.backup || [];
+                    escalationMembers = response.data.escalation || [];
+
+                    console.log('[push] Primary:', primaryMembers.length, 'Backup:', backupMembers.length, 'Escalation:', escalationMembers.length);
                 }
             }
 
-            if (!membersToNotify.length) {
-                console.warn('[push] No users found to notify');
-                return { sent: 0, failed: 0, skipped: 0 };
+            // Emergency: Send all at once
+            if (isEmergency) {
+                const result = await sendNotificationsToMembers(allMembersToNotify, incident, 'emergency');
+
+                if (userId && incident.id) {
+                    await createNotificationAuditLog(
+                        incident, userId, result.sent, result.failed,
+                        result.skipped, result.results || [], isEmergency
+                    );
+                }
+
+                return result;
             }
 
-            let sentCount = 0,
-                failedCount = 0,
-                skippedCount = 0;
-            const notificationResults: any[] = [];
+            // Normal: Escalate Primary → Backup → Escalation
+            let totalSent = 0, totalFailed = 0, totalSkipped = 0;
+            let allResults: any[] = [];
 
-            for (const member of membersToNotify) {
-                if (!member.pushToken) {
-                    skippedCount++;
-                    notificationResults.push({
-                        userId: member.userId,
-                        fullname: member.fullname,
-                        email: member.email,
-                        role: member.role,
-                        status: 'skipped',
-                        reason: 'No push token'
-                    });
-                    continue;
-                }
-                try {
-                    const message = {
-                        to: member.pushToken,
-                        sound: 'default',
-                        title: `${incident.severity.toUpperCase()}: ${incident.title}`,
-                        body: incident.description,
-                        data: {
-                            incidentId: incident.id,
-                            severity: incident.severity,
-                            type: 'incident_alert', // ✅ ADD THIS LINE
-                            teamId: incident.teamId  // ✅ ADD THIS LINE TOO
-                        },
-                        channelId: getChannelBySeverity(incident.severity),
-                        categoryId: 'incident-actions',
-                        priority: incident.severity === 'critical' ? 'high' : 'default',
-                    };
+            // Step 1: Send to Primary
+            if (primaryMembers.length > 0) {
+                console.log('[push] 📍 Step 1: Notifying PRIMARY members...');
+                const primaryResult = await sendNotificationsToMembers(primaryMembers, incident, 'primary');
+                totalSent += primaryResult.sent;
+                totalFailed += primaryResult.failed;
+                totalSkipped += primaryResult.skipped;
+                allResults.push(...(primaryResult.results || []));
 
-                    const pushResponse = await fetch('https://exp.host/--/api/v2/push/send', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(message),
-                    });
+                console.log('[push] ⏳ Waiting 30 seconds for primary response...');
+                const hasAck = await waitForAcknowledgment(incident.id, 30000);
 
-                    if (pushResponse.ok) {
-                        sentCount++;
-                        notificationResults.push({
-                            userId: member.userId,
-                            fullname: member.fullname,
-                            email: member.email,
-                            role: member.role,
-                            status: 'sent',
-                            pushToken: member.pushToken
-                        });
-                    } else {
-                        failedCount++;
-                        const errorText = await pushResponse.text();
-                        notificationResults.push({
-                            userId: member.userId,
-                            fullname: member.fullname,
-                            email: member.email,
-                            role: member.role,
-                            status: 'failed',
-                            error: errorText
-                        });
+                if (!hasAck && backupMembers.length > 0) {
+                    // Step 2: Backup
+                    console.log('[push] 📍 Step 2: No response, escalating to BACKUP...');
+                    const backupResult = await sendNotificationsToMembers(backupMembers, incident, 'backup');
+                    totalSent += backupResult.sent;
+                    totalFailed += backupResult.failed;
+                    totalSkipped += backupResult.skipped;
+                    allResults.push(...(backupResult.results || []));
+
+                    const backupAck = await waitForAcknowledgment(incident.id, 30000);
+
+                    if (!backupAck && escalationMembers.length > 0) {
+                        // Step 3: Escalation
+                        console.log('[push] 📍 Step 3: Final escalation...');
+                        const escResult = await sendNotificationsToMembers(escalationMembers, incident, 'escalation');
+                        totalSent += escResult.sent;
+                        totalFailed += escResult.failed;
+                        totalSkipped += escResult.skipped;
+                        allResults.push(...(escResult.results || []));
                     }
-                } catch (err) {
-                    failedCount++;
-                    notificationResults.push({
-                        userId: member.userId,
-                        fullname: member.fullname,
-                        email: member.email,
-                        role: member.role,
-                        status: 'failed',
-                        error: String(err)
-                    });
-                }
-            }
-
-            console.log(`[push] Sent: ${sentCount}, Failed: ${failedCount}, Skipped: ${skippedCount}`);
-
-            // 🔔 Create audit log ONLY if we have a valid userId
-            if (userId && incident.id) {
-                const notificationMode = isEmergency ? 'Emergency Override' : 'On-Call Rotation';
-                const totalTargeted = membersToNotify.length;
-
-                const auditPayload = {
-                    action: "SEND_PUSH_NOTIFICATION",
-                    incidentId: incident.id,
-                    userId: userId, // ✅ Now guaranteed to have a value
-                    description: isEmergency
-                        ? `Push notifications sent via Emergency Override to ${totalTargeted} selected users (${sentCount} sent, ${failedCount} failed, ${skippedCount} skipped)`
-                        : `Push notifications sent to On-Call Team (${totalTargeted} users: ${sentCount} sent, ${failedCount} failed, ${skippedCount} skipped)`,
-                    details: {
-                        incidentTitle: incident.title,
-                        severity: incident.severity,
-                        notificationMode: notificationMode,
-                        teamId: incident.teamId || 'global',
-                        emergencyOverride: isEmergency,
-                        targetedUsers: totalTargeted,
-                        sentCount: sentCount,
-                        failedCount: failedCount,
-                        skippedCount: skippedCount,
-                        recipients: notificationResults.map(r => ({
-                            userId: r.userId,
-                            fullname: r.fullname,
-                            email: r.email,
-                            role: r.role,
-                            status: r.status
-                        }))
-                    },
-                    metadata: {
-                        device: Platform.OS,
-                        timestamp: new Date().toISOString(),
-                        notificationType: 'push',
-                        channelId: getChannelBySeverity(incident.severity),
-                        ...(isEmergency && {
-                            emergencyEmails: emergency.userEmails
-                        })
-                    }
-                };
-
-                try {
-                    console.log("🔍 Audit payload being sent:", JSON.stringify(auditPayload, null, 2));
-                    const auditResponse = await createAuditLog(auditPayload);
-                    console.log("✅ Notification audit log created:", auditResponse);
-                } catch (auditError: any) {
-                    console.error("⚠️ Failed to create notification audit log:", auditError);
-                    console.error("⚠️ Error response data:", auditError?.response?.data);
-                    console.error("⚠️ Error response status:", auditError?.response?.status);
                 }
             } else {
-                console.warn('⚠️ Skipping audit log creation - missing userId or incidentId');
-                console.log('[push] userId:', userId, 'incidentId:', incident.id);
+                console.warn('[push] No primary members found');
             }
 
-            return { sent: sentCount, failed: failedCount, skipped: skippedCount };
+            // Create audit log
+            if (userId && incident.id) {
+                await createNotificationAuditLog(
+                    incident, userId, totalSent, totalFailed,
+                    totalSkipped, allResults, isEmergency
+                );
+            }
+
+            return { sent: totalSent, failed: totalFailed, skipped: totalSkipped };
         } catch (err) {
             console.error('[push] Error sending notifications:', err);
             return { sent: 0, failed: 0, skipped: 0 };
         }
     };
 
-    // ✅ Updated to send remote notifications to the entire team
+    // ✅ Send status change notification to team
     const sendStatusChangeNotification = async (incident: {
         id: string;
         title: string;
@@ -576,26 +646,17 @@ export const usePushNotifications = () => {
             console.log('[push] Sending status change notification:', incident.status);
 
             const session = await retrieveUserSession();
-
-            // Get team members to notify
             let membersToNotify: any[] = [];
 
-            if (incident.teamId) {
-                console.log('[push] Getting team members for team:', incident.teamId);
-                const response = await getAllCurrentOnCall(incident.teamId);
-                if (response.httpStatus === 'OK' && response.data) {
-                    response.data.forEach((team: any) => {
-                        membersToNotify.push(...team.members);
-                    });
-                }
-            } else {
-                console.log('[push] Getting all on-call team members');
-                const response = await getAllCurrentOnCall();
-                if (response.httpStatus === 'OK' && response.data) {
-                    response.data.forEach((team: any) => {
-                        membersToNotify.push(...team.members);
-                    });
-                }
+            const response = await getAllCurrentOnCall();
+
+            if (response.httpStatus === 'OK' && response.data) {
+                // ✅ Combine all roles from new format
+                membersToNotify = [
+                    ...(response.data.primary || []),
+                    ...(response.data.backup || []),
+                    ...(response.data.escalation || [])
+                ];
             }
 
             if (!membersToNotify.length) {
@@ -611,15 +672,10 @@ export const usePushNotifications = () => {
             let skippedCount = 0;
 
             for (const member of membersToNotify) {
-                // Skip the person who made the action
-                if (member.id === incident.excludeUserId) {
-                    console.log('[push] Skipping notification for user who made the action:', member.email);
-
-                    // Still dismiss their original notification if it's them on current device
-                    if (session?.id === member.id) {
+                if (member.userId === incident.excludeUserId) {
+                    if (session?.id === member.userId) {
                         await clearStoredNotifications(incident.id);
                     }
-
                     skippedCount++;
                     continue;
                 }
@@ -630,10 +686,9 @@ export const usePushNotifications = () => {
                 }
 
                 try {
-                    // Send remote push notification
                     const message = {
                         to: member.pushToken,
-                        sound: 'default', // Gentle sound for status updates
+                        sound: 'default',
                         title: incident.status === 'resolved'
                             ? '✅ Incident Resolved'
                             : '🔍 Incident Under Investigation',
@@ -643,8 +698,8 @@ export const usePushNotifications = () => {
                             status: incident.status,
                             type: 'status_change'
                         },
-                        badge: 0, // Don't increment badge for positive updates
-                        priority: 'default', // Lower priority for status updates
+                        badge: 0,
+                        priority: 'default',
                     };
 
                     const pushResponse = await fetch('https://exp.host/--/api/v2/push/send', {
@@ -655,22 +710,17 @@ export const usePushNotifications = () => {
 
                     if (pushResponse.ok) {
                         sentCount++;
-                        console.log('[push] Status notification sent to:', member.email);
-                    } else {
-                        console.warn('[push] Failed to send to:', member.email);
                     }
 
-                    // If it's the current user, also clear their original notification
-                    if (session?.id === member.id) {
+                    if (session?.id === member.userId) {
                         await clearStoredNotifications(incident.id);
                     }
-
                 } catch (err) {
                     console.error('[push] Error sending to:', member.email, err);
                 }
             }
 
-            console.log(`[push] Status change notifications: Sent ${sentCount}, Skipped ${skippedCount}`);
+            console.log(`[push] Status notifications: Sent ${sentCount}, Skipped ${skippedCount}`);
         } catch (error) {
             console.error('[push] Error sending status change notification:', error);
         }
@@ -1054,7 +1104,6 @@ export const usePushNotifications = () => {
     };
 
     const clearIncidentNotifications = async (incidentId: string) => {
-        console.log('[push] Clearing notification for incident:', incidentId);
         await Notifications.dismissNotificationAsync(`incident-${incidentId}`);
         await Notifications.dismissNotificationAsync(`incident-${incidentId}-reminder`);
     };

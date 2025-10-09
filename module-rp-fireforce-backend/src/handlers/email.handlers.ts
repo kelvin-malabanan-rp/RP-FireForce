@@ -12,7 +12,7 @@ export async function handleSendIncidentAlertEmail(
 	corsHeaders: Record<string, string>
 ): Promise<Response> {
 	try {
-		const body = await request.json();
+		const body = await request.json() as any;
 
 		const { to, incidentId, title, description, severity, reportedBy, timestamp } = body;
 
@@ -82,7 +82,7 @@ export async function handleSendStatusChangeEmail(
 	corsHeaders: Record<string, string>
 ): Promise<Response> {
 	try {
-		const body = await request.json();
+		const body = await request.json() as any;
 
 		const { to, incidentId, title, status, changedBy, timestamp } = body;
 
@@ -165,7 +165,7 @@ export async function handleSendReminderEmail(
 	corsHeaders: Record<string, string>
 ): Promise<Response> {
 	try {
-		const body = await request.json();
+		const body = await request.json() as any;
 
 		const { to, incidentId, title, description, severity, reminderNumber, totalReminders } = body;
 
@@ -235,7 +235,7 @@ export async function handleSendEscalationEmail(
 	corsHeaders: Record<string, string>
 ): Promise<Response> {
 	try {
-		const body = await request.json();
+		const body = await request.json() as any;
 
 		const { to, incidentId, title, description, severity, escalatedFrom, escalatedTo, reason } = body;
 
@@ -395,7 +395,7 @@ export async function handleSendBulkEmail(
 	corsHeaders: Record<string, string>
 ): Promise<Response> {
 	try {
-		const body = await request.json();
+		const body = await request.json() as any;
 
 		const { recipients, subject, htmlBody, textBody } = body;
 
@@ -494,7 +494,6 @@ export async function handleSendBulkEmail(
 		);
 	}
 }
-
 /**
  * Send test email
  * POST /api/email/test
@@ -505,7 +504,7 @@ export async function handleSendTestEmail(
 	corsHeaders: Record<string, string>
 ): Promise<Response> {
 	try {
-		const body = await request.json();
+		const body = await request.json() as any;
 
 		const { to } = body;
 
