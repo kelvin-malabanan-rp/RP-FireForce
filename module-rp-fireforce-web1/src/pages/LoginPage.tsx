@@ -65,13 +65,13 @@ export function LoginPage({ onLogin }: LoginPageProps) {
               whileHover={{ scale: 1.05 }}
               className="flex items-center space-x-3 cursor-pointer"
             >
-              <motion.div 
-                className="w-10 h-10 bg-gradient-to-r from-orange-500 to-red-600 rounded-xl flex items-center justify-center shadow-lg shadow-orange-500/25"
-                whileHover={{ rotate: 180 }}
+              <motion.img
+                src="https://i.postimg.cc/Y9pP0btx/Gemini-Generated-Image-n40l9yn40l9yn40l-1.png"
+                alt="FireForce Logo"
+                className="w-10 h-10 rounded-xl shadow-lg shadow-orange-500/25"
+                whileHover={{ rotate: 5 }}
                 transition={{ duration: 0.3 }}
-              >
-                <Zap className="h-6 w-6 text-white" />
-              </motion.div>
+              />
               <div className="flex flex-col">
                 <span className="text-2xl font-bold bg-gradient-to-r from-orange-400 to-red-500 bg-clip-text text-transparent">
                   FireForce
@@ -185,9 +185,13 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                   initial={{ scale: 0 }}
                   animate={{ scale: 1 }}
                   transition={{ delay: 0.5, type: "spring", stiffness: 200 }}
-                  className="w-16 h-16 bg-gradient-to-r from-orange-500 to-red-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-orange-500/25"
+                  className="w-32 h-32 mx-auto mb-4"
                 >
-                  <Lock className="h-8 w-8 text-white" />
+                  <img
+                    src="https://i.postimg.cc/Y9pP0btx/Gemini-Generated-Image-n40l9yn40l9yn40l-1.png"
+                    alt="FireForce Logo"
+                    className="w-full h-full object-contain"
+                  />
                 </motion.div>
                 <CardTitle className="text-3xl font-bold text-white mb-2">
                   Sign In
@@ -329,9 +333,11 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         <div className="container mx-auto px-4 py-6">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center space-x-2">
-              <div className="w-6 h-6 bg-gradient-to-r from-orange-500 to-red-600 rounded flex items-center justify-center">
-                <Zap className="h-3 w-3 text-white" />
-              </div>
+              <img 
+                src="https://i.postimg.cc/Y9pP0btx/Gemini-Generated-Image-n40l9yn40l9yn40l-1.png"
+                alt="FireForce Logo"
+                className="w-6 h-6 rounded"
+              />
               <span className="text-white/60 text-sm">
                 © 2025 FireForce. All rights reserved.
               </span>

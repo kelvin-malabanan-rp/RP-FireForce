@@ -196,9 +196,11 @@ export function DashboardSideNav({ isOpen, onNavigate, onToggle, currentPage }: 
           <div className="p-4 border-b border-slate-200 dark:border-slate-700">
             {isOpen ? (
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gradient-to-r from-orange-500 to-red-600 rounded-xl flex items-center justify-center shadow-lg">
-                  <Activity className="w-5 h-5 text-white" />
-                </div>
+                <img
+                  src="https://i.postimg.cc/Y9pP0btx/Gemini-Generated-Image-n40l9yn40l9yn40l-1.png"
+                  alt="FireForce Logo"
+                  className="w-10 h-10 object-contain"
+                />
                 <div>
                   <h2 className="font-semibold text-slate-800 dark:text-white">FireForce</h2>
                   <p className="text-xs text-slate-500 dark:text-slate-200">Incident Management</p>
@@ -206,9 +208,11 @@ export function DashboardSideNav({ isOpen, onNavigate, onToggle, currentPage }: 
               </div>
             ) : (
               <div className="flex justify-center">
-                <div className="w-10 h-10 bg-gradient-to-r from-orange-500 to-red-600 rounded-xl flex items-center justify-center shadow-lg">
-                  <Activity className="w-5 h-5 text-white" />
-                </div>
+                <img
+                  src="https://i.postimg.cc/Y9pP0btx/Gemini-Generated-Image-n40l9yn40l9yn40l-1.png"
+                  alt="FireForce Logo"
+                  className="w-10 h-10 object-contain"
+                />
               </div>
             )}
           </div>

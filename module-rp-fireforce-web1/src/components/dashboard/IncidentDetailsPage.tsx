@@ -365,7 +365,7 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
     try {
       abortControllerRef.current = new AbortController();
 
-      const response = await fetch('http://localhost:8000/analyze/stream', {
+      const response = await fetch('http://localhost:8000/analyze/agentic-stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

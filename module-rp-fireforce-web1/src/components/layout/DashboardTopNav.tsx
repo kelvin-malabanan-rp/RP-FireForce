@@ -148,9 +148,11 @@ export function DashboardTopNav({ onMenuToggle, isSidebarOpen, onNavigate }: Das
           whileHover={{ scale: 1.05 }}
           className="flex items-center space-x-3"
         >
-          <div className="w-10 h-10 bg-gradient-to-r from-orange-500 to-red-600 rounded-xl flex items-center justify-center shadow-lg">
-            <Sparkles className="w-5 h-5 text-white" />
-          </div>
+          <img
+            src="https://i.postimg.cc/Y9pP0btx/Gemini-Generated-Image-n40l9yn40l9yn40l-1.png"
+            alt="FireForce Logo"
+            className="w-10 h-10 object-contain"
+          />
           <div>
             <span className="font-bold text-xl bg-gradient-to-r from-orange-500 to-red-600 bg-clip-text text-transparent">
               FireForce
