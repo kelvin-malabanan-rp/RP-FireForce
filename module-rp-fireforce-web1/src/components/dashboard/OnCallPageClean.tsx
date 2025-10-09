@@ -3,13 +3,9 @@ import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Shield, 
-  Clock, 
-  Phone, 
   Calendar,
   ChevronLeft,
   ChevronRight,
-  Save,
-  X,
   UserCheck,
   Loader2,
   RefreshCw,
@@ -19,9 +15,9 @@ import {
   Settings,
   Plus,
   Users,
-  Repeat,
   Info,
-  CheckCircle
+  CheckCircle,
+  X
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Badge } from "../ui/badge";
@@ -38,22 +34,12 @@ import {
 import { 
   onCallService, 
   Team, 
-  TeamDetails, 
   Assignment, 
   CurrentOnCallResponse,
   ScheduleConfigResponse,
-  SimpleTeam
+  SimpleTeam,
+  TeamMember
 } from "../../services/oncallService";
-import { SuccessModal } from "../modals/SuccessModal"; import { ErrorModal } from "../modals/ErrorModal"; import { ViewAssignmentModal } from "../modals/ViewAssignmentModal"; import { EditScheduleModal } from "../modals/EditScheduleModal";
-
-// Type definitions
-interface EditingSchedule {
-  date: Date;
-  team: string;
-  primary: string | null;
-  backup: string | null;
-  escalation: string | null;
-}
 
 interface OverrideData {
   teamId: string;
@@ -68,7 +54,7 @@ interface OverrideData {
 export function OnCallPage() {
   const [teams, setTeams] = useState<SimpleTeam[]>([]);
   const [selectedTeam, setSelectedTeam] = useState<string>('');
-  const [teamDetails, setTeamDetails] = useState<TeamDetails | null>(null);
+  const [currentOnCallByTeam, setCurrentOnCallByTeam] = useState<Assignment | null>(null);
   const [calendarData, setCalendarData] = useState<Team[]>([]);
   const [currentOnCallAll, setCurrentOnCallAll] = useState<CurrentOnCallResponse | null>(null);
   const [showAllTeams, setShowAllTeams] = useState(false);
@@ -79,15 +65,12 @@ export function OnCallPage() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null);
   const [isViewMode, setIsViewMode] = useState(false);
-  const [isEditMode, setIsEditMode] = useState(false);
-  const [editingSchedule, setEditingSchedule] = useState<EditingSchedule | null>(null);
-  
-  // New modals
   const [isOverrideModalOpen, setIsOverrideModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
   const [isErrorModalOpen, setIsErrorModalOpen] = useState(false);
   const [modalMessage, setModalMessage] = useState('');
+  
   const [overrideData, setOverrideData] = useState<OverrideData>({
     teamId: '',
     startDate: '',
@@ -97,17 +80,16 @@ export function OnCallPage() {
     reason: '',
     originalUserId: ''
   });
+  
   const [scheduleConfig, setScheduleConfig] = useState<ScheduleConfigResponse | null>(null);
 
-  // Load data on mount
   useEffect(() => {
     loadData();
   }, []);
 
-  // Load team details when selected team changes
   useEffect(() => {
     if (selectedTeam) {
-      loadTeamDetails(selectedTeam);
+      loadCurrentOnCallByTeam(selectedTeam);
       loadScheduleConfig(selectedTeam);
     }
   }, [selectedTeam]);
@@ -116,24 +98,55 @@ export function OnCallPage() {
     setIsLoading(true);
     setError(null);
     try {
-      // Fetch all teams (simple list)
+      // 1. Get all teams
       const teamsResponse = await onCallService.getAllTeams();
       if (teamsResponse.success && teamsResponse.object) {
         setTeams(teamsResponse.object);
         
-        // Set first team as selected by default
         if (teamsResponse.object.length > 0 && !selectedTeam) {
           setSelectedTeam(teamsResponse.object[0].id);
         }
+
+        // 2. Get schedules for each team
+        const teamSchedules = await Promise.all(
+          teamsResponse.object.map(async (team) => {
+            try {
+              const scheduleResponse = await onCallService.getTeamSchedule(team.id, 30);
+              
+              if (scheduleResponse.success && scheduleResponse.object) {
+                return {
+                  teamId: team.id,
+                  teamName: team.name,
+                  timezone: team.timezone,
+                  members: team.members,
+                  schedule: scheduleResponse.object.schedule
+                };
+              }
+              
+              return {
+                teamId: team.id,
+                teamName: team.name,
+                timezone: team.timezone,
+                members: team.members,
+                schedule: []
+              };
+            } catch (err) {
+              console.warn(`Failed to load schedule for team ${team.id}:`, err);
+              return {
+                teamId: team.id,
+                teamName: team.name,
+                timezone: team.timezone,
+                members: team.members,
+                schedule: []
+              };
+            }
+          })
+        );
+        
+        setCalendarData(teamSchedules as Team[]);
       }
 
-      // Fetch calendar data (30 days)
-      const calendar = await onCallService.getCalendarData(30);
-      if (calendar.success && calendar.data) {
-        setCalendarData(calendar.data);
-      }
-
-      // Fetch current on-call for all teams
+      // 3. Get current on-call for all teams
       const currentOnCall = await onCallService.getCurrentOnCall();
       if (currentOnCall.httpStatus === 'OK') {
         setCurrentOnCallAll(currentOnCall);
@@ -146,14 +159,15 @@ export function OnCallPage() {
     }
   };
 
-  const loadTeamDetails = async (teamId: string) => {
+  // ✅ FIXED: Use getCurrentOnCallByTeam instead of getTeamDetails
+  const loadCurrentOnCallByTeam = async (teamId: string) => {
     try {
-      const details = await onCallService.getTeamDetails(teamId);
-      if (details.success && details.data) {
-        setTeamDetails(details.data);
+      const response = await onCallService.getCurrentOnCallByTeam(teamId);
+      if (response.httpStatus === 'OK' && response.data) {
+        setCurrentOnCallByTeam(response.data);
       }
     } catch (error) {
-      console.error('Error loading team details:', error);
+      console.error('Error loading current on-call:', error);
     }
   };
 
@@ -168,50 +182,83 @@ export function OnCallPage() {
     }
   };
 
+  // ✅ NEW: Get all unique members from multiple sources (like mobile app)
+  const getTeamMembers = (): TeamMember[] => {
+    const membersMap = new Map<string, TeamMember>();
+    
+    // 1. Add members from team list
+    const calendarTeam = calendarData.find(t => t.teamId === selectedTeam);
+    calendarTeam?.members?.forEach(member => {
+      membersMap.set(member.id, member);
+    });
+    
+    // 2. Add current on-call members
+    if (currentOnCallByTeam) {
+      const currentMembers = [
+        currentOnCallByTeam.primary,
+        currentOnCallByTeam.backup,
+        ...(currentOnCallByTeam.escalation || [])
+      ].filter(Boolean) as TeamMember[];
+      
+      currentMembers.forEach(person => {
+        if (!membersMap.has(person.id)) {
+          membersMap.set(person.id, person);
+        }
+      });
+    }
+    
+    // 3. Add members from calendar schedule assignments
+    calendarTeam?.schedule?.forEach(day => {
+      if (day.assignment) {
+        const assignedMembers = [
+          day.assignment.primary,
+          day.assignment.backup,
+          ...(day.assignment.escalation || [])
+        ].filter(Boolean) as TeamMember[];
+        
+        assignedMembers.forEach(person => {
+          if (!membersMap.has(person.id)) {
+            membersMap.set(person.id, person);
+          }
+        });
+      }
+    });
+    
+    // Convert Map to Array and sort by name
+    return Array.from(membersMap.values()).sort((a, b) => 
+      `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`)
+    );
+  };
+
   const handleCreateOverride = async () => {
-    // Validate required fields
     if (!overrideData.teamId || !overrideData.startDate || !overrideData.endDate || 
-        !overrideData.userId || !overrideData.originalUserId || !overrideData.reason) {
+        !overrideData.userId || !overrideData.reason) {
       setModalMessage('Please fill in all required fields');
       setIsErrorModalOpen(true);
       return;
     }
 
     try {
-      // Add time to dates to make them full ISO strings
       const startDateTime = new Date(overrideData.startDate + 'T00:00:00');
       const endDateTime = new Date(overrideData.endDate + 'T23:59:59');
 
-      // Get current schedule ID for the team
-      const scheduleId = teamDetails?.scheduleConfig?.schedule?.id;
-
       const payload = {
         teamId: overrideData.teamId,
-        scheduleId: scheduleId,
         startTime: startDateTime.toISOString(),
         endTime: endDateTime.toISOString(),
         userId: overrideData.userId,
         role: overrideData.role,
         reason: overrideData.reason,
-        originalUserId: overrideData.originalUserId,
-        status: 'active',
-        createdBy: localStorage.getItem('userId') || 'web-user'
+        originalUserId: overrideData.originalUserId || undefined  // Send undefined if empty
       };
-
-      // Log payload for debugging
-      console.log('Creating override with payload:', payload);
 
       const result = await onCallService.createOverride(payload);
       
-      // Log result for debugging
-      console.log('Override creation result:', result);
-      
       if (result.success) {
         setIsOverrideModalOpen(false);
-        setModalMessage('Override created successfully!');
+        setModalMessage('Override created successfully! Refreshing schedule...');
         setIsSuccessModalOpen(true);
         
-        // Reset form
         setOverrideData({
           teamId: selectedTeam,
           startDate: '',
@@ -224,12 +271,11 @@ export function OnCallPage() {
         
         await loadData();
       } else {
-        throw new Error(result.message || 'Failed to create override - unknown error');
+        throw new Error(result.message || 'Failed to create override');
       }
     } catch (error: any) {
       console.error('Override creation error:', error);
-      const errorMsg = error.message || 'Failed to create override. Please check all fields and try again.';
-      setModalMessage(errorMsg);
+      setModalMessage(error.message || 'Failed to create override. Please try again.');
       setIsErrorModalOpen(true);
     }
   };
@@ -265,7 +311,6 @@ export function OnCallPage() {
     return colors[index % colors.length];
   };
 
-  // Calendar functions
   const getDaysInMonth = (date: Date) => {
     return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
   };
@@ -290,121 +335,22 @@ export function OnCallPage() {
       setSelectedAssignment(daySchedule.assignment);
       setIsViewMode(true);
     } else {
-      setSelectedAssignment(null);
-      setEditingSchedule({
-        date: clickedDate,
-        team: selectedTeam,
-        primary: null,
-        backup: null,
-        escalation: null
+      setOverrideData({
+        teamId: selectedTeam,
+        startDate: dateKey,
+        endDate: dateKey,
+        userId: '',
+        role: 'primary',
+        reason: '',
+        originalUserId: ''
       });
-      setIsEditMode(true);
-    }
-  };
-
-  const handleEditFromView = () => {
-    if (selectedDate && selectedAssignment) {
-      setEditingSchedule({
-        date: selectedDate,
-        team: selectedTeam,
-        primary: selectedAssignment.primary?.id || null,
-        backup: selectedAssignment.backup?.id || null,
-        escalation: selectedAssignment.escalation?.[0]?.id || null
-      });
-      setIsViewMode(false);
-      setIsEditMode(true);
-    }
-  };
-
-  const saveSchedule = async () => {
-    if (!editingSchedule || !selectedDate || !teamDetails) return;
-
-    try {
-      // Since there's no API to update a single day, we use Override instead
-      const dateKey = formatDateKey(selectedDate);
-      const selectedTeamData = calendarData.find(t => t.teamId === selectedTeam);
-      const daySchedule = selectedTeamData?.schedule.find(s => s.date === dateKey);
-      
-      // Get original assignments
-      const originalPrimary = daySchedule?.assignment?.primary?.id;
-      const originalBackup = daySchedule?.assignment?.backup?.id;
-      const originalEscalation = daySchedule?.assignment?.escalation?.[0]?.id;
-
-      // Create overrides for each changed role
-      const overridesToCreate = [];
-
-      // Check if primary changed
-      if (editingSchedule.primary && editingSchedule.primary !== originalPrimary) {
-        overridesToCreate.push({
-          teamId: selectedTeam,
-          startTime: new Date(dateKey + 'T00:00:00').toISOString(),
-          endTime: new Date(dateKey + 'T23:59:59').toISOString(),
-          userId: editingSchedule.primary,
-          role: 'primary' as const,
-          reason: 'Manual schedule adjustment',
-          originalUserId: originalPrimary || 'system'
-        });
-      }
-
-      // Check if backup changed
-      if (editingSchedule.backup && editingSchedule.backup !== originalBackup) {
-        overridesToCreate.push({
-          teamId: selectedTeam,
-          startTime: new Date(dateKey + 'T00:00:00').toISOString(),
-          endTime: new Date(dateKey + 'T23:59:59').toISOString(),
-          userId: editingSchedule.backup,
-          role: 'backup' as const,
-          reason: 'Manual schedule adjustment',
-          originalUserId: originalBackup || 'system'
-        });
-      }
-
-      // Check if escalation changed
-      if (editingSchedule.escalation && editingSchedule.escalation !== originalEscalation) {
-        overridesToCreate.push({
-          teamId: selectedTeam,
-          startTime: new Date(dateKey + 'T00:00:00').toISOString(),
-          endTime: new Date(dateKey + 'T23:59:59').toISOString(),
-          userId: editingSchedule.escalation,
-          role: 'escalation' as const,
-          reason: 'Manual schedule adjustment',
-          originalUserId: originalEscalation || 'system'
-        });
-      }
-
-      // Create all overrides
-      if (overridesToCreate.length === 0) {
-        setModalMessage('No changes detected');
-        setIsErrorModalOpen(true);
-        return;
-      }
-
-      for (const override of overridesToCreate) {
-        await onCallService.createOverride(override);
-      }
-      
-      setModalMessage(`Schedule updated successfully! Created ${overridesToCreate.length} override(s).`);
-      setIsSuccessModalOpen(true);
-      
-    } catch (error: any) {
-      setModalMessage(error.message || 'Failed to update schedule');
-      setIsErrorModalOpen(true);
-    } finally {
-      setIsEditMode(false);
-      setIsViewMode(false);
-      setSelectedDate(null);
-      setEditingSchedule(null);
-      setSelectedAssignment(null);
-      
-      await loadData();
+      setIsOverrideModalOpen(true);
     }
   };
 
   const closeModals = () => {
     setIsViewMode(false);
-    setIsEditMode(false);
     setSelectedDate(null);
-    setEditingSchedule(null);
     setSelectedAssignment(null);
   };
 
@@ -454,7 +400,7 @@ export function OnCallPage() {
                 <div className="flex items-center gap-1.5 bg-green-500/20 border border-green-500/40 rounded px-2 py-1">
                   <div className="w-1.5 h-1.5 rounded-full bg-green-400"></div>
                   <span className="text-xs text-green-300 truncate font-medium">
-                    {daySchedule.assignment.primary.firstName}
+                    {daySchedule.assignment.primary.firstName || 'Unknown'}
                   </span>
                 </div>
               )}
@@ -462,7 +408,7 @@ export function OnCallPage() {
                 <div className="flex items-center gap-1.5 bg-yellow-500/20 border border-yellow-500/40 rounded px-2 py-1">
                   <div className="w-1.5 h-1.5 rounded-full bg-yellow-400"></div>
                   <span className="text-xs text-yellow-300 truncate font-medium">
-                    {daySchedule.assignment.backup.firstName}
+                    {daySchedule.assignment.backup.firstName || 'Unknown'}
                   </span>
                 </div>
               )}
@@ -470,10 +416,16 @@ export function OnCallPage() {
                 <div className="flex items-center gap-1.5 bg-blue-500/20 border border-blue-500/40 rounded px-2 py-1">
                   <div className="w-1.5 h-1.5 rounded-full bg-blue-400"></div>
                   <span className="text-xs text-blue-300 truncate font-medium">
-                    {daySchedule.assignment.escalation[0].firstName}
+                    {daySchedule.assignment.escalation[0].firstName || 'Unknown'}
                   </span>
                 </div>
               )}
+            </div>
+          )}
+
+          {!hasAssignment && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <Plus className="h-5 w-5 text-slate-600" />
             </div>
           )}
         </motion.div>
@@ -483,38 +435,9 @@ export function OnCallPage() {
     return days;
   };
 
-  const getUpcomingSchedule = () => {
-    const selectedTeamData = calendarData.find(t => t.teamId === selectedTeam);
-    if (!selectedTeamData) return [];
-
-    const today = new Date();
-    const upcoming = [];
-
-    for (let i = 1; i <= 7; i++) {
-      const date = new Date(today);
-      date.setDate(date.getDate() + i);
-      const dateKey = formatDateKey(date);
-      const daySchedule = selectedTeamData.schedule.find(s => s.date === dateKey);
-
-      if (daySchedule?.assignment) {
-        upcoming.push({
-          date: date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
-          primary: daySchedule.assignment.primary ? 
-            `${daySchedule.assignment.primary.firstName} ${daySchedule.assignment.primary.lastName}` : 'Unassigned',
-          backup: daySchedule.assignment.backup ? 
-            `${daySchedule.assignment.backup.firstName} ${daySchedule.assignment.backup.lastName}` : 'Unassigned',
-          escalation: daySchedule.assignment.escalation[0] ? 
-            `${daySchedule.assignment.escalation[0].firstName} ${daySchedule.assignment.escalation[0].lastName}` : 'Unassigned'
-        });
-      }
-    }
-
-    return upcoming;
-  };
-
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center h-screen">
+      <div className="flex flex-col items-center justify-center h-screen bg-slate-900">
         <Loader2 className="h-12 w-12 animate-spin text-purple-500 mb-4" />
         <p className="text-slate-400">Loading on-call schedules...</p>
       </div>
@@ -523,7 +446,7 @@ export function OnCallPage() {
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center h-screen">
+      <div className="flex flex-col items-center justify-center h-screen bg-slate-900">
         <AlertCircle className="h-12 w-12 text-red-500 mb-4" />
         <p className="text-white text-xl mb-2">Error Loading Data</p>
         <p className="text-slate-400 mb-4">{error}</p>
@@ -536,546 +459,595 @@ export function OnCallPage() {
   }
 
   return (
-    <div className="space-y-6 p-6">
-      {/* Header */}
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="flex items-center justify-between"
-      >
-        <div className="flex items-center gap-4">
-          <div className="p-3 rounded-xl bg-gradient-to-br from-purple-500 to-blue-600 shadow-lg">
-            <Shield className="h-8 w-8 text-white" />
-          </div>
-          <div>
-            <h1 className="text-3xl font-bold text-white">On-Call Schedule</h1>
-            <p className="text-slate-300 mt-1">Manage on-call rotations and escalations</p>
-          </div>
-        </div>
-        <div className="flex gap-3">
-          <Button
-            variant={showAllTeams ? "default" : "outline"}
-            onClick={() => setShowAllTeams(!showAllTeams)}
-            className={showAllTeams ? "bg-purple-600 text-white" : "border-slate-600 text-white hover:bg-slate-700"}
-          >
-            <Users className="h-4 w-4 mr-2" />
-            All Teams
-          </Button>
-          
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="border-slate-600 text-white hover:bg-slate-700">
-                <UserCheck className="h-4 w-4 mr-2" />
-                {teams.find(t => t.id === selectedTeam)?.name || 'Select Team'}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="bg-slate-800 border-slate-600">
-              {teams.map((team, index) => (
-                <DropdownMenuItem 
-                  key={team.id}
-                  onClick={() => setSelectedTeam(team.id)}
-                  className="text-white hover:bg-slate-700"
-                >
-                  <div className={`w-3 h-3 rounded-full ${getTeamColor(index)} mr-2`} />
-                  {team.name}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          <Button
-            variant="outline"
-            onClick={() => {
-              setOverrideData({ ...overrideData, teamId: selectedTeam });
-              setIsOverrideModalOpen(true);
-            }}
-            className="border-slate-600 text-white hover:bg-slate-700"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Create Override
-          </Button>
-
-          <Button
-            variant="outline"
-            onClick={() => setIsSettingsModalOpen(true)}
-            className="border-slate-600 text-white hover:bg-slate-700"
-          >
-            <Settings className="h-4 w-4 mr-2" />
-            Manage Rotation
-          </Button>
-          
-          <Button
-            onClick={loadData}
-            className="bg-gradient-to-r from-orange-500 to-red-600 text-white hover:from-orange-600 hover:to-red-700"
-          >
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Refresh
-          </Button>
-        </div>
-      </motion.div>
-
-      {/* All Teams Dashboard (when toggled) */}
-      {showAllTeams && currentOnCallAll && (
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+      <div className="space-y-6 p-6">
+        {/* Header */}
         <motion.div
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: 'auto' }}
-          exit={{ opacity: 0, height: 0 }}
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex items-center justify-between"
         >
+          <div className="flex items-center gap-4">
+            <div className="p-3 rounded-xl bg-gradient-to-br from-purple-500 to-blue-600 shadow-lg">
+              <Shield className="h-8 w-8 text-white" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold text-white">On-Call Schedule</h1>
+              <p className="text-slate-300 mt-1">Manage on-call rotations and overrides</p>
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <Button
+              variant={showAllTeams ? "default" : "outline"}
+              onClick={() => setShowAllTeams(!showAllTeams)}
+              className={showAllTeams ? "bg-purple-600 text-white" : "border-slate-600 text-white hover:bg-slate-700"}
+            >
+              <Users className="h-4 w-4 mr-2" />
+              All Teams
+            </Button>
+            
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="border-slate-600 text-white hover:bg-slate-700">
+                  <UserCheck className="h-4 w-4 mr-2" />
+                  {teams.find(t => t.id === selectedTeam)?.name || 'Select Team'}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="bg-slate-800 border-slate-600">
+                {teams.map((team, index) => (
+                  <DropdownMenuItem 
+                    key={team.id}
+                    onClick={() => setSelectedTeam(team.id)}
+                    className="text-white hover:bg-slate-700"
+                  >
+                    <div className={`w-3 h-3 rounded-full ${getTeamColor(index)} mr-2`} />
+                    {team.name}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <Button
+              variant="outline"
+              onClick={() => {
+                setOverrideData({ 
+                  teamId: selectedTeam,
+                  startDate: '',
+                  endDate: '',
+                  userId: '',
+                  role: 'primary',
+                  reason: '',
+                  originalUserId: ''
+                });
+                setIsOverrideModalOpen(true);
+              }}
+              className="border-slate-600 text-white hover:bg-slate-700"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Create Override
+            </Button>
+
+            <Button
+              variant="outline"
+              onClick={() => setIsSettingsModalOpen(true)}
+              className="border-slate-600 text-white hover:bg-slate-700"
+            >
+              <Settings className="h-4 w-4 mr-2" />
+              Manage Rotation
+            </Button>
+            
+            <Button
+              onClick={loadData}
+              className="bg-gradient-to-r from-orange-500 to-red-600 text-white hover:from-orange-600 hover:to-red-700"
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh
+            </Button>
+          </div>
+        </motion.div>
+
+        {/* All Teams Dashboard */}
+        {showAllTeams && currentOnCallAll && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+          >
+            <Card className="bg-slate-800/50 border-slate-700">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-white">
+                  <Users className="h-5 w-5" />
+                  All Teams - Current On-Call Overview
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {currentOnCallAll.data.primary.map((person, idx) => (
+                    <div key={idx} className="bg-gradient-to-br from-green-500/10 to-green-600/5 rounded-lg p-4 border border-green-500/30">
+                      <Badge className="bg-green-500 text-white mb-2">Primary</Badge>
+                      <h4 className="font-semibold text-white">{person.fullname}</h4>
+                      <p className="text-sm text-slate-400">{person.teamName}</p>
+                      <p className="text-xs text-slate-500 mt-1">{person.email}</p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+
+        {/* Current On-Call Status */}
+        {!showAllTeams && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+          >
+            <Card className="bg-slate-800/50 border-slate-700">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-white">
+                  <Shield className="h-5 w-5" />
+                  Current On-Call Status - {teams.find(t => t.id === selectedTeam)?.name}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {currentOnCallByTeam ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {currentOnCallByTeam.primary && (
+                      <motion.div whileHover={{ scale: 1.02 }} className="bg-gradient-to-br from-green-500/10 to-green-600/5 rounded-lg p-4 border border-green-500/30">
+                        <Badge className="bg-green-500 text-white mb-3">Primary</Badge>
+                        <div className="flex items-center gap-3 mb-3">
+                          <Avatar className="h-12 w-12 border-2 border-green-500/50">
+                            <AvatarFallback className="bg-green-600 text-white font-semibold">
+                              {currentOnCallByTeam.primary.firstName?.[0]}{currentOnCallByTeam.primary.lastName?.[0]}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <h4 className="font-semibold text-white">
+                              {currentOnCallByTeam.primary.firstName} {currentOnCallByTeam.primary.lastName}
+                            </h4>
+                            <p className="text-sm text-slate-400">{currentOnCallByTeam.primary.role}</p>
+                          </div>
+                        </div>
+                        <div className="space-y-2 text-sm">
+                          <div className="flex items-center gap-2 text-slate-300">
+                            <Mail className="h-4 w-4 text-green-400" />
+                            <span className="truncate">{currentOnCallByTeam.primary.email}</span>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+
+                    {currentOnCallByTeam.backup && (
+                      <motion.div whileHover={{ scale: 1.02 }} className="bg-gradient-to-br from-yellow-500/10 to-yellow-600/5 rounded-lg p-4 border border-yellow-500/30">
+                        <Badge className="bg-yellow-500 text-white mb-3">Backup</Badge>
+                        <div className="flex items-center gap-3 mb-3">
+                          <Avatar className="h-12 w-12 border-2 border-yellow-500/50">
+                            <AvatarFallback className="bg-yellow-600 text-white font-semibold">
+                              {currentOnCallByTeam.backup.firstName?.[0]}{currentOnCallByTeam.backup.lastName?.[0]}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <h4 className="font-semibold text-white">
+                              {currentOnCallByTeam.backup.firstName} {currentOnCallByTeam.backup.lastName}
+                            </h4>
+                            <p className="text-sm text-slate-400">{currentOnCallByTeam.backup.role}</p>
+                          </div>
+                        </div>
+                        <div className="space-y-2 text-sm">
+                          <div className="flex items-center gap-2 text-slate-300">
+                            <Mail className="h-4 w-4 text-yellow-400" />
+                            <span className="truncate">{currentOnCallByTeam.backup.email}</span>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+
+                    {currentOnCallByTeam.escalation?.map((person, idx) => (
+                      <motion.div key={idx} whileHover={{ scale: 1.02 }} className="bg-gradient-to-br from-blue-500/10 to-blue-600/5 rounded-lg p-4 border border-blue-500/30">
+                        <Badge className="bg-blue-500 text-white mb-3">Escalation</Badge>
+                        <div className="flex items-center gap-3 mb-3">
+                          <Avatar className="h-12 w-12 border-2 border-blue-500/50">
+                            <AvatarFallback className="bg-blue-600 text-white font-semibold">
+                              {person.firstName?.[0]}{person.lastName?.[0]}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <h4 className="font-semibold text-white">{person.firstName} {person.lastName}</h4>
+                            <p className="text-sm text-slate-400">{person.role}</p>
+                          </div>
+                        </div>
+                        <div className="space-y-2 text-sm">
+                          <div className="flex items-center gap-2 text-slate-300">
+                            <Mail className="h-4 w-4 text-blue-400" />
+                            <span className="truncate">{person.email}</span>
+                          </div>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-12">
+                    <User className="h-12 w-12 text-slate-600 mx-auto mb-3" />
+                    <p className="text-slate-400">No current on-call assignments</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+
+        {/* Calendar View */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
           <Card className="bg-slate-800/50 border-slate-700">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-white">
-                <Users className="h-5 w-5" />
-                All Teams - Current On-Call Overview
-              </CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2 text-white">
+                  <Calendar className="h-5 w-5" />
+                  Schedule Calendar - {teams.find(t => t.id === selectedTeam)?.name}
+                </CardTitle>
+                <div className="flex items-center gap-2">
+                  <Button variant="ghost" size="sm" onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1))} className="text-white hover:bg-slate-700">
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <span className="text-white font-medium min-w-[150px] text-center">
+                    {currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                  </span>
+                  <Button variant="ghost" size="sm" onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1))} className="text-white hover:bg-slate-700">
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {currentOnCallAll.data.primary.map((person, idx) => (
-                  <div key={idx} className="bg-gradient-to-br from-green-500/10 to-green-600/5 rounded-lg p-4 border border-green-500/30">
-                    <Badge className="bg-green-500 text-white mb-2">Primary</Badge>
-                    <h4 className="font-semibold text-white">{person.fullname}</h4>
-                    <p className="text-sm text-slate-400">{person.teamName}</p>
-                    <p className="text-xs text-slate-500 mt-1">{person.email}</p>
+              <div className="grid grid-cols-7 gap-2 mb-2">
+                {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map((day) => (
+                  <div key={day} className="h-10 flex items-center justify-center">
+                    <span className="text-sm font-semibold text-slate-400">{day}</span>
                   </div>
                 ))}
               </div>
+              <div className="grid grid-cols-7 gap-2">
+                {renderCalendar()}
+              </div>
+              <div className="mt-6 flex items-center justify-center gap-6 text-sm">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-green-400"></div>
+                  <span className="text-slate-400">Primary</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-yellow-400"></div>
+                  <span className="text-slate-400">Backup</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-blue-400"></div>
+                  <span className="text-slate-400">Escalation</span>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </motion.div>
-      )}
 
-      {/* Current On-Call Status (Selected Team) */}
-      {!showAllTeams && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-        >
-          <Card className="bg-slate-800/50 border-slate-700">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-white">
-                <Shield className="h-5 w-5" />
-                Current On-Call Status - {teams.find(t => t.id === selectedTeam)?.name}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {teamDetails?.currentOnCall ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {teamDetails.currentOnCall.primary && (
-                    <motion.div whileHover={{ scale: 1.02 }} className="bg-gradient-to-br from-green-500/10 to-green-600/5 rounded-lg p-4 border border-green-500/30">
-                      <Badge className="bg-green-500 text-white mb-3">Primary</Badge>
-                      <div className="flex items-center gap-3 mb-3">
-                        <Avatar className="h-12 w-12 border-2 border-green-500/50">
-                          <AvatarFallback className="bg-green-600 text-white font-semibold">
-                            {teamDetails.currentOnCall.primary.firstName[0]}{teamDetails.currentOnCall.primary.lastName[0]}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <h4 className="font-semibold text-white">
-                            {teamDetails.currentOnCall.primary.firstName} {teamDetails.currentOnCall.primary.lastName}
-                          </h4>
-                          <p className="text-sm text-slate-400">{teamDetails.currentOnCall.primary.role}</p>
-                        </div>
-                      </div>
-                      <div className="space-y-2 text-sm">
-                        <div className="flex items-center gap-2 text-slate-300">
-                          <Mail className="h-4 w-4 text-green-400" />
-                          <span className="truncate">{teamDetails.currentOnCall.primary.email}</span>
-                        </div>
-                      </div>
-                    </motion.div>
-                  )}
-
-                  {teamDetails.currentOnCall.backup && (
-                    <motion.div whileHover={{ scale: 1.02 }} className="bg-gradient-to-br from-yellow-500/10 to-yellow-600/5 rounded-lg p-4 border border-yellow-500/30">
-                      <Badge className="bg-yellow-500 text-white mb-3">Backup</Badge>
-                      <div className="flex items-center gap-3 mb-3">
-                        <Avatar className="h-12 w-12 border-2 border-yellow-500/50">
-                          <AvatarFallback className="bg-yellow-600 text-white font-semibold">
-                            {teamDetails.currentOnCall.backup.firstName[0]}{teamDetails.currentOnCall.backup.lastName[0]}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <h4 className="font-semibold text-white">
-                            {teamDetails.currentOnCall.backup.firstName} {teamDetails.currentOnCall.backup.lastName}
-                          </h4>
-                          <p className="text-sm text-slate-400">{teamDetails.currentOnCall.backup.role}</p>
-                        </div>
-                      </div>
-                      <div className="space-y-2 text-sm">
-                        <div className="flex items-center gap-2 text-slate-300">
-                          <Mail className="h-4 w-4 text-yellow-400" />
-                          <span className="truncate">{teamDetails.currentOnCall.backup.email}</span>
-                        </div>
-                      </div>
-                    </motion.div>
-                  )}
-
-                  {teamDetails.currentOnCall.escalation.map((person, idx) => (
-                    <motion.div key={idx} whileHover={{ scale: 1.02 }} className="bg-gradient-to-br from-blue-500/10 to-blue-600/5 rounded-lg p-4 border border-blue-500/30">
-                      <Badge className="bg-blue-500 text-white mb-3">Escalation</Badge>
-                      <div className="flex items-center gap-3 mb-3">
-                        <Avatar className="h-12 w-12 border-2 border-blue-500/50">
-                          <AvatarFallback className="bg-blue-600 text-white font-semibold">
-                            {person.firstName[0]}{person.lastName[0]}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <h4 className="font-semibold text-white">{person.firstName} {person.lastName}</h4>
-                          <p className="text-sm text-slate-400">{person.role}</p>
-                        </div>
-                      </div>
-                      <div className="space-y-2 text-sm">
-                        <div className="flex items-center gap-2 text-slate-300">
-                          <Mail className="h-4 w-4 text-blue-400" />
-                          <span className="truncate">{person.email}</span>
-                        </div>
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-12">
-                  <User className="h-12 w-12 text-slate-600 mx-auto mb-3" />
-                  <p className="text-slate-400">No current on-call assignments</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </motion.div>
-      )}
-
-      {/* Calendar View */}
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-        <Card className="bg-slate-800/50 border-slate-700">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2 text-white">
-                <Calendar className="h-5 w-5" />
-                Schedule Calendar - {teams.find(t => t.id === selectedTeam)?.name}
-              </CardTitle>
-              <div className="flex items-center gap-2">
-                <Button variant="ghost" size="sm" onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1))} className="text-white hover:bg-slate-700">
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <span className="text-white font-medium min-w-[150px] text-center">
-                  {currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-                </span>
-                <Button variant="ghost" size="sm" onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1))} className="text-white hover:bg-slate-700">
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-7 gap-2 mb-2">
-              {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map((day) => (
-                <div key={day} className="h-10 flex items-center justify-center">
-                  <span className="text-sm font-semibold text-slate-400">{day}</span>
-                </div>
-              ))}
-            </div>
-            <div className="grid grid-cols-7 gap-2">
-              {renderCalendar()}
-            </div>
-            <div className="mt-6 flex items-center justify-center gap-6 text-sm">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-green-400"></div>
-                <span className="text-slate-400">Primary</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-yellow-400"></div>
-                <span className="text-slate-400">Backup</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-blue-400"></div>
-                <span className="text-slate-400">Escalation</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </motion.div>
-
-      {/* Upcoming Schedule */}
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
-        <Card className="bg-slate-800/50 border-slate-700">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-white">
-              <Clock className="h-5 w-5" />
-              Upcoming Schedule (Next 7 Days)
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {getUpcomingSchedule().map((schedule, index) => (
-                <motion.div key={index} whileHover={{ scale: 1.01 }} className="bg-slate-700/30 rounded-lg p-4 border border-slate-600">
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <h4 className="font-semibold text-white mb-3">{schedule.date}</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-                        <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                          <span className="text-slate-400">Primary:</span>
-                          <span className="text-white font-medium">{schedule.primary}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
-                          <span className="text-slate-400">Backup:</span>
-                          <span className="text-white font-medium">{schedule.backup}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                          <span className="text-slate-400">Escalation:</span>
-                          <span className="text-white font-medium">{schedule.escalation}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
-              {getUpcomingSchedule().length === 0 && (
-                <div className="text-center py-8">
-                  <Clock className="h-12 w-12 text-slate-600 mx-auto mb-3" />
-                  <p className="text-slate-400">No upcoming schedules</p>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </motion.div>
-
-      {/* Create Override Modal */}
-      <AnimatePresence>
-        {isOverrideModalOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-            onClick={() => setIsOverrideModalOpen(false)}
-          >
+        {/* Create Override Modal */}
+        <AnimatePresence>
+          {isOverrideModalOpen && (
             <motion.div
-              initial={{ scale: 0.9, y: 20 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.9, y: 20 }}
-              className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-6 border border-slate-700 max-w-md w-full"
-              onClick={(e) => e.stopPropagation()}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+              onClick={() => setIsOverrideModalOpen(false)}
             >
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-xl font-bold text-white">Create Schedule Override</h3>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setIsOverrideModalOpen(false)}
-                  className="text-slate-400 hover:text-white"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-              
-              <div className="space-y-4">
-                <div>
-                  <Label className="text-white">Original Person (who needs coverage)</Label>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="outline" className="w-full justify-start bg-slate-700 border-slate-600 text-white hover:bg-slate-600">
-                        {overrideData.originalUserId && teamDetails
-                          ? `${teamDetails.members.find(m => m.id === overrideData.originalUserId)?.firstName} ${teamDetails.members.find(m => m.id === overrideData.originalUserId)?.lastName}`
-                          : "Select person needing coverage"
-                        }
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent className="bg-slate-800 border-slate-600">
-                      {teamDetails?.members.map((member) => (
-                        <DropdownMenuItem 
-                          key={member.id}
-                          onClick={() => setOverrideData({...overrideData, originalUserId: member.id})}
-                          className="text-white hover:bg-slate-700"
-                        >
-                          {member.firstName} {member.lastName}
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-
-                <div>
-                  <Label className="text-white">Replacement Person (covering)</Label>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="outline" className="w-full justify-start bg-slate-700 border-slate-600 text-white hover:bg-slate-600">
-                        {overrideData.userId && teamDetails
-                          ? `${teamDetails.members.find(m => m.id === overrideData.userId)?.firstName} ${teamDetails.members.find(m => m.id === overrideData.userId)?.lastName}`
-                          : "Select replacement person"
-                        }
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent className="bg-slate-800 border-slate-600">
-                      {teamDetails?.members.map((member) => (
-                        <DropdownMenuItem 
-                          key={member.id}
-                          onClick={() => setOverrideData({...overrideData, userId: member.id})}
-                          className="text-white hover:bg-slate-700"
-                        >
-                          {member.firstName} {member.lastName}
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-
-                <div>
-                  <Label className="text-white">Role</Label>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="outline" className="w-full justify-start bg-slate-700 border-slate-600 text-white hover:bg-slate-600">
-                        {overrideData.role.charAt(0).toUpperCase() + overrideData.role.slice(1)}
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent className="bg-slate-800 border-slate-600">
-                      <DropdownMenuItem onClick={() => setOverrideData({...overrideData, role: 'primary'})} className="text-white hover:bg-slate-700">
-                        Primary
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => setOverrideData({...overrideData, role: 'backup'})} className="text-white hover:bg-slate-700">
-                        Backup
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => setOverrideData({...overrideData, role: 'escalation'})} className="text-white hover:bg-slate-700">
-                        Escalation
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-
-                <div>
-                  <Label className="text-white">Start Date</Label>
-                  <Input 
-                    type="date" 
-                    value={overrideData.startDate} 
-                    onChange={(e) => setOverrideData({...overrideData, startDate: e.target.value})} 
-                    className="bg-slate-700 border-slate-600 text-white" 
-                  />
+              <motion.div
+                initial={{ scale: 0.9, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.9, y: 20 }}
+                className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-6 border border-slate-700 max-w-md w-full"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xl font-bold text-white">Create Schedule Override</h3>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setIsOverrideModalOpen(false)}
+                    className="text-slate-400 hover:text-white"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
                 </div>
                 
-                <div>
-                  <Label className="text-white">End Date</Label>
-                  <Input 
-                    type="date" 
-                    value={overrideData.endDate} 
-                    onChange={(e) => setOverrideData({...overrideData, endDate: e.target.value})} 
-                    className="bg-slate-700 border-slate-600 text-white" 
-                  />
-                </div>
-                
-                <div>
-                  <Label className="text-white">Reason</Label>
-                  <Input 
-                    value={overrideData.reason} 
-                    onChange={(e) => setOverrideData({...overrideData, reason: e.target.value})} 
-                    placeholder="e.g., Vacation coverage, Sick leave" 
-                    className="bg-slate-700 border-slate-600 text-white" 
-                  />
-                </div>
-
-                <div className="bg-blue-900/20 border border-blue-700/50 rounded-lg p-3">
-                  <div className="flex items-start gap-2">
-                    <Info className="h-4 w-4 text-blue-400 flex-shrink-0 mt-0.5" />
-                    <p className="text-xs text-blue-300">
-                      Override will temporarily replace the original person with the replacement during the specified date range.
-                    </p>
+                <div className="space-y-4">
+                  <div>
+                    <Label className="text-white">Person Needing Coverage (Optional)</Label>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" className="w-full justify-start bg-slate-700 border-slate-600 text-white hover:bg-slate-600">
+                          {overrideData.originalUserId && getTeamMembers().find(m => m.id === overrideData.originalUserId)
+                            ? `${getTeamMembers().find(m => m.id === overrideData.originalUserId)!.firstName} ${getTeamMembers().find(m => m.id === overrideData.originalUserId)!.lastName}`
+                            : "Select person (optional)"
+                          }
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent className="bg-slate-800 border-slate-600">
+                        <DropdownMenuItem 
+                          onClick={() => setOverrideData({...overrideData, originalUserId: ''})}
+                          className="text-white hover:bg-slate-700"
+                        >
+                          None (New assignment)
+                        </DropdownMenuItem>
+                        {getTeamMembers().map((member) => (
+                          <DropdownMenuItem 
+                            key={member.id}
+                            onClick={() => setOverrideData({...overrideData, originalUserId: member.id})}
+                            className="text-white hover:bg-slate-700"
+                          >
+                            {member.firstName} {member.lastName}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
-                </div>
 
-                <Button 
-                  onClick={handleCreateOverride} 
-                  className="w-full bg-gradient-to-r from-purple-500 to-blue-600 hover:from-purple-600 hover:to-blue-700"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create Override
-                </Button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+                  <div>
+                    <Label className="text-white">Replacement Person *</Label>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" className="w-full justify-start bg-slate-700 border-slate-600 text-white hover:bg-slate-600">
+                          {overrideData.userId && getTeamMembers().find(m => m.id === overrideData.userId)
+                            ? `${getTeamMembers().find(m => m.id === overrideData.userId)!.firstName} ${getTeamMembers().find(m => m.id === overrideData.userId)!.lastName}`
+                            : "Select replacement person"
+                          }
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent className="bg-slate-800 border-slate-600">
+                        {getTeamMembers().map((member) => (
+                          <DropdownMenuItem 
+                            key={member.id}
+                            onClick={() => setOverrideData({...overrideData, userId: member.id})}
+                            className="text-white hover:bg-slate-700"
+                          >
+                            {member.firstName} {member.lastName}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
 
-      {/* Schedule Settings Modal */}
-      <AnimatePresence>
-        {isSettingsModalOpen && scheduleConfig?.object && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-            onClick={() => setIsSettingsModalOpen(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.9, y: 20 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.9, y: 20 }}
-              className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-6 border border-slate-700 max-w-2xl w-full max-h-[80vh] overflow-y-auto"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-                <Repeat className="h-5 w-5" />
-                Manage Rotation Schedule
-              </h3>
-              <div className="space-y-4">
-                <div className="bg-blue-900/20 border border-blue-700/50 rounded-lg p-4">
-                  <div className="flex items-start gap-3">
-                    <Info className="h-5 w-5 text-blue-400 flex-shrink-0 mt-0.5" />
-                    <div className="text-sm text-blue-300">
-                      <p className="font-semibold mb-1">Current Configuration</p>
-                      <ul className="list-disc list-inside space-y-1 text-xs">
-                        <li>Rotation: {scheduleConfig.object.schedule.rotationType}</li>
-                        <li>Length: {scheduleConfig.object.schedule.rotationLengthHours / 24} days</li>
-                        <li>Members: {scheduleConfig.object.members.length}</li>
-                      </ul>
+                  <div>
+                    <Label className="text-white">Role *</Label>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" className="w-full justify-start bg-slate-700 border-slate-600 text-white hover:bg-slate-600">
+                          {overrideData.role.charAt(0).toUpperCase() + overrideData.role.slice(1)}
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent className="bg-slate-800 border-slate-600">
+                        <DropdownMenuItem onClick={() => setOverrideData({...overrideData, role: 'primary'})} className="text-white hover:bg-slate-700">
+                          Primary
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setOverrideData({...overrideData, role: 'backup'})} className="text-white hover:bg-slate-700">
+                          Backup
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setOverrideData({...overrideData, role: 'escalation'})} className="text-white hover:bg-slate-700">
+                          Escalation
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+
+                  <div>
+                    <Label className="text-white">Start Date *</Label>
+                    <Input 
+                      type="date" 
+                      value={overrideData.startDate} 
+                      onChange={(e) => setOverrideData({...overrideData, startDate: e.target.value})} 
+                      className="bg-slate-700 border-slate-600 text-white" 
+                    />
+                  </div>
+                  
+                  <div>
+                    <Label className="text-white">End Date *</Label>
+                    <Input 
+                      type="date" 
+                      value={overrideData.endDate} 
+                      onChange={(e) => setOverrideData({...overrideData, endDate: e.target.value})} 
+                      className="bg-slate-700 border-slate-600 text-white" 
+                    />
+                  </div>
+                  
+                  <div>
+                    <Label className="text-white">Reason *</Label>
+                    <Input 
+                      value={overrideData.reason} 
+                      onChange={(e) => setOverrideData({...overrideData, reason: e.target.value})} 
+                      placeholder="e.g., Vacation coverage, Sick leave" 
+                      className="bg-slate-700 border-slate-600 text-white" 
+                    />
+                  </div>
+
+                  <div className="bg-blue-900/20 border border-blue-700/50 rounded-lg p-3">
+                    <div className="flex items-start gap-2">
+                      <Info className="h-4 w-4 text-blue-400 flex-shrink-0 mt-0.5" />
+                      <p className="text-xs text-blue-300">
+                        Override will temporarily assign the replacement person during the specified date range. Original rotation resumes after.
+                      </p>
                     </div>
                   </div>
+
+                  <Button 
+                    onClick={handleCreateOverride} 
+                    className="w-full bg-gradient-to-r from-purple-500 to-blue-600 hover:from-purple-600 hover:to-blue-700"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create Override
+                  </Button>
                 </div>
-                <Button onClick={handleUpdateScheduleConfig} className="w-full bg-purple-600 hover:bg-purple-700">
-                  <Save className="h-4 w-4 mr-2" />
-                  Save Configuration
-                </Button>
-              </div>
+              </motion.div>
             </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          )}
+        </AnimatePresence>
 
-      {/* View Assignment Modal */}
-      <ViewAssignmentModal 
-        isOpen={isViewMode}
-        onClose={closeModals}
-        onEdit={handleEditFromView}
-        assignment={selectedAssignment}
-        selectedDate={selectedDate}
-      />
+        {/* View Assignment Modal */}
+        <AnimatePresence>
+          {isViewMode && selectedAssignment && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+              onClick={closeModals}
+            >
+              <motion.div
+                initial={{ scale: 0.9, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.9, y: 20 }}
+                className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-6 border border-slate-700 max-w-lg w-full"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-xl font-bold text-white">
+                    Schedule Details
+                    {selectedDate && ` - ${selectedDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`}
+                  </h3>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={closeModals}
+                    className="text-slate-400 hover:text-white"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
 
-      {/* Edit Schedule Modal */}
-      <EditScheduleModal 
-        isOpen={isEditMode}
-        onClose={closeModals}
-        onSave={saveSchedule}
-        selectedDate={selectedDate}
-        editingSchedule={editingSchedule}
-        setEditingSchedule={setEditingSchedule}
-        teamMembers={teamDetails?.members || []}
-      />
+                <div className="space-y-4">
+                  {selectedAssignment.primary && (
+                    <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
+                      <Badge className="bg-green-500 text-white mb-2">Primary</Badge>
+                      <h4 className="text-white font-semibold">
+                        {selectedAssignment.primary.firstName} {selectedAssignment.primary.lastName}
+                      </h4>
+                      <p className="text-sm text-slate-400">{selectedAssignment.primary.email}</p>
+                    </div>
+                  )}
 
-      {/* Success Modal */}
-      <SuccessModal 
-        isOpen={isSuccessModalOpen}
-        onClose={() => setIsSuccessModalOpen(false)}
-        message={modalMessage}
-      />
+                  {selectedAssignment.backup && (
+                    <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4">
+                      <Badge className="bg-yellow-500 text-white mb-2">Backup</Badge>
+                      <h4 className="text-white font-semibold">
+                        {selectedAssignment.backup.firstName} {selectedAssignment.backup.lastName}
+                      </h4>
+                      <p className="text-sm text-slate-400">{selectedAssignment.backup.email}</p>
+                    </div>
+                  )}
 
-      {/* Error Modal */}
-      <ErrorModal 
-        isOpen={isErrorModalOpen}
-        onClose={() => setIsErrorModalOpen(false)}
-        message={modalMessage}
-      />
+                  {selectedAssignment.escalation && selectedAssignment.escalation.length > 0 && (
+                    <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
+                      <Badge className="bg-blue-500 text-white mb-2">Escalation</Badge>
+                      {selectedAssignment.escalation.map((person, idx) => (
+                        <div key={idx} className="mb-2 last:mb-0">
+                          <h4 className="text-white font-semibold">
+                            {person.firstName} {person.lastName}
+                          </h4>
+                          <p className="text-sm text-slate-400">{person.email}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <Button
+                    onClick={() => {
+                      closeModals();
+                      setOverrideData({
+                        teamId: selectedTeam,
+                        startDate: selectedDate ? formatDateKey(selectedDate) : '',
+                        endDate: selectedDate ? formatDateKey(selectedDate) : '',
+                        userId: '',
+                        role: 'primary',
+                        reason: '',
+                        originalUserId: selectedAssignment.primary?.id || ''
+                      });
+                      setIsOverrideModalOpen(true);
+                    }}
+                    className="w-full bg-purple-600 hover:bg-purple-700"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create Override for This Day
+                  </Button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Success Modal */}
+        <AnimatePresence>
+          {isSuccessModalOpen && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+              onClick={() => setIsSuccessModalOpen(false)}
+            >
+              <motion.div
+                initial={{ scale: 0.9, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.9, y: 20 }}
+                className="bg-gradient-to-br from-green-800 to-green-900 rounded-2xl p-6 border border-green-700 max-w-md w-full"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex flex-col items-center text-center">
+                  <CheckCircle className="h-16 w-16 text-green-400 mb-4" />
+                  <h3 className="text-xl font-bold text-white mb-2">Success!</h3>
+                  <p className="text-green-200 mb-6">{modalMessage}</p>
+                  <Button
+                    onClick={() => setIsSuccessModalOpen(false)}
+                    className="bg-green-600 hover:bg-green-700"
+                  >
+                    Close
+                  </Button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Error Modal */}
+        <AnimatePresence>
+          {isErrorModalOpen && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+              onClick={() => setIsErrorModalOpen(false)}
+            >
+              <motion.div
+                initial={{ scale: 0.9, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.9, y: 20 }}
+                className="bg-gradient-to-br from-red-800 to-red-900 rounded-2xl p-6 border border-red-700 max-w-md w-full"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex flex-col items-center text-center">
+                  <AlertCircle className="h-16 w-16 text-red-400 mb-4" />
+                  <h3 className="text-xl font-bold text-white mb-2">Error</h3>
+                  <p className="text-red-200 mb-6">{modalMessage}</p>
+                  <Button
+                    onClick={() => setIsErrorModalOpen(false)}
+                    className="bg-red-600 hover:bg-red-700"
+                  >
+                    Close
+                  </Button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     </div>
   );
 }
+
+export default OnCallPage;

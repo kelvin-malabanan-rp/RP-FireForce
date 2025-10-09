@@ -243,9 +243,9 @@ export interface CreateOverridePayload {
   userId: string;  // This is the replacement user
   role: 'primary' | 'backup' | 'escalation';
   reason: string;
-  originalUserId: string;
-  status?: string;  // Optional: pending, active, expired
-  createdBy?: string;  // Optional: user who created the override
+  originalUserId?: string;  // Made optional to match mobile
+  status?: string;
+  createdBy?: string;
 }
 
 export interface OverrideResponse {
@@ -303,32 +303,18 @@ export interface UserTeamResponse {
 }
 
 // ============================================================================
-// ONCALL SERVICE
+// ONCALL SERVICE (UPDATED TO MATCH MOBILE)
 // ============================================================================
 
 class OnCallService {
   // ========================================
-  // BASIC CALENDAR & TEAM DATA
+  // BASIC TEAM DATA
   // ========================================
-
-  /**
-   * GET: Calendar Data (All Teams) - 30 days
-   * API: /api/oncall/calendar?days=30
-   */
-  async getCalendarData(days: number = 30): Promise<CalendarResponse> {
-    try {
-      const response = await fetch(`${BASE_URL}/api/oncall/calendar?days=${days}`);
-      if (!response.ok) throw new Error(`Failed to fetch calendar: ${response.status}`);
-      return await response.json();
-    } catch (error) {
-      console.error('Error fetching calendar:', error);
-      throw error;
-    }
-  }
 
   /**
    * GET: All Teams (Simple list with members)
    * API: /api/oncall/teams
+   * ✅ SAME AS MOBILE
    */
   async getAllTeams(): Promise<AllTeamsResponse> {
     try {
@@ -341,21 +327,6 @@ class OnCallService {
     }
   }
 
-  /**
-   * GET: Team Details (with current on-call and config)
-   * API: /api/oncall/team/details?teamId={teamId}
-   */
-  async getTeamDetails(teamId: string): Promise<TeamDetailsResponse> {
-    try {
-      const response = await fetch(`${BASE_URL}/api/oncall/team/details?teamId=${teamId}`);
-      if (!response.ok) throw new Error(`Failed to fetch team details: ${response.status}`);
-      return await response.json();
-    } catch (error) {
-      console.error('Error fetching team details:', error);
-      throw error;
-    }
-  }
-
   // ========================================
   // CURRENT ON-CALL QUERIES
   // ========================================
@@ -364,6 +335,7 @@ class OnCallService {
    * GET: Current On-Call Users (All Teams)
    * API: /api/oncall/current
    * Returns all current on-call people grouped by role
+   * ✅ SAME AS MOBILE
    */
   async getCurrentOnCall(): Promise<CurrentOnCallResponse> {
     try {
@@ -380,6 +352,7 @@ class OnCallService {
    * GET: Current On-Call by Team
    * API: /api/oncall/team?teamId={teamId}
    * Returns who's currently on-call for a specific team
+   * ✅ UPDATED TO MATCH MOBILE - Uses /team instead of /team/details
    */
   async getCurrentOnCallByTeam(teamId: string): Promise<CurrentOnCallByTeamResponse> {
     try {
@@ -396,6 +369,7 @@ class OnCallService {
    * GET: On-Call Team by User ID
    * API: /api/oncall/user/team?userId={userId}
    * Find which team a user belongs to
+   * ✅ SAME AS MOBILE
    */
   async getUserTeam(userId: string): Promise<UserTeamResponse> {
     try {
@@ -416,8 +390,9 @@ class OnCallService {
    * GET: On-Call Schedule for Team
    * API: /api/oncall/schedule?teamId={teamId}&days={days}
    * Get schedule for specific team and date range
+   * ✅ SAME AS MOBILE
    */
-  async getTeamSchedule(teamId: string, days: number = 7): Promise<TeamScheduleResponse> {
+  async getTeamSchedule(teamId: string, days: number = 30): Promise<TeamScheduleResponse> {
     try {
       const response = await fetch(`${BASE_URL}/api/oncall/schedule?teamId=${teamId}&days=${days}`);
       if (!response.ok) throw new Error(`Failed to fetch schedule: ${response.status}`);
@@ -432,6 +407,7 @@ class OnCallService {
    * GET: Schedule Configuration
    * API: /api/oncall/schedule/config?teamId={teamId}
    * Get rotation configuration (type, length, members order)
+   * ✅ SAME AS MOBILE
    */
   async getScheduleConfig(teamId: string): Promise<ScheduleConfigResponse> {
     try {
@@ -448,6 +424,7 @@ class OnCallService {
    * PUT: Update Schedule Configuration
    * API: /api/oncall/schedule/config
    * Update rotation settings and member order
+   * ✅ SAME AS MOBILE
    */
   async updateScheduleConfig(payload: UpdateScheduleConfigPayload): Promise<any> {
     try {
@@ -465,10 +442,121 @@ class OnCallService {
   }
 
   // ========================================
-  // LEGACY SCHEDULE MANAGEMENT (if still needed)
+  // OVERRIDE MANAGEMENT
   // ========================================
 
   /**
+   * POST: Create Override
+   * API: /api/oncall/override
+   * Temporarily replace someone in the schedule (vacation, sick leave, etc.)
+   * ✅ SAME AS MOBILE
+   */
+  async createOverride(payload: CreateOverridePayload): Promise<OverrideResponse> {
+    try {
+      const response = await fetch(`${BASE_URL}/api/oncall/override`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      
+      const responseText = await response.text();
+      
+      if (!response.ok) {
+        try {
+          const errorData = JSON.parse(responseText);
+          throw new Error(errorData.message || `Failed to create override: ${response.status}`);
+        } catch {
+          throw new Error(`Failed to create override: ${response.status} - ${responseText}`);
+        }
+      }
+      
+      const result = JSON.parse(responseText);
+      return result;
+    } catch (error) {
+      console.error('Error creating override:', error);
+      throw error;
+    }
+  }
+
+  // ========================================
+  // ESCALATION
+  // ========================================
+
+  /**
+   * GET: Escalation Policy
+   * API: /api/oncall/escalation-policy?teamId={teamId}
+   * ✅ SAME AS MOBILE
+   */
+  async getEscalationPolicy(teamId: string): Promise<EscalationPolicyResponse> {
+    try {
+      const response = await fetch(`${BASE_URL}/api/oncall/escalation-policy?teamId=${teamId}`);
+      if (!response.ok) throw new Error(`Failed to fetch escalation policy: ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching escalation policy:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * POST: Escalate Incident
+   * API: /api/oncall/escalate
+   * Escalate an unresolved incident to the next level
+   * ✅ SAME AS MOBILE
+   */
+  async escalateIncident(payload: EscalateIncidentPayload): Promise<EscalateIncidentResponse> {
+    try {
+      const response = await fetch(`${BASE_URL}/api/oncall/escalate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) throw new Error(`Failed to escalate incident: ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      console.error('Error escalating incident:', error);
+      throw error;
+    }
+  }
+
+  // ========================================
+  // LEGACY/DEPRECATED - Keeping for backward compatibility
+  // ========================================
+
+  /**
+   * @deprecated Use getCurrentOnCallByTeam() instead
+   * GET: Team Details (with current on-call and config)
+   * API: /api/oncall/team/details?teamId={teamId}
+   */
+  async getTeamDetails(teamId: string): Promise<TeamDetailsResponse> {
+    try {
+      const response = await fetch(`${BASE_URL}/api/oncall/team/details?teamId=${teamId}`);
+      if (!response.ok) throw new Error(`Failed to fetch team details: ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching team details:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * @deprecated
+   * GET: Calendar Data (All Teams) - 30 days
+   * API: /api/oncall/calendar?days=30
+   */
+  async getCalendarData(days: number = 30): Promise<CalendarResponse> {
+    try {
+      const response = await fetch(`${BASE_URL}/api/oncall/calendar?days=${days}`);
+      if (!response.ok) throw new Error(`Failed to fetch calendar: ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching calendar:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * @deprecated
    * POST: Create Schedule
    * API: /api/oncall/schedule
    */
@@ -488,6 +576,7 @@ class OnCallService {
   }
 
   /**
+   * @deprecated
    * PUT: Update Schedule
    * API: /api/oncall/schedule
    */
@@ -507,6 +596,7 @@ class OnCallService {
   }
 
   /**
+   * @deprecated
    * DELETE: Delete Schedule
    * API: /api/oncall/schedule?scheduleId={scheduleId}
    */
@@ -524,6 +614,7 @@ class OnCallService {
   }
 
   /**
+   * @deprecated
    * GET: All Schedules
    * API: /api/oncall/schedules/all?includeInactive=false
    */
@@ -536,84 +627,6 @@ class OnCallService {
       return await response.json();
     } catch (error) {
       console.error('Error fetching schedules:', error);
-      throw error;
-    }
-  }
-
-  // ========================================
-  // OVERRIDE MANAGEMENT
-  // ========================================
-
-  /**
-   * POST: Create Override
-   * API: /api/oncall/override
-   * Temporarily replace someone in the schedule (vacation, sick leave, etc.)
-   */
-  async createOverride(payload: CreateOverridePayload): Promise<OverrideResponse> {
-    try {
-      const response = await fetch(`${BASE_URL}/api/oncall/override`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      
-      // Get response text first to see what's actually returned
-      const responseText = await response.text();
-      
-      if (!response.ok) {
-        // Try to parse as JSON for error message
-        try {
-          const errorData = JSON.parse(responseText);
-          throw new Error(errorData.message || `Failed to create override: ${response.status}`);
-        } catch {
-          throw new Error(`Failed to create override: ${response.status} - ${responseText}`);
-        }
-      }
-      
-      // Parse successful response
-      const result = JSON.parse(responseText);
-      return result;
-    } catch (error) {
-      console.error('Error creating override:', error);
-      throw error;
-    }
-  }
-
-  // ========================================
-  // ESCALATION
-  // ========================================
-
-  /**
-   * GET: Escalation Policy
-   * API: /api/oncall/escalation-policy?teamId={teamId}
-   */
-  async getEscalationPolicy(teamId: string): Promise<EscalationPolicyResponse> {
-    try {
-      const response = await fetch(`${BASE_URL}/api/oncall/escalation-policy?teamId=${teamId}`);
-      if (!response.ok) throw new Error(`Failed to fetch escalation policy: ${response.status}`);
-      return await response.json();
-    } catch (error) {
-      console.error('Error fetching escalation policy:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * POST: Escalate Incident
-   * API: /api/oncall/escalate
-   * Escalate an unresolved incident to the next level
-   */
-  async escalateIncident(payload: EscalateIncidentPayload): Promise<EscalateIncidentResponse> {
-    try {
-      const response = await fetch(`${BASE_URL}/api/oncall/escalate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      if (!response.ok) throw new Error(`Failed to escalate incident: ${response.status}`);
-      return await response.json();
-    } catch (error) {
-      console.error('Error escalating incident:', error);
       throw error;
     }
   }
