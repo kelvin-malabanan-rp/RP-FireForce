@@ -102,39 +102,70 @@ export default function IncidentsScreen() {
 
     const fetchTeamMembersAndTeams = async () => {
         try {
-            // ✅ Use getAllCurrentOnCall to get teams WITH actual member data
             const onCallResponse = await getAllCurrentOnCall();
 
             if (onCallResponse.httpStatus !== 'OK' || !onCallResponse.data) {
                 throw new Error('Failed to fetch on-call teams with members');
             }
 
-            // Transform teams with full member details
-            const transformedTeams: Team[] = onCallResponse.data.map((teamData: any) => ({
-                id: teamData.teamId,
-                name: teamData.teamName,
-                members: (teamData.members || []).map((member: any) => ({
-                    id: member.userId,
-                    email: member.email,
-                    firstName: member.firstName || member.fullname?.split(' ')[0] || '',
-                    lastName: member.lastName || member.fullname?.split(' ')[1] || '',
-                    role: member.role
-                }))
+            console.log("onCallResponse: ", onCallResponse.data);
+
+            // ✅ Transform the grouped role data into teams
+            const { primary = [], backup = [], escalation = [] } = onCallResponse.data;
+
+            // Combine all roles and group by teamId
+            const allAssignments = [...primary, ...backup, ...escalation];
+
+            // Group by team
+            const teamMap = new Map<string, any>();
+
+            allAssignments.forEach((assignment: any) => {
+                const teamId = assignment.teamId;
+
+                if (!teamMap.has(teamId)) {
+                    teamMap.set(teamId, {
+                        id: teamId,
+                        name: assignment.teamName,
+                        membersMap: new Map<string, TeamMember>() // Use Map to avoid duplicates
+                    });
+                }
+
+                const team = teamMap.get(teamId);
+                const userId = assignment.userId;
+
+                // Only add if not already in the team
+                if (!team.membersMap.has(userId)) {
+                    const [firstName = '', lastName = ''] = (assignment.fullname || '').split(' ');
+                    team.membersMap.set(userId, {
+                        id: userId,
+                        email: assignment.email,
+                        firstName,
+                        lastName,
+                        role: assignment.role // Will be 'primary', 'backup', or 'escalation'
+                    });
+                }
+            });
+
+            // Convert Map to array and transform members Map to array
+            const transformedTeams: Team[] = Array.from(teamMap.values()).map(team => ({
+                id: team.id,
+                name: team.name,
+                members: Array.from(team.membersMap.values())
             }));
 
             setAvailableTeams(transformedTeams);
 
-            // Flatten all team members
-            const allMembers: TeamMember[] = [];
+            // Flatten all team members (avoid duplicates)
+            const allMembersMap = new Map<string, TeamMember>();
             transformedTeams.forEach((team: Team) => {
-                team.members.forEach((member: TeamMember) => { // ✅ Add type annotation
-                    // Avoid duplicates
-                    if (!allMembers.find(m => m.id === member.id)) {
-                        allMembers.push(member);
+                team.members.forEach((member: TeamMember) => {
+                    if (!allMembersMap.has(member.id)) {
+                        allMembersMap.set(member.id, member);
                     }
                 });
             });
 
+            const allMembers = Array.from(allMembersMap.values());
             setAvailableUsers(allMembers);
 
             console.log('[incident] ✅ Loaded teams:', transformedTeams.length);

@@ -62,6 +62,18 @@ export function IncidentsPage() {
     return localStorage.getItem('selectedIncidentId');
   });
 
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const incidentIdFromUrl = urlParams.get('id');
+
+    if (incidentIdFromUrl) {
+      console.log('📧 Opening incident from URL:', incidentIdFromUrl);
+      setSelectedIncidentId(incidentIdFromUrl);
+      // Optional: Clean up URL
+      window.history.replaceState({}, '', '/incidents');
+    }
+  }, []);
+
   // Save selected incident ID to localStorage whenever it changes
   useEffect(() => {
     if (selectedIncidentId) {

@@ -43,31 +43,90 @@ export default function CreateOverrideScreen() {
             const response = await getAllCurrentOnCall(teamId);
 
             if (response.httpStatus === 'OK' && response.data) {
-                // Extract all members from all teams (or just the specific team)
+                console.log('[override] Raw response data:', response.data);
+
+                const data = response.data as any;
+
+                // ✅ Extract users from the object structure (not arrays!)
                 const allMembers: OnCallUser[] = [];
 
-                response.data.forEach((team: any) => {
-                    if (team.teamId === teamId || !teamId) {
-                        team.members.forEach((member: any) => {
+                // Add primary if exists
+                if (data.primary && typeof data.primary === 'object') {
+                    allMembers.push({
+                        id: data.primary.id,
+                        firstName: data.primary.firstName || '',
+                        lastName: data.primary.lastName || '',
+                        email: data.primary.email,
+                        role: 'primary',
+                        timezone: data.timezone,
+                        startTime: data.startTime,
+                        endTime: data.endTime,
+                        teamId: data.teamId,
+                        teamName: data.teamName,
+                        phoneNumber: data.primary.phoneNumber,
+                    });
+                }
+
+                // Add backup if exists
+                if (data.backup && typeof data.backup === 'object') {
+                    allMembers.push({
+                        id: data.backup.id,
+                        firstName: data.backup.firstName || '',
+                        lastName: data.backup.lastName || '',
+                        email: data.backup.email,
+                        role: 'backup',
+                        timezone: data.timezone,
+                        startTime: data.startTime,
+                        endTime: data.endTime,
+                        teamId: data.teamId,
+                        teamName: data.teamName,
+                        phoneNumber: data.backup.phoneNumber,
+                    });
+                }
+
+                // Add escalation if exists (could be object or array)
+                if (data.escalation) {
+                    if (Array.isArray(data.escalation)) {
+                        data.escalation.forEach((user: any) => {
                             allMembers.push({
-                                id: member.userId,
-                                firstName: member.firstName || member.fullname?.split(' ')[0] || '',
-                                lastName: member.lastName || member.fullname?.split(' ')[1] || '',
-                                email: member.email,
-                                role: member.role,
-                                // ... other fields
+                                id: user.id,
+                                firstName: user.firstName || '',
+                                lastName: user.lastName || '',
+                                email: user.email,
+                                role: 'escalation',
+                                timezone: data.timezone,
+                                startTime: data.startTime,
+                                endTime: data.endTime,
+                                teamId: data.teamId,
+                                teamName: data.teamName,
+                                phoneNumber: user.phoneNumber,
                             });
                         });
+                    } else if (typeof data.escalation === 'object') {
+                        allMembers.push({
+                            id: data.escalation.id,
+                            firstName: data.escalation.firstName || '',
+                            lastName: data.escalation.lastName || '',
+                            email: data.escalation.email,
+                            role: 'escalation',
+                            timezone: data.timezone,
+                            startTime: data.startTime,
+                            endTime: data.endTime,
+                            teamId: data.teamId,
+                            teamName: data.teamName,
+                            phoneNumber: data.escalation.phoneNumber,
+                        });
                     }
-                });
+                }
 
-                // Remove duplicates
+                // Remove duplicates based on userId
                 const uniqueUsers = allMembers.filter((user, index, self) =>
                     index === self.findIndex(u => u.id === user.id)
                 );
 
                 setAvailableUsers(uniqueUsers);
                 console.log('[override] Loaded users:', uniqueUsers.length);
+                console.log('[override] Users:', uniqueUsers);
             } else {
                 console.log('[override] No on-call data found');
                 setAvailableUsers([]);

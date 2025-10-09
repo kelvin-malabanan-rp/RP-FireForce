@@ -54,35 +54,35 @@ export class OnCallService {
 			const now = new Date().toISOString();
 
 			const sql = `
-            SELECT
-                oa.id, oa.schedule_id, oa.team_id,
-                oa.user_id, oa.role,
-                oa.start_time, oa.end_time,
-                u.email,
-                u.first_name || ' ' || u.last_name as fullname,
-                t.name as team_name,
-                t.timezone,
-                DATE('now') as today,
-                pt.id as push_token_id,
-                pt.token as push_token,
-                pt.fcm_token as fcm_token,
-                pt.device_type as device_type
-            FROM oncall_assignments oa
-                JOIN users u ON oa.user_id = u.id
-                JOIN oncall_teams t ON oa.team_id = t.id
-                LEFT JOIN push_token_user_assoc ptua ON ptua.user_id = u.id
-                LEFT JOIN push_tokens pt ON pt.id = ptua.push_token_id AND pt.is_active = 1
-            WHERE oa.is_active = 1
-                AND oa.start_time <= DATETIME('now')
-                AND oa.end_time > DATETIME('now')
-            ORDER BY
-                CASE oa.role
-                    WHEN 'primary' THEN 1
-                    WHEN 'backup' THEN 2
-                    WHEN 'escalation' THEN 3
-                END,
-                t.name
-        `;
+				SELECT
+					oa.id, oa.schedule_id, oa.team_id,
+					oa.user_id, oa.role,
+					oa.start_time, oa.end_time,
+					u.email,
+					u.first_name || ' ' || u.last_name as fullname,
+					t.name as team_name,
+					t.timezone,
+					DATE('now') as today,
+					pt.id as push_token_id,
+					pt.token as push_token,
+					pt.fcm_token as fcm_token,
+					pt.device_type as device_type
+				FROM oncall_assignments oa
+						 JOIN users u ON oa.user_id = u.id
+						 JOIN oncall_teams t ON oa.team_id = t.id
+						 LEFT JOIN push_token_user_assoc ptua ON ptua.user_id = u.id
+						 LEFT JOIN push_tokens pt ON pt.id = ptua.push_token_id AND pt.is_active = 1
+				WHERE oa.is_active = 1
+				  AND oa.start_time <= DATETIME('now')
+				  AND oa.end_time > DATETIME('now')
+				ORDER BY
+					CASE oa.role
+						WHEN 'primary' THEN 1
+						WHEN 'backup' THEN 2
+						WHEN 'escalation' THEN 3
+						END,
+					t.name
+			`;
 
 			const { results } = await this.dbService.db.prepare(sql).all();
 
@@ -136,24 +136,24 @@ export class OnCallService {
 			const placeholders = emails.map(() => '?').join(', ');
 
 			const sql = `
-            SELECT
-                u.id,
-                u.email,
-                u.first_name,
-                u.last_name,
-                u.first_name || ' ' || u.last_name as fullname,
-                u.role,
-                pt.id as push_token_id,
-                pt.token as push_token,
-                pt.fcm_token as fcm_token,
-                pt.device_type as device_type
-            FROM users u
-            LEFT JOIN push_token_user_assoc ptua ON ptua.user_id = u.id
-            LEFT JOIN push_tokens pt ON pt.id = ptua.push_token_id AND pt.is_active = 1
-            WHERE u.email IN (${placeholders})
-            AND u.is_active = 1
-            ORDER BY u.first_name, u.last_name
-        `;
+				SELECT
+					u.id,
+					u.email,
+					u.first_name,
+					u.last_name,
+					u.first_name || ' ' || u.last_name as fullname,
+					u.role,
+					pt.id as push_token_id,
+					pt.token as push_token,
+					pt.fcm_token as fcm_token,
+					pt.device_type as device_type
+				FROM users u
+						 LEFT JOIN push_token_user_assoc ptua ON ptua.user_id = u.id
+						 LEFT JOIN push_tokens pt ON pt.id = ptua.push_token_id AND pt.is_active = 1
+				WHERE u.email IN (${placeholders})
+				  AND u.is_active = 1
+				ORDER BY u.first_name, u.last_name
+			`;
 
 			const { results } = await this.dbService.db.prepare(sql).bind(...emails).all();
 
@@ -190,7 +190,7 @@ export class OnCallService {
 				WHERE otm.user_id = ?
 				  AND otm.is_active = 1
 				  AND ot.is_active = 1
-					LIMIT 1
+				LIMIT 1
 			`;
 
 			const result = await this.dbService.db.prepare(query).bind(userId).first();
@@ -243,11 +243,11 @@ export class OnCallService {
 
 	async generateCurrentAssignment(teamId?: string): Promise<CurrentOnCall | null> {
 		let sql = `
-      SELECT s.*, t.timezone
-      FROM oncall_schedules s
-      JOIN oncall_teams t ON s.team_id = t.id
-      WHERE s.is_active = 1
-    `;
+			SELECT s.*, t.timezone
+			FROM oncall_schedules s
+					 JOIN oncall_teams t ON s.team_id = t.id
+			WHERE s.is_active = 1
+		`;
 		const params: any[] = [];
 		if (teamId) { sql += ' AND s.team_id = ?'; params.push(teamId); }
 
@@ -369,16 +369,16 @@ export class OnCallService {
 		end: Date
 	): Promise<{ scheduleId: string; userId: string } | null> {
 		const sql = `
-      SELECT id as schedule_id, user_id
-      FROM oncall_assignments
-      WHERE team_id = ?
-        AND role = ?
-        AND start_time <= ?
-        AND end_time >= ?
-        AND is_active = 1
-      ORDER BY start_time DESC
-      LIMIT 1
-    `;
+			SELECT id as schedule_id, user_id
+			FROM oncall_assignments
+			WHERE team_id = ?
+			  AND role = ?
+			  AND start_time <= ?
+			  AND end_time >= ?
+			  AND is_active = 1
+			ORDER BY start_time DESC
+			LIMIT 1
+		`;
 		const row = await this.dbService.db
 			.prepare(sql)
 			.bind(teamId, role, start.toISOString(), end.toISOString())
@@ -436,15 +436,15 @@ export class OnCallService {
 
 	async getOnCallTeams(): Promise<OnCallTeam[]> {
 		const sql = `
-      SELECT t.id, t.name, t.timezone,
-             u.id as user_id, u.email, u.first_name, u.last_name, u.phone_number,
-             tm.role, tm.order_index
-      FROM oncall_teams t
-      LEFT JOIN oncall_team_members tm ON t.id = tm.team_id AND tm.is_active = 1
-      LEFT JOIN users u ON tm.user_id = u.id
-      WHERE t.is_active = 1
-      ORDER BY t.name, tm.order_index
-    `;
+			SELECT t.id, t.name, t.timezone,
+				   u.id as user_id, u.email, u.first_name, u.last_name, u.phone_number,
+				   tm.role, tm.order_index
+			FROM oncall_teams t
+					 LEFT JOIN oncall_team_members tm ON t.id = tm.team_id AND tm.is_active = 1
+					 LEFT JOIN users u ON tm.user_id = u.id
+			WHERE t.is_active = 1
+			ORDER BY t.name, tm.order_index
+		`;
 		const { results } = await this.dbService.db.prepare(sql).all();
 
 		const map = new Map<string, OnCallTeam>();
@@ -477,23 +477,23 @@ export class OnCallService {
 
 		// 1) next escalation target
 		let target = await this.dbService.db.prepare(`
-      SELECT ec.level, ec.user_id, u.email, u.first_name, u.last_name, u.phone_number
-      FROM escalation_chains ec
-      JOIN users u ON ec.user_id = u.id
-      WHERE ec.team_id = ? AND ec.level > ? AND ec.is_active = 1
-      ORDER BY ec.level
-      LIMIT 1
-    `).bind(args.teamId, args.currentLevel).first();
+			SELECT ec.level, ec.user_id, u.email, u.first_name, u.last_name, u.phone_number
+			FROM escalation_chains ec
+					 JOIN users u ON ec.user_id = u.id
+			WHERE ec.team_id = ? AND ec.level > ? AND ec.is_active = 1
+			ORDER BY ec.level
+			LIMIT 1
+		`).bind(args.teamId, args.currentLevel).first();
 
 		if (!target) {
 			// try team lead/manager
 			const lead = await this.dbService.db.prepare(`
-        SELECT u.id as user_id, u.email, u.first_name, u.last_name, u.phone_number
-        FROM team_members tm
-        JOIN users u ON tm.user_id = u.id
-        WHERE tm.team_id = ? AND tm.role IN ('lead','manager') AND tm.is_active = 1
-        LIMIT 1
-      `).bind(args.teamId).first();
+				SELECT u.id as user_id, u.email, u.first_name, u.last_name, u.phone_number
+				FROM team_members tm
+						 JOIN users u ON tm.user_id = u.id
+				WHERE tm.team_id = ? AND tm.role IN ('lead','manager') AND tm.is_active = 1
+				LIMIT 1
+			`).bind(args.teamId).first();
 
 			if (!lead) {
 				const current = await this.getCurrentOnCallByTeamId(args.teamId);
@@ -507,26 +507,26 @@ export class OnCallService {
 		// 2) write escalation record
 		const escId = crypto.randomUUID();
 		await this.dbService.db.prepare(`
-      INSERT INTO incident_escalations
-      (id, incident_id, team_id, escalated_to_user_id, escalation_level, reason, priority, created_at, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active')
-    `).bind(
+			INSERT INTO incident_escalations
+			(id, incident_id, team_id, escalated_to_user_id, escalation_level, reason, priority, created_at, status)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active')
+		`).bind(
 			escId, args.incidentId, args.teamId, (target as any).user_id,
 			(target as any).level, args.reason, args.priority, now
 		).run();
 
 		// 3) update incident
 		await this.dbService.db.prepare(`
-      UPDATE incidents
-      SET escalation_level = ?,
-          updated_at = ?,
-          priority = CASE
-            WHEN ? = 'critical' THEN 'critical'
-            WHEN priority = 'critical' THEN 'critical'
-            ELSE ?
-          END
-      WHERE id = ?
-    `).bind(
+			UPDATE incidents
+			SET escalation_level = ?,
+				updated_at = ?,
+				priority = CASE
+							   WHEN ? = 'critical' THEN 'critical'
+							   WHEN priority = 'critical' THEN 'critical'
+							   ELSE ?
+					END
+			WHERE id = ?
+		`).bind(
 			(target as any).level, now, args.priority, args.priority, args.incidentId
 		).run();
 
@@ -569,10 +569,10 @@ export class OnCallService {
 		const scheduleRow = await this.dbService.db
 			.prepare(
 				`SELECT id, rotation_type, rotation_length_hours, rotation_start
-         FROM oncall_schedules
-         WHERE team_id = ? AND is_active = 1
-         ORDER BY created_at DESC
-         LIMIT 1`
+				 FROM oncall_schedules
+				 WHERE team_id = ? AND is_active = 1
+				 ORDER BY created_at DESC
+				 LIMIT 1`
 			)
 			.bind(teamId)
 			.first();
@@ -637,8 +637,8 @@ export class OnCallService {
 		await this.dbService.db
 			.prepare(
 				`INSERT INTO oncall_schedules
-         (id, team_id, name, rotation_type, rotation_start, rotation_length_hours, is_active, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+				 (id, team_id, name, rotation_type, rotation_start, rotation_length_hours, is_active, created_at, updated_at)
+				 VALUES (?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
 			)
 			.bind(
 				scheduleId,
@@ -666,8 +666,8 @@ export class OnCallService {
 			await this.dbService.db
 				.prepare(
 					`INSERT INTO oncall_team_members
-           (id, team_id, user_id, role, order_index, is_active, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`
+						 (id, team_id, user_id, role, order_index, is_active, created_at)
+					 VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`
 				)
 				.bind(crypto.randomUUID(), teamId, m.userId, m.role, m.orderIndex, m.isActive ? 1 : 0)
 				.run();
@@ -677,19 +677,19 @@ export class OnCallService {
 	async trackIncidentNotification(incidentId: string, userId: string, notificationType: 'initial' | 'escalation'): Promise<void> {
 		const id = crypto.randomUUID();
 		await this.dbService.db.prepare(`
-        INSERT INTO incident_notifications
-        (id, incident_id, user_id, notification_type, sent_at)
-        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-    `).bind(id, incidentId, userId, notificationType).run();
+			INSERT INTO incident_notifications
+				(id, incident_id, user_id, notification_type, sent_at)
+			VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+		`).bind(id, incidentId, userId, notificationType).run();
 	}
 
 	async getNotifiedUsers(incidentId: string): Promise<Array<{ userId: string; email: string; firstName: string; lastName: string }>> {
 		const sql = `
-        SELECT DISTINCT u.id as userId, u.email, u.first_name as firstName, u.last_name as lastName
-        FROM incident_notifications n
-        JOIN users u ON n.user_id = u.id
-        WHERE n.incident_id = ?
-    `;
+			SELECT DISTINCT u.id as userId, u.email, u.first_name as firstName, u.last_name as lastName
+			FROM incident_notifications n
+					 JOIN users u ON n.user_id = u.id
+			WHERE n.incident_id = ?
+		`;
 		const { results } = await this.dbService.db.prepare(sql).bind(incidentId).all();
 		return results as any[];
 	}
@@ -721,10 +721,10 @@ export class OnCallService {
 
 				// Log the all-clear notification
 				await this.dbService.db.prepare(`
-                INSERT INTO incident_notifications
-                (id, incident_id, user_id, notification_type, sent_at)
-                VALUES (?, ?, ?, 'all_clear', CURRENT_TIMESTAMP)
-            `).bind(crypto.randomUUID(), incidentId, user.userId).run();
+					INSERT INTO incident_notifications
+						(id, incident_id, user_id, notification_type, sent_at)
+					VALUES (?, ?, ?, 'all_clear', CURRENT_TIMESTAMP)
+				`).bind(crypto.randomUUID(), incidentId, user.userId).run();
 			} catch (error) {
 				console.error(`Failed to send all-clear to ${user.email}:`, error);
 			}
@@ -767,9 +767,9 @@ export class OnCallService {
 		// Track notification in database
 		const notificationId = crypto.randomUUID();
 		await this.dbService.db.prepare(`
-        INSERT INTO notifications (id, alert_id, user_id, type, status)
-        VALUES (?, ?, ?, ?, 'sent')
-    `).bind(notificationId, alert.id, userId, type).run();
+			INSERT INTO notifications (id, alert_id, user_id, type, status)
+			VALUES (?, ?, ?, ?, 'sent')
+		`).bind(notificationId, alert.id, userId, type).run();
 	}
 
 	/**
@@ -796,10 +796,10 @@ export class OnCallService {
 
 			// Create schedule record
 			await this.dbService.db.prepare(`
-            INSERT INTO oncall_schedules
-            (id, team_id, name, rotation_type, rotation_start, rotation_length_hours, is_active, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-        `).bind(
+				INSERT INTO oncall_schedules
+				(id, team_id, name, rotation_type, rotation_start, rotation_length_hours, is_active, created_at, updated_at)
+				VALUES (?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+			`).bind(
 				scheduleId,
 				teamId,
 				name,
@@ -810,19 +810,19 @@ export class OnCallService {
 
 			// Deactivate other schedules for this team (only one active at a time)
 			await this.dbService.db.prepare(`
-            UPDATE oncall_schedules
-            SET is_active = 0
-            WHERE team_id = ? AND id != ?
-        `).bind(teamId, scheduleId).run();
+				UPDATE oncall_schedules
+				SET is_active = 0
+				WHERE team_id = ? AND id != ?
+			`).bind(teamId, scheduleId).run();
 
 			// Add team members
 			for (const member of members) {
 				const memberId = crypto.randomUUID();
 				await this.dbService.db.prepare(`
-                INSERT INTO oncall_team_members
-                (id, team_id, user_id, role, order_index, is_active, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-            `).bind(
+					INSERT INTO oncall_team_members
+						(id, team_id, user_id, role, order_index, is_active, created_at)
+					VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+				`).bind(
 					memberId,
 					teamId,
 					member.userId,
@@ -850,10 +850,10 @@ export class OnCallService {
 	async deleteSchedule(scheduleId: string): Promise<void> {
 		try {
 			await this.dbService.db.prepare(`
-            UPDATE oncall_schedules
-            SET is_active = 0, updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-        `).bind(scheduleId).run();
+				UPDATE oncall_schedules
+				SET is_active = 0, updated_at = CURRENT_TIMESTAMP
+				WHERE id = ?
+			`).bind(scheduleId).run();
 
 			console.log('[oncall-service] ✅ Schedule deactivated:', scheduleId);
 		} catch (error) {
@@ -871,16 +871,16 @@ export class OnCallService {
 	}): Promise<any[]> {
 		try {
 			let sql = `
-            SELECT
-                s.*,
-                t.name as team_name,
-                t.timezone,
-                COUNT(DISTINCT tm.id) as member_count
-            FROM oncall_schedules s
-            JOIN oncall_teams t ON s.team_id = t.id
-            LEFT JOIN oncall_team_members tm ON tm.team_id = s.team_id
-            WHERE 1=1
-        `;
+				SELECT
+					s.*,
+					t.name as team_name,
+					t.timezone,
+					COUNT(DISTINCT tm.id) as member_count
+				FROM oncall_schedules s
+						 JOIN oncall_teams t ON s.team_id = t.id
+						 LEFT JOIN oncall_team_members tm ON tm.team_id = s.team_id
+				WHERE 1=1
+			`;
 
 			const queryParams: any[] = [];
 
@@ -996,10 +996,10 @@ export class OnCallService {
 				queryParams.push(scheduleId);
 
 				const sql = `
-                UPDATE oncall_schedules
-                SET ${updates.join(', ')}
-                WHERE id = ?
-            `;
+					UPDATE oncall_schedules
+					SET ${updates.join(', ')}
+					WHERE id = ?
+				`;
 
 				await this.dbService.db.prepare(sql).bind(...queryParams).run();
 				console.log('[oncall-service] ✅ Schedule updated:', scheduleId);
@@ -1027,10 +1027,10 @@ export class OnCallService {
 				for (const member of members) {
 					const memberId = crypto.randomUUID();
 					await this.dbService.db.prepare(`
-                    INSERT INTO oncall_team_members
-                    (id, team_id, user_id, role, order_index, is_active, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                `).bind(
+						INSERT INTO oncall_team_members
+							(id, team_id, user_id, role, order_index, is_active, created_at)
+						VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+					`).bind(
 						memberId,
 						teamId,
 						member.userId,
