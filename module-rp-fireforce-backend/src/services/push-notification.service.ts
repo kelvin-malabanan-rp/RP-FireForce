@@ -45,10 +45,21 @@ export class PushNotificationService {
 	async sendIncidentAlert(incident: Incident): Promise<void> {
 		try {
 			// Get current on-call assignments with push tokens for today
-			const currentOnCall = await this.oncallService.getAllCurrentOnCall();
+			const currentOnCallResponse = await this.oncallService.getAllCurrentOnCall();
 
-			if (!currentOnCall || currentOnCall.length === 0) {
+			if (!currentOnCallResponse) {
 				console.log('No on-call assignments found for today - skipping notifications');
+				return;
+			}
+
+			// ✅ Handle the new response format: {primary: [], backup: [], escalation: []}
+			const { primary = [], backup = [], escalation = [] } = currentOnCallResponse;
+
+			// Combine all members from all roles
+			const allMembers = [...primary, ...backup, ...escalation];
+
+			if (allMembers.length === 0) {
+				console.log('No on-call members found - skipping notifications');
 				return;
 			}
 
@@ -56,29 +67,24 @@ export class PushNotificationService {
 			let sentCount = 0;
 			let skippedCount = 0;
 
-			// Loop through each team
-			for (const team of currentOnCall) {
-				console.log(`Processing team: ${team.teamName}`);
-
-				// Loop through each on-call member
-				for (const member of team.members) {
-					// Only send if member has a push token
-					if (member.pushToken) {
-						const success = await this.sendPushNotification(member.pushToken, message);
-						if (success) {
-							sentCount++;
-							await this.logDelivery(
-								incident.id,
-								'alert',
-								member.pushToken,
-								member.fcmToken
-							);
-							console.log(`✓ Sent to ${member.fullname} (${member.role})`);
-						}
-					} else {
-						skippedCount++;
-						console.log(`⊘ No token for ${member.fullname} (${member.role})`);
+			// Loop through each on-call member
+			for (const member of allMembers) {
+				// Only send if member has a push token
+				if (member.pushToken) {
+					const success = await this.sendPushNotification(member.pushToken, message);
+					if (success) {
+						sentCount++;
+						await this.logDelivery(
+							incident.id,
+							'alert',
+							member.pushToken,
+							member.fcmToken
+						);
+						console.log(`✓ Sent to ${member.fullname} (${member.role}) - Team: ${member.teamName}`);
 					}
+				} else {
+					skippedCount++;
+					console.log(`⊘ No token for ${member.fullname} (${member.role}) - Team: ${member.teamName}`);
 				}
 			}
 
