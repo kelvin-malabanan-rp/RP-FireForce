@@ -11,7 +11,7 @@ interface PushMessage {
 	priority?: 'default' | 'normal' | 'high';
 	sound?: string | null;
 	channelId?: string;
-	categoryId?: string; // 👈 NEW
+	categoryId?: string;
 }
 
 export class PushNotificationService {
@@ -26,15 +26,15 @@ export class PushNotificationService {
 		this.oncallService = new OnCallService(env);
 	}
 
-	private async logDelivery(incidentId: string, kind: 'alert' | 'all_clear', token?: string, fcmToken?: string) {
+	private async logDelivery(incidentId: string, kind: 'alert' | 'all_clear' | 'reminder' | 'escalation', token?: string, fcmToken?: string) {
 		if (!this.dbService.db) return;
 		const sql = `
-      INSERT OR IGNORE INTO incident_notifications (id, incident_id, token, fcm_token, kind)
-      VALUES (?, ?, ?, ?, ?)
-    `;
+			INSERT OR IGNORE INTO incident_notifications (id, incident_id, token, fcm_token, kind)
+			VALUES (?, ?, ?, ?, ?)
+		`;
 		const uuid = this.dbService.generateUUID()
 		await this.dbService.db.prepare(sql).bind(
-			`deliv-${uuid ?? Date.now()}`, // fallback if no randomUUID
+			`deliv-${uuid ?? Date.now()}`,
 			incidentId,
 			token ?? null,
 			fcmToken ?? null,
@@ -42,13 +42,14 @@ export class PushNotificationService {
 		).run();
 	}
 
+	// ✅ Send initial incident alert to all on-call members
 	async sendIncidentAlert(incident: Incident): Promise<void> {
 		try {
 			// Get current on-call assignments with push tokens for today
 			const currentOnCallResponse = await this.oncallService.getAllCurrentOnCall();
 
 			if (!currentOnCallResponse) {
-				console.log('No on-call assignments found for today - skipping notifications');
+				console.log('[push] No on-call assignments found for today - skipping notifications');
 				return;
 			}
 
@@ -59,11 +60,11 @@ export class PushNotificationService {
 			const allMembers = [...primary, ...backup, ...escalation];
 
 			if (allMembers.length === 0) {
-				console.log('No on-call members found - skipping notifications');
+				console.log('[push] No on-call members found - skipping notifications');
 				return;
 			}
 
-			const message = this.createNotificationMessage(incident);
+			const message = this.createNotificationMessage(incident, 'incident_alert');
 			let sentCount = 0;
 			let skippedCount = 0;
 
@@ -80,26 +81,115 @@ export class PushNotificationService {
 							member.pushToken,
 							member.fcmToken
 						);
-						console.log(`✓ Sent to ${member.fullname} (${member.role}) - Team: ${member.teamName}`);
+						console.log(`[push] ✓ Sent to ${member.fullname} (${member.role}) - Team: ${member.teamName}`);
 					}
 				} else {
 					skippedCount++;
-					console.log(`⊘ No token for ${member.fullname} (${member.role}) - Team: ${member.teamName}`);
+					console.log(`[push] ⊘ No token for ${member.fullname} (${member.role}) - Team: ${member.teamName}`);
 				}
 			}
 
-			console.log(`Sent incident alert to ${sentCount} on-call members, ${skippedCount} skipped (no token)`);
+			console.log(`[push] Sent incident alert to ${sentCount} on-call members, ${skippedCount} skipped (no token)`);
 		} catch (error) {
-			console.error('Error sending incident alerts:', error);
+			console.error('[push] Error sending incident alerts:', error);
 		}
 	}
 
+	// ✅ Send reminder notification (called by ReminderService)
+	async sendReminderNotification(
+		incident: Incident,
+		members: any[],
+		reminderNumber: number,
+		totalReminders: number
+	): Promise<{ sent: number; skipped: number }> {
+		try {
+			console.log(`[push] Sending reminder #${reminderNumber}/${totalReminders} for incident:`, incident.id);
+
+			const message = this.createReminderMessage(incident, reminderNumber, totalReminders);
+			let sentCount = 0;
+			let skippedCount = 0;
+
+			for (const member of members) {
+				if (!member.pushToken) {
+					skippedCount++;
+					continue;
+				}
+
+				// ✅ Add role to message for personalization
+				const personalizedMessage = {
+					...message,
+					title: `[${member.role?.toUpperCase() || 'TEAM'}] ⏰ REMINDER #${reminderNumber}/${totalReminders}: ${incident.severity.toUpperCase()} - ${incident.title}`,
+					data: {
+						...message.data,
+						role: member.role
+					}
+				};
+
+				const success = await this.sendPushNotification(member.pushToken, personalizedMessage);
+				if (success) {
+					sentCount++;
+					await this.logDelivery(
+						incident.id,
+						'reminder',
+						member.pushToken,
+						member.fcmToken
+					);
+					console.log(`[push] ✓ Reminder sent to ${member.fullname} (${member.role})`);
+				}
+			}
+
+			console.log(`[push] Reminder #${reminderNumber}: ${sentCount} sent, ${skippedCount} skipped`);
+			return { sent: sentCount, skipped: skippedCount };
+		} catch (error) {
+			console.error('[push] Error sending reminder notifications:', error);
+			return { sent: 0, skipped: 0 };
+		}
+	}
+
+	// ✅ Send escalation notification (called by ReminderService)
+	async sendEscalationNotification(
+		incident: Incident,
+		members: any[]
+	): Promise<{ sent: number; skipped: number }> {
+		try {
+			console.log(`[push] Sending escalation notification for incident:`, incident.id);
+
+			const message = this.createEscalationMessage(incident);
+			let sentCount = 0;
+			let skippedCount = 0;
+
+			for (const member of members) {
+				if (!member.pushToken) {
+					skippedCount++;
+					continue;
+				}
+
+				const success = await this.sendPushNotification(member.pushToken, message);
+				if (success) {
+					sentCount++;
+					await this.logDelivery(
+						incident.id,
+						'escalation',
+						member.pushToken,
+						member.fcmToken
+					);
+					console.log(`[push] ✓ Escalation sent to ${member.fullname}`);
+				}
+			}
+
+			console.log(`[push] Escalation: ${sentCount} sent, ${skippedCount} skipped`);
+			return { sent: sentCount, skipped: skippedCount };
+		} catch (error) {
+			console.error('[push] Error sending escalation notifications:', error);
+			return { sent: 0, skipped: 0 };
+		}
+	}
 
 	// EMERGENCY OVERRIDE
 	async sendEmergencyOverrideAlert(incident: Incident, userEmails: string[]): Promise<void> {
 		try {
 			if (!userEmails || userEmails.length === 0) {
-				console.log('No users specified for emergency override');
+				console.log('[push] No users specified for emergency override');
 				return;
 			}
 
@@ -107,11 +197,11 @@ export class PushNotificationService {
 			const usersWithTokens = await this.oncallService.usersForEmergencyOverride(userEmails);
 
 			if (!usersWithTokens || usersWithTokens.length === 0) {
-				console.log('No users found for emergency override');
+				console.log('[push] No users found for emergency override');
 				return;
 			}
 
-			const message = this.createNotificationMessage(incident);
+			const message = this.createNotificationMessage(incident, 'incident_alert');
 			let sentCount = 0;
 			let skippedCount = 0;
 
@@ -127,19 +217,19 @@ export class PushNotificationService {
 							user.pushToken,
 							user.fcmToken
 						);
-						console.log(`✓ EMERGENCY: Sent to ${user.fullname}`);
+						console.log(`[push] ✓ EMERGENCY: Sent to ${user.fullname}`);
 					} else {
-						console.error(`✗ EMERGENCY: Failed to send to ${user.fullname}`);
+						console.error(`[push] ✗ EMERGENCY: Failed to send to ${user.fullname}`);
 					}
 				} else {
 					skippedCount++;
-					console.log(`⊘ EMERGENCY: No token for ${user.fullname}`);
+					console.log(`[push] ⊘ EMERGENCY: No token for ${user.fullname}`);
 				}
 			}
 
-			console.log(`Emergency override: ${sentCount} notified, ${skippedCount} skipped (no token)`);
+			console.log(`[push] Emergency override: ${sentCount} notified, ${skippedCount} skipped (no token)`);
 		} catch (error) {
-			console.error('Error sending emergency override alerts:', error);
+			console.error('[push] Error sending emergency override alerts:', error);
 		}
 	}
 
@@ -157,12 +247,11 @@ export class PushNotificationService {
 			.bind(incidentId)
 			.first();
 		if (!incidentRow) {
-			console.warn('[all_clear] incident not found:', incidentId);
+			console.warn('[push] [all_clear] incident not found:', incidentId);
 			return { notifiedCount: 0, users: [] };
 		}
 
 		// 2) Find everyone who previously received 'alert' for this incident
-		// Join with users table to get name and email
 		const { results } = await this.dbService.db
 			.prepare(`
 				SELECT DISTINCT
@@ -171,7 +260,7 @@ export class PushNotificationService {
 					u.name,
 					u.email
 				FROM incident_notifications n
-						 LEFT JOIN users u ON n.token = u.expo_token OR n.fcm_token = u.fcm_token
+				LEFT JOIN users u ON n.token = u.expo_token OR n.fcm_token = u.fcm_token
 				WHERE n.incident_id = ? AND n.kind = 'alert'
 			`)
 			.bind(incidentId)
@@ -179,7 +268,7 @@ export class PushNotificationService {
 
 		const recipients = (results as any[]) || [];
 		if (recipients.length === 0) {
-			console.log('[all_clear] no prior recipients to notify for', incidentId);
+			console.log('[push] [all_clear] no prior recipients to notify for', incidentId);
 			return { notifiedCount: 0, users: [] };
 		}
 
@@ -192,7 +281,6 @@ export class PushNotificationService {
 				incidentId,
 				resolved_at: new Date().toISOString(),
 			},
-			// Use default sound / a light channel
 			priority: 'normal',
 			sound: 'default',
 			channelId: 'default-v4',
@@ -210,7 +298,6 @@ export class PushNotificationService {
 			if (ok) {
 				sent++;
 
-				// Track notified users
 				if (r.name && r.email) {
 					notifiedUsers.push({
 						name: r.name,
@@ -227,7 +314,7 @@ export class PushNotificationService {
 			}
 		}
 
-		console.log(`[all_clear] sent to ${sent}/${recipients.length} recipients`, { incidentId });
+		console.log(`[push] [all_clear] sent to ${sent}/${recipients.length} recipients`, { incidentId });
 
 		return {
 			notifiedCount: sent,
@@ -235,7 +322,8 @@ export class PushNotificationService {
 		};
 	}
 
-	private createNotificationMessage(incident: Incident): Omit<PushMessage, 'to'> {
+	// ✅ Create initial incident notification message
+	private createNotificationMessage(incident: Incident, type: string): Omit<PushMessage, 'to'> {
 		const severityConfig = {
 			critical: {
 				channelId: 'critical-alerts-v4',
@@ -259,7 +347,6 @@ export class PushNotificationService {
 			},
 		};
 
-		// Handle null/undefined severity
 		const severity = (incident.severity || 'low') as keyof typeof severityConfig;
 		const config = severityConfig[severity] || severityConfig.low;
 
@@ -270,21 +357,71 @@ export class PushNotificationService {
 				incidentId: incident.id,
 				severity: incident.severity || 'low',
 				status: incident.status,
-				type: 'incident_alert',
+				type: type,
 				awsConsoleUrl: incident.aws_console_url,
 			},
 			priority: config.priority,
 			sound: config.sound,
 			channelId: config.channelId,
-			categoryId: 'incident-actions', // ← ADD THIS for acknowledge/decline buttons
+			categoryId: 'incident-actions',
 		};
 	}
 
-	private shouldSendAlert(incident: Incident, settings: any): boolean {
-		if (!settings || !settings.enableAlerts) return false;
-		if (settings.criticalOnly && incident.severity !== 'critical') return false;
-		if (incident.status === 'resolved') return false;
-		return true;
+	// ✅ Create reminder notification message
+	private createReminderMessage(incident: Incident, reminderNumber: number, totalReminders: number): Omit<PushMessage, 'to'> {
+		const severityConfig = {
+			critical: { channelId: 'critical-alerts-v4', sound: 'alarm_sound.mp3', priority: 'high' as const },
+			high: { channelId: 'high-priority-v4', sound: 'alarm_sound.mp3', priority: 'high' as const },
+			medium: { channelId: 'medium-priority-v4', sound: 'alarm_sound.mp3', priority: 'normal' as const },
+			low: { channelId: 'default-v4', sound: 'alarm_sound.mp3', priority: 'normal' as const },
+		};
+
+		const severity = (incident.severity || 'low') as keyof typeof severityConfig;
+		const config = severityConfig[severity] || severityConfig.low;
+
+		return {
+			title: `⏰ REMINDER #${reminderNumber}/${totalReminders}: ${incident.severity.toUpperCase()} - ${incident.title}`,
+			body: `This incident still requires attention. ${incident.description}`,
+			data: {
+				incidentId: incident.id,
+				severity: incident.severity || 'low',
+				type: 'auto_reminder',
+				reminderNumber: reminderNumber,
+				totalReminders: totalReminders,
+			},
+			priority: config.priority,
+			sound: config.sound,
+			channelId: config.channelId,
+			categoryId: 'incident-actions',
+		};
+	}
+
+	// ✅ Create escalation notification message
+	private createEscalationMessage(incident: Incident): Omit<PushMessage, 'to'> {
+		const severityConfig = {
+			critical: { channelId: 'critical-alerts-v4', sound: 'alarm_sound.mp3', priority: 'high' as const },
+			high: { channelId: 'high-priority-v4', sound: 'alarm_sound.mp3', priority: 'high' as const },
+			medium: { channelId: 'medium-priority-v4', sound: 'alarm_sound.mp3', priority: 'normal' as const },
+			low: { channelId: 'default-v4', sound: 'alarm_sound.mp3', priority: 'normal' as const },
+		};
+
+		const severity = (incident.severity || 'low') as keyof typeof severityConfig;
+		const config = severityConfig[severity] || severityConfig.low;
+
+		return {
+			title: `[ESCALATION] 🚨 ESCALATED: ${incident.severity.toUpperCase()} - ${incident.title}`,
+			body: `This incident has been escalated to you after no response. ${incident.description}`,
+			data: {
+				incidentId: incident.id,
+				severity: incident.severity || 'low',
+				type: 'escalation',
+				role: 'escalation'
+			},
+			priority: 'high',
+			sound: config.sound,
+			channelId: config.channelId,
+			categoryId: 'incident-actions',
+		};
 	}
 
 	private async sendPushNotification(token: string, message: Omit<PushMessage, 'to'>): Promise<boolean> {
@@ -295,7 +432,7 @@ export class PushNotificationService {
 				return await this.sendFCMNotification(token, message);
 			}
 		} catch (error) {
-			console.error('Error sending push notification:', error);
+			console.error('[push] Error sending push notification:', error);
 			return false;
 		}
 	}
@@ -305,7 +442,7 @@ export class PushNotificationService {
 			const payload: PushMessage = {
 				to: token,
 				...message,
-				sound: 'default', // Expo-only limitation
+				sound: 'default',
 			};
 
 			const response = await fetch(this.expoPushUrl, {
@@ -318,15 +455,15 @@ export class PushNotificationService {
 			});
 
 			if (!response.ok) {
-				console.error('Expo push notification failed:', response.status, await response.text());
+				console.error('[push] Expo push notification failed:', response.status, await response.text());
 				return false;
 			}
 
 			const result = await response.json();
-			console.log('Expo push notification sent:', result);
+			console.log('[push] Expo push notification sent:', result);
 			return true;
 		} catch (error) {
-			console.error('Error sending Expo notification:', error);
+			console.error('[push] Error sending Expo notification:', error);
 			return false;
 		}
 	}
@@ -336,7 +473,7 @@ export class PushNotificationService {
 			const accessToken = await this.getFirebaseAccessToken();
 
 			if (!accessToken) {
-				console.error('Failed to get Firebase access token');
+				console.error('[push] Failed to get Firebase access token');
 				return false;
 			}
 
@@ -355,9 +492,8 @@ export class PushNotificationService {
 						notification: {
 							sound: message.sound || 'default',
 							channel_id: message.channelId,
-							// Remove priority from here - it's not valid in FCM v1
 						},
-						priority: message.priority === 'high' ? 'high' : 'normal', // Move priority here
+						priority: message.priority === 'high' ? 'high' : 'normal',
 					},
 				}
 			};
@@ -374,28 +510,23 @@ export class PushNotificationService {
 			});
 
 			if (!response.ok) {
-				console.error('FCM v1 notification failed:', response.status, await response.text());
+				console.error('[push] FCM v1 notification failed:', response.status, await response.text());
 				return false;
 			}
 
 			const result = await response.json();
-			console.log('FCM v1 notification sent:', result);
+			console.log('[push] FCM v1 notification sent:', result);
 			return true;
 		} catch (error) {
-			console.error('Error sending FCM v1 notification:', error);
+			console.error('[push] Error sending FCM v1 notification:', error);
 			return false;
 		}
 	}
 
 	private async getFirebaseAccessToken(): Promise<string | null> {
 		try {
-			console.log('Available env vars:', Object.keys(this.env));
-			console.log('FIREBASE_PROJECT_ID:', this.env.FIREBASE_PROJECT_ID);
-			console.log('FIREBASE_CLIENT_EMAIL:', this.env.FIREBASE_CLIENT_EMAIL);
-			console.log('FIREBASE_PRIVATE_KEY exists:', !!this.env.FIREBASE_PRIVATE_KEY);
-
 			if (!this.env.FIREBASE_PROJECT_ID || !this.env.FIREBASE_CLIENT_EMAIL || !this.env.FIREBASE_PRIVATE_KEY) {
-				console.log('Firebase credentials not configured, skipping FCM');
+				console.log('[push] Firebase credentials not configured, skipping FCM');
 				return null;
 			}
 
@@ -406,10 +537,8 @@ export class PushNotificationService {
 				private_key: this.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
 			};
 
-			// Create JWT for Firebase
 			const jwt = await this.createJWT(serviceAccount);
 
-			// Exchange JWT for access token
 			const response = await fetch('https://oauth2.googleapis.com/token', {
 				method: 'POST',
 				headers: {
@@ -423,25 +552,20 @@ export class PushNotificationService {
 
 			if (!response.ok) {
 				const error = await response.text();
-				console.error('Failed to get Firebase access token:', error);
+				console.error('[push] Failed to get Firebase access token:', error);
 				return null;
 			}
 
 			const data = await response.json() as { access_token?: string };
-			console.log('getFirebaseAccessToken data:', data);
 			return data.access_token || null;
 		} catch (error) {
-			console.error('Error getting Firebase access token:', error);
+			console.error('[push] Error getting Firebase access token:', error);
 			return null;
 		}
 	}
 
 	private async createJWT(serviceAccount: any): Promise<string> {
-		const header = {
-			alg: 'RS256',
-			typ: 'JWT'
-		};
-
+		const header = { alg: 'RS256', typ: 'JWT' };
 		const now = Math.floor(Date.now() / 1000);
 		const payload = {
 			iss: serviceAccount.client_email,
@@ -451,51 +575,37 @@ export class PushNotificationService {
 			iat: now
 		};
 
-		// Base64URL encode header and payload
 		const encodedHeader = this.base64URLEncode(JSON.stringify(header));
 		const encodedPayload = this.base64URLEncode(JSON.stringify(payload));
-
-		// Create signing input
 		const signingInput = `${encodedHeader}.${encodedPayload}`;
 
-		// Import private key
 		const privateKey = await this.importPrivateKey(serviceAccount.private_key);
-
-		// Sign with WebCrypto
 		const signature = await crypto.subtle.sign(
 			'RSASSA-PKCS1-v1_5',
 			privateKey,
 			new TextEncoder().encode(signingInput)
 		);
 
-		// Base64URL encode signature
 		const encodedSignature = this.base64URLEncode(signature);
-
 		return `${signingInput}.${encodedSignature}`;
 	}
 
 	private async importPrivateKey(privateKeyPem: string): Promise<CryptoKey> {
-		// Remove PEM header/footer and newlines
 		const pemContents = privateKeyPem
 			.replace('-----BEGIN PRIVATE KEY-----', '')
 			.replace('-----END PRIVATE KEY-----', '')
 			.replace(/\s/g, '');
 
-		// Convert base64 to ArrayBuffer
 		const binaryString = atob(pemContents);
 		const bytes = new Uint8Array(binaryString.length);
 		for (let i = 0; i < binaryString.length; i++) {
 			bytes[i] = binaryString.charCodeAt(i);
 		}
 
-		// Import the key
 		return await crypto.subtle.importKey(
 			'pkcs8',
 			bytes.buffer,
-			{
-				name: 'RSASSA-PKCS1-v1_5',
-				hash: 'SHA-256',
-			},
+			{ name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
 			false,
 			['sign']
 		);
@@ -512,13 +622,10 @@ export class PushNotificationService {
 			base64 = btoa(binaryString);
 		}
 
-		// Convert base64 to base64URL
-		return base64
-			.replace(/\+/g, '-')
-			.replace(/\//g, '_')
-			.replace(/=/g, '');
+		return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 	}
 
+	// ✅ Register push token with user settings (includes reminderConfig)
 	async registerPushToken(userId: string, token: string, deviceType?: string, fcmToken?: string, settings?: any) {
 		const deviceId = `device-${token.slice(-8)}-${Date.now()}`;
 
@@ -527,11 +634,40 @@ export class PushNotificationService {
 				throw new Error("Database connection not available");
 			}
 
-			// 1. Insert/Update push token
+			// ✅ Find and delete all existing tokens for this user
+			const existingTokens = await this.dbService.db.prepare(`
+				SELECT push_token_id FROM push_token_user_assoc WHERE user_id = ?
+			`).bind(userId).all();
+
+			await this.dbService.db.prepare(`
+				DELETE FROM push_token_user_assoc WHERE user_id = ?
+			`).bind(userId).run();
+
+			console.log(`[push-token] Removed ${existingTokens.results?.length || 0} existing associations for user: ${userId}`);
+
+			if (existingTokens.results && existingTokens.results.length > 0) {
+				for (const row of existingTokens.results) {
+					await this.dbService.db.prepare(`
+						DELETE FROM push_tokens WHERE id = ?
+					`).bind(row.push_token_id).run();
+				}
+				console.log(`[push-token] Removed ${existingTokens.results.length} old tokens for user: ${userId}`);
+			}
+
+			// ✅ Insert new push token with settings (includes reminderConfig)
+			const settingsJson = JSON.stringify(settings || {
+				enableAlerts: true,
+				reminderConfig: {
+					enabled: true,
+					maxReminders: 3,
+					intervalSeconds: 10
+				}
+			});
+
 			const tokenQuery = `
-			  INSERT OR REPLACE INTO push_tokens
-			  (id, token, fcm_token, device_type, settings, is_active, created_at, updated_at)
-			  VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+				INSERT INTO push_tokens
+				(id, token, fcm_token, device_type, settings, is_active, created_at, updated_at)
+				VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 			`;
 
 			await this.dbService.db.prepare(tokenQuery).bind(
@@ -539,15 +675,15 @@ export class PushNotificationService {
 				token,
 				fcmToken || null,
 				deviceType,
-				JSON.stringify(settings || {}),
-				1  // is_active = true
+				settingsJson,
+				1
 			).run();
 
-			// 2. Create association between user and token
+			// ✅ Create new association between user and token
 			const assocQuery = `
-			  INSERT OR REPLACE INTO push_token_user_assoc
-			  (push_token_id, user_id, created_at)
-			  VALUES (?, ?, CURRENT_TIMESTAMP)
+				INSERT INTO push_token_user_assoc
+				(push_token_id, user_id, created_at)
+				VALUES (?, ?, CURRENT_TIMESTAMP)
 			`;
 
 			await this.dbService.db.prepare(assocQuery).bind(
@@ -555,36 +691,23 @@ export class PushNotificationService {
 				userId
 			).run();
 
-			console.log("Push token registered for user:", userId, "Device:", deviceId, "FCM:", !!fcmToken);
-			return { success: true, deviceId, userId };
-		} catch (error) {
-			console.error("Error registering push token:", error);
-			throw error;
-		}
-	}
+			console.log(`[push-token] ✅ Registered new token for user: ${userId}, Device: ${deviceId}, Type: ${deviceType}, FCM: ${!!fcmToken}`);
+			console.log(`[push-token] ⚠️ All other devices for this user have been logged out`);
 
-	private async getActivePushTokens(): Promise<Array<{
-		token: string;
-		fcmToken: string | null;
-		settings: any
-	}>> {
-		const query = 'SELECT token, fcm_token, settings FROM push_tokens WHERE is_active = 1';
-
-		try {
-			if (!this.dbService.db) {
-				return [];
+			// Log reminder config if present
+			if (settings?.reminderConfig) {
+				console.log(`[push-token] 📢 Reminder config: ${settings.reminderConfig.maxReminders}x every ${settings.reminderConfig.intervalSeconds}s (${settings.reminderConfig.enabled ? 'enabled' : 'disabled'})`);
 			}
 
-			const { results } = await this.dbService.db.prepare(query).all();
-
-			return (results as any[]).map(row => ({
-				token: row.token,
-				fcmToken: row.fcm_token,
-				settings: row.settings ? JSON.parse(row.settings) : {}
-			}));
+			return {
+				success: true,
+				deviceId,
+				userId,
+				message: 'Device registered successfully. Other devices have been logged out.'
+			};
 		} catch (error) {
-			console.error('Error fetching push tokens:', error);
-			return [];
+			console.error("[push-token] ❌ Error registering push token:", error);
+			throw error;
 		}
 	}
 
@@ -593,6 +716,7 @@ export class PushNotificationService {
 			channelId: 'default-v4',
 			sound: 'default',
 		};
+
 		if (alertType === 'critical') {
 			config.channelId = 'critical-alerts-v4';
 			config.sound = 'alarm_sound';

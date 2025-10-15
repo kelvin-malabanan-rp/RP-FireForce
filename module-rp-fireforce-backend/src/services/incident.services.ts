@@ -12,6 +12,7 @@ import { DatabaseService } from './database.service';
 import { PushNotificationService } from './push-notification.service';
 import { EmailService } from "./email.service";
 import { OnCallService } from "./oncall.service";
+import {ReminderService} from "./reminder.service";
 
 export class IncidentService {
 	private env: Env;
@@ -50,7 +51,7 @@ export class IncidentService {
 				}
 			};
 		} catch (error) {
-			console.error('Error calculating stats:', error);
+			console.error('[incident] Error calculating stats:', error);
 			throw error;
 		}
 	}
@@ -82,7 +83,7 @@ export class IncidentService {
 			);
 
 			if (result.changes > 0) {
-				console.log('Incident resolved for alarm:', alarm.AlarmName);
+				console.log('[incident] Incident resolved for alarm:', alarm.AlarmName);
 			}
 
 			return { action: 'resolved', changes: result.changes };
@@ -110,16 +111,32 @@ export class IncidentService {
 		};
 
 		const result = await this.dbService.insertIncident(incident);
-		console.log('New incident created:', result.id);
+		console.log('[incident] New incident created:', result.id);
 
-		// ✅ Get on-call users and send both push AND email notifications
+		// ✅ Get reminder configuration from primary on-call user
+		const reminderConfig = await this.getUserReminderSettings(result.id);
+
 		try {
-			const onCallResponse = await this.oncallService.getAllCurrentOnCall();
+			// ✅ Send initial push notifications to all on-call members
+			await this.pushService.sendIncidentAlert({
+				...incident,
+				id: result.id
+			} as Incident);
+			console.log('[incident] Push notifications sent for incident:', incident.title);
 
-			if (onCallResponse && Array.isArray(onCallResponse)) {
-				for (const team of onCallResponse) {
-					for (const member of team.members || []) {
-						// Send email notification
+			// ✅ Send initial email notifications (backend handles this, not client)
+			const onCallResponse = await this.oncallService.getAllCurrentOnCall();
+			if (onCallResponse) {
+				const { primary = [], backup = [], escalation = [] } = onCallResponse;
+				const allMembers = [...primary, ...backup, ...escalation];
+
+				// Deduplicate emails
+				const uniqueEmails = new Set<string>();
+
+				for (const member of allMembers) {
+					if (!uniqueEmails.has(member.email)) {
+						uniqueEmails.add(member.email);
+
 						try {
 							await this.emailService.sendIncidentAlert({
 								to: member.email,
@@ -128,28 +145,98 @@ export class IncidentService {
 								description: incident.description!,
 								severity: incident.severity!,
 								reportedBy: incident.reported_by!,
-								timestamp: incident.timestamp!
+								timestamp: incident.timestamp!,
+								role: member.role
 							});
-							console.log('[email] ✅ Sent to:', member.email);
+							console.log('[incident] [email] ✅ Sent to:', member.email, `(${member.role})`);
 						} catch (emailError) {
-							console.error('[email] ❌ Failed to send to:', member.email, emailError);
+							console.error('[incident] [email] ❌ Failed to send to:', member.email, emailError);
 						}
 					}
 				}
 			}
 
-			// Send push notifications
-			await this.pushService.sendIncidentAlert({
-				...incident,
-				id: result.id
-			} as Incident);
-			console.log('Push notifications sent for incident:', incident.title);
+			// ✅ Schedule reminders with user's preferences (if enabled)
+			if (reminderConfig.enabled) {
+				const reminderService = new ReminderService(this.env);
+				await reminderService.scheduleReminders(result.id, {
+					maxReminders: reminderConfig.maxReminders,
+					intervalSeconds: reminderConfig.intervalSeconds
+				});
+				console.log(`[incident] ✅ Reminders scheduled: ${reminderConfig.maxReminders}x every ${reminderConfig.intervalSeconds}s`);
+			} else {
+				console.log('[incident] ⏭️ Reminders disabled for this user');
+			}
 
 		} catch (error) {
-			console.error('Failed to send notifications:', error);
+			console.error('[incident] Failed to send notifications:', error);
 		}
 
 		return { action: 'created', incident: incident as Incident };
+	}
+
+	// ✅ Get reminder settings from primary on-call user's push token
+	private async getUserReminderSettings(incidentId: string): Promise<{
+		enabled: boolean;
+		maxReminders: number;
+		intervalSeconds: number;
+	}> {
+		try {
+			// Get incident to find team
+			const incident = await this.dbService.getIncidentById(incidentId);
+
+			// Get on-call users for the team
+			const onCallResponse = await this.oncallService.getAllCurrentOnCall(incident.team_id);
+
+			if (!onCallResponse || !onCallResponse.primary || onCallResponse.primary.length === 0) {
+				// Default settings if no on-call user found
+				console.log('[incident] No primary on-call user found, using default reminder settings');
+				return { enabled: true, maxReminders: 3, intervalSeconds: 10 };
+			}
+
+			// Get primary user's push token settings
+			const primaryUser = onCallResponse.primary[0];
+
+			const tokenSettings = await this.dbService.db?.prepare(`
+				SELECT pt.settings
+				FROM push_tokens pt
+				JOIN push_token_user_assoc pta ON pt.id = pta.push_token_id
+				WHERE pta.user_id = ? AND pt.is_active = 1
+				ORDER BY pt.created_at DESC
+				LIMIT 1
+			`).bind(primaryUser.userId).first();
+
+			if (tokenSettings && tokenSettings.settings) {
+				try {
+					const settings = JSON.parse(tokenSettings.settings as string);
+
+					// Check if reminders are enabled and get config
+					if (settings.reminderConfig) {
+						const config = settings.reminderConfig;
+						console.log(`[incident] Using ${primaryUser.email}'s reminder settings:`, {
+							enabled: config.enabled,
+							maxReminders: config.maxReminders,
+							intervalSeconds: config.intervalSeconds
+						});
+
+						return {
+							enabled: config.enabled !== false, // Default to true if not explicitly false
+							maxReminders: config.maxReminders || 3,
+							intervalSeconds: config.intervalSeconds || 10
+						};
+					}
+				} catch (parseError) {
+					console.error('[incident] Error parsing settings JSON:', parseError);
+				}
+			}
+
+			// Default settings if no valid config found
+			console.log('[incident] No reminder config found, using defaults');
+			return { enabled: true, maxReminders: 3, intervalSeconds: 10 };
+		} catch (error) {
+			console.error('[incident] Error getting reminder settings:', error);
+			return { enabled: true, maxReminders: 3, intervalSeconds: 10 };
+		}
 	}
 
 	// ──────────────────────────────────────────────
@@ -181,9 +268,9 @@ export class IncidentService {
 					changedBy: resolvedBy || 'System',
 					timestamp: new Date().toISOString()
 				});
-				console.log('[email] ✅ Resolution email sent to:', user.email);
+				console.log('[incident] [email] ✅ Resolution email sent to:', user.email);
 			} catch (emailError) {
-				console.error('[email] ❌ Failed to send resolution email:', emailError);
+				console.error('[incident] [email] ❌ Failed to send resolution email:', emailError);
 			}
 		}
 
@@ -198,16 +285,16 @@ export class IncidentService {
 		};
 	}
 
-// ✅ Helper to get all users who were notified about an incident
+	// ✅ Helper to get all users who were notified about an incident
 	private async getNotifiedUsers(incidentId: string): Promise<any[]> {
-		const result = await this.dbService.db.prepare(`
-        SELECT DISTINCT u.*
-        FROM incident_notifications n
-        JOIN users u ON n.user_id = u.id
-        WHERE n.incident_id = ?
-    `).bind(incidentId).all();
+		const result = await this.dbService.db?.prepare(`
+			SELECT DISTINCT u.*
+			FROM incident_notifications n
+			JOIN users u ON n.user_id = u.id
+			WHERE n.incident_id = ?
+		`).bind(incidentId).all();
 
-		return result.results || [];
+		return result?.results || [];
 	}
 
 	// ──────────────────────────────────────────────
@@ -248,6 +335,17 @@ export class IncidentService {
 			await this.notifyCurrentOnCall(result.id);
 		}
 
+		// ✅ Schedule reminders for manually created incidents too
+		const reminderConfig = await this.getUserReminderSettings(result.id);
+		if (reminderConfig.enabled) {
+			const reminderService = new ReminderService(this.env);
+			await reminderService.scheduleReminders(result.id, {
+				maxReminders: reminderConfig.maxReminders,
+				intervalSeconds: reminderConfig.intervalSeconds
+			});
+			console.log(`[incident] ✅ Reminders scheduled for manual incident: ${reminderConfig.maxReminders}x every ${reminderConfig.intervalSeconds}s`);
+		}
+
 		return result;
 	}
 
@@ -271,9 +369,9 @@ export class IncidentService {
 					});
 
 					await this.trackNotification(incidentId, userId, 'email');
-					console.log('[email] ✅ Sent to:', user.email);
+					console.log('[incident] [email] ✅ Sent to:', user.email);
 				} catch (error) {
-					console.error(`[email] ❌ Failed to notify user ${userId}:`, error);
+					console.error(`[incident] [email] ❌ Failed to notify user ${userId}:`, error);
 				}
 			}
 		}
@@ -282,7 +380,7 @@ export class IncidentService {
 	private async notifyCurrentOnCall(incidentId: string): Promise<void> {
 		const incident = await this.dbService.getIncidentById(incidentId);
 		if (!incident) {
-			console.error('Incident not found:', incidentId);
+			console.error('[incident] Incident not found:', incidentId);
 			return;
 		}
 
@@ -293,55 +391,61 @@ export class IncidentService {
 				const current = await this.oncallService.getAllCurrentOnCall(team.id);
 
 				// Notify primary
-				if (current?.primary) {
-					try {
-						await this.emailService.sendIncidentAlert({
-							to: current.primary.email,
-							incidentId: incident.id,
-							title: incident.title,
-							description: incident.description,
-							severity: incident.severity,
-							reportedBy: incident.reported_by,
-							timestamp: incident.timestamp
-						});
-						await this.trackNotification(incidentId, current.primary.id, 'email');
-						console.log('[email] ✅ Sent to primary:', current.primary.email);
-					} catch (err) {
-						console.error(`[email] ❌ Failed to notify primary:`, err);
+				if (current?.primary && Array.isArray(current.primary)) {
+					for (const primaryUser of current.primary) {
+						try {
+							await this.emailService.sendIncidentAlert({
+								to: primaryUser.email,
+								incidentId: incident.id,
+								title: incident.title,
+								description: incident.description,
+								severity: incident.severity,
+								reportedBy: incident.reported_by,
+								timestamp: incident.timestamp,
+								role: 'primary'
+							});
+							await this.trackNotification(incidentId, primaryUser.userId, 'email');
+							console.log('[incident] [email] ✅ Sent to primary:', primaryUser.email);
+						} catch (err) {
+							console.error(`[incident] [email] ❌ Failed to notify primary:`, err);
+						}
 					}
 				}
 
 				// Notify backup
-				if (current?.backup) {
-					try {
-						await this.emailService.sendIncidentAlert({
-							to: current.backup.email,
-							incidentId: incident.id,
-							title: incident.title,
-							description: incident.description,
-							severity: incident.severity,
-							reportedBy: incident.reported_by,
-							timestamp: incident.timestamp
-						});
-						await this.trackNotification(incidentId, current.backup.id, 'email');
-						console.log('[email] ✅ Sent to backup:', current.backup.email);
-					} catch (err) {
-						console.error(`[email] ❌ Failed to notify backup:`, err);
+				if (current?.backup && Array.isArray(current.backup)) {
+					for (const backupUser of current.backup) {
+						try {
+							await this.emailService.sendIncidentAlert({
+								to: backupUser.email,
+								incidentId: incident.id,
+								title: incident.title,
+								description: incident.description,
+								severity: incident.severity,
+								reportedBy: incident.reported_by,
+								timestamp: incident.timestamp,
+								role: 'backup'
+							});
+							await this.trackNotification(incidentId, backupUser.userId, 'email');
+							console.log('[incident] [email] ✅ Sent to backup:', backupUser.email);
+						} catch (err) {
+							console.error(`[incident] [email] ❌ Failed to notify backup:`, err);
+						}
 					}
 				}
 			}
 
 			// Send push notifications
 			await this.pushService.sendIncidentAlert(incident);
-			console.log('Push notifications sent for incident:', incidentId);
+			console.log('[incident] Push notifications sent for incident:', incidentId);
 		} catch (error) {
-			console.error('Failed to send on-call notifications:', error);
+			console.error('[incident] Failed to send on-call notifications:', error);
 		}
 	}
 
 	// ──────────────────────────────────────────────
 	private async trackNotification(incidentId: string, userId: string, type: string): Promise<void> {
-		await this.dbService.db.prepare(`
+		await this.dbService.db?.prepare(`
 			INSERT INTO incident_notifications (id, incident_id, user_id, notification_type, kind, sent_at, delivered_at)
 			VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 		`).bind(
@@ -358,7 +462,7 @@ export class IncidentService {
 		try {
 			await this.dbService.getUserById(userId);
 		} catch (error) {
-			console.error(error);
+			console.error('[incident]', error);
 			throw error;
 		}
 	}
@@ -367,7 +471,7 @@ export class IncidentService {
 		try {
 			await this.dbService.getUserByEmail(email);
 		} catch (error) {
-			console.error(error);
+			console.error('[incident]', error);
 			throw error;
 		}
 	}

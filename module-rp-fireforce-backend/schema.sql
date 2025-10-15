@@ -1,6 +1,8 @@
 /* ======= DROP (order matters - drop dependent tables first) ======= */
 DROP TABLE IF EXISTS notification_responses;
 DROP TABLE IF EXISTS audit_log;
+DROP TABLE IF EXISTS incident_reminders;           -- ✅ NEW
+DROP TABLE IF EXISTS incident_reminder_config;     -- ✅ NEW
 DROP TABLE IF EXISTS incident_escalations;
 DROP TABLE IF EXISTS escalation_chains;
 DROP TABLE IF EXISTS oncall_overrides;
@@ -142,6 +144,31 @@ CREATE INDEX idx_inc_notif_incident_kind ON incident_notifications(incident_id, 
 CREATE INDEX idx_inc_notif_user          ON incident_notifications(user_id);
 CREATE INDEX idx_inc_notif_status        ON incident_notifications(status);
 
+/* ======= REMINDER SYSTEM ======= */
+
+-- ✅ NEW: Stores reminder configuration per incident
+CREATE TABLE incident_reminder_config (
+										  incident_id      TEXT PRIMARY KEY,
+										  max_reminders    INTEGER DEFAULT 3,
+										  interval_seconds INTEGER DEFAULT 10,
+										  created_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
+										  FOREIGN KEY (incident_id) REFERENCES incidents(id) ON DELETE CASCADE
+);
+CREATE INDEX idx_reminder_config_incident ON incident_reminder_config(incident_id);
+
+-- ✅ NEW: Tracks which reminders have been sent
+CREATE TABLE incident_reminders (
+									id                TEXT PRIMARY KEY,
+									incident_id       TEXT NOT NULL,
+									reminder_number   INTEGER NOT NULL,
+									sent_at           DATETIME DEFAULT CURRENT_TIMESTAMP,
+									recipients_count  INTEGER DEFAULT 0,
+									FOREIGN KEY (incident_id) REFERENCES incidents(id) ON DELETE CASCADE
+);
+CREATE INDEX idx_reminders_incident ON incident_reminders(incident_id);
+CREATE INDEX idx_reminders_number   ON incident_reminders(incident_id, reminder_number);
+CREATE INDEX idx_reminders_sent_at  ON incident_reminders(sent_at);
+
 /* ======= ON-CALL ======= */
 CREATE TABLE oncall_teams (
 							  id          TEXT PRIMARY KEY,
@@ -240,6 +267,7 @@ CREATE UNIQUE INDEX uq_escalation_chain_team_level ON escalation_chains(team_id,
 CREATE INDEX idx_escalation_chains_team  ON escalation_chains(team_id);
 CREATE INDEX idx_escalation_chains_level ON escalation_chains(team_id, level);
 
+-- ✅ UPDATED: Added triggered_at field for auto-escalation tracking
 CREATE TABLE incident_escalations (
 									  id                     TEXT PRIMARY KEY,
 									  incident_id            TEXT,
@@ -250,12 +278,14 @@ CREATE TABLE incident_escalations (
 									  reason                 TEXT,
 									  priority               TEXT,
 									  status                 TEXT,
+									  triggered_at           DATETIME DEFAULT CURRENT_TIMESTAMP,  -- ✅ NEW
 									  created_at             DATETIME DEFAULT CURRENT_TIMESTAMP,
 									  acknowledged_at        DATETIME,
 									  resolved_at            DATETIME
 );
-CREATE INDEX idx_incident_escalations_incident ON incident_escalations(incident_id);
-CREATE INDEX idx_incident_escalations_status   ON incident_escalations(status);
+CREATE INDEX idx_incident_escalations_incident     ON incident_escalations(incident_id);
+CREATE INDEX idx_incident_escalations_status       ON incident_escalations(status);
+CREATE INDEX idx_incident_escalations_triggered_at ON incident_escalations(triggered_at);  -- ✅ NEW
 
 /* ======= AUDIT TRAIL TABLES ======= */
 
