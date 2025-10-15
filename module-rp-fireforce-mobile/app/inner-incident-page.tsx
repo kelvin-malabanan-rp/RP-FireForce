@@ -256,6 +256,17 @@ export default function InnerIncidentPage() {
             // Create audit log
             if (userSession) {
                 try {
+                    // include the escalation response here
+                    const escalationResponse = await escalateIncident({
+                        teamId: userSession.teamId,
+                        incidentId: incident!.id,
+                        reason: escalationReason.trim(),
+                        priority: escalationPriority || 'high',
+                        userRole: userSession?.teamRole ?? null,
+                    });
+
+                    const escalationData = escalationResponse.data;
+
                     await createAuditLog({
                         action: "ESCALATE_INCIDENT",
                         incidentId: incident!.id,
@@ -263,16 +274,24 @@ export default function InnerIncidentPage() {
                         description: `${userSession.firstName} ${userSession.lastName} escalated incident "${incident!.title}"`,
                         details: {
                             incidentTitle: incident!.title,
-                            priority: escalationPriority,
-                            reason: escalationReason.trim(),
+                            priority: escalationData?.priority || escalationPriority,
+                            reason: escalationData?.reason || escalationReason.trim(),
                             severity: incident!.severity,
-                            actionFrom: "mobile_app"
+                            actionFrom: "mobile_app",
+                            escalatedToRole: escalationData?.object?.escalatedToRole || null,
+                            notifiedUsers: escalationData?.object?.notifiedUsers?.map(u => ({
+                                fullname: u.fullname,
+                                email: u.email,
+                                role: u.role,
+                                pushToken: u.pushToken ?? null,
+                                fcmToken: u.fcmToken ?? null,
+                            })) || [],
                         },
                         metadata: {
                             device: Platform.OS,
                             timestamp: new Date().toISOString(),
                             userEmail: userSession.email,
-                        }
+                        },
                     });
                 } catch (auditError) {
                     console.warn("⚠️ Failed to create escalation audit log:", auditError);
@@ -281,7 +300,6 @@ export default function InnerIncidentPage() {
 
             setShowEscalateModal(false);
             setEscalationReason('');
-            setEscalationPriority('high');
 
             Alert.alert('Success', 'Incident escalated successfully', [
                 { text: 'OK', onPress: () => router.push('/tabs/incidents') }
