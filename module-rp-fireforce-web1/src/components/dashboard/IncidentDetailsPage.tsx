@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-// import { incidentService } from "incidents-service";
 
 import {
   ArrowLeft,
@@ -18,7 +17,8 @@ import {
   AlertCircle,
   CheckCircle,
   ArrowUpRight,
-  Zap
+  Zap,
+  RefreshCw
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
@@ -44,7 +44,6 @@ interface ChatMessage {
   similarIncidents?: any[];
 }
 
-// Extended Incident type with new fields
 interface ExtendedIncident extends Incident {
   acknowledged_by?: string;
   acknowledged_by_name?: string;
@@ -71,13 +70,9 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [newStatus, setNewStatus] = useState<string>('');
 
-  // Save Resolution Modal state
+  // Modal states
   const [showSaveResolutionModal, setShowSaveResolutionModal] = useState(false);
-  
-  // Resolve Incident Modal state
   const [showResolveModal, setShowResolveModal] = useState(false);
-  
-  // Notification modal state
   const [notification, setNotification] = useState<{
     show: boolean;
     type: 'success' | 'error' | 'warning';
@@ -95,6 +90,18 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  // CRITICAL: Debug incident ID
+  useEffect(() => {
+    if (incident) {
+      console.log('🔑 Incident loaded:', {
+        id: incident.id,
+        incident_id: incident.incident_id,
+        incidentId: incidentId,
+        title: incident.title
+      });
+    }
+  }, [incident, incidentId]);
 
   // Load incident details
   useEffect(() => {
@@ -166,7 +173,6 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
       setNewComment('');
       await loadComments();
 
-      // Create audit log for comment addition
       try {
         const userName = localStorage.getItem('user')
           ? JSON.parse(localStorage.getItem('user')!).first_name + ' ' + JSON.parse(localStorage.getItem('user')!).last_name
@@ -204,17 +210,12 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
     try {
       const oldStatus = incident?.status || 'Unknown';
       const resolvedBy = localStorage.getItem('userEmail') || undefined;
-      console.log('[DEBUG] Update Incident Status Payload:', {
-        incidentId,
-        newStatus,
-        resolvedBy
-      });
+      
       const response = await incidentService.updateIncidentStatus(incidentId, newStatus, resolvedBy);
       if (response.success && response.data) {
         setIncident(response.data);
         setNewStatus('');
         
-        // Create audit log for status update
         try {
           const userId = localStorage.getItem('userId') || 'unknown';
           const userName = localStorage.getItem('user') 
@@ -258,7 +259,6 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
     try {
       const userId = localStorage.getItem('userId') || 'user-unknown';
       
-      // Use the new respond API
       const response = await incidentService.respondToIncident({
         incidentId: incidentId,
         action: 'acknowledge',
@@ -266,7 +266,6 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
       });
       
       if (response.success) {
-        // Create audit log for acknowledgment
         try {
           const userName = localStorage.getItem('user') 
             ? JSON.parse(localStorage.getItem('user')!).first_name + ' ' + JSON.parse(localStorage.getItem('user')!).last_name
@@ -307,7 +306,6 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
     try {
       const userId = localStorage.getItem('userId') || 'user-unknown';
       
-      // Use the new respond API
       const response = await incidentService.respondToIncident({
         incidentId: incidentId,
         action: 'escalate',
@@ -323,7 +321,6 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
         });
         await loadIncident();
 
-        // Create audit log for escalation
         try {
           const userName = localStorage.getItem('user')
             ? JSON.parse(localStorage.getItem('user')!).first_name + ' ' + JSON.parse(localStorage.getItem('user')!).last_name
@@ -347,6 +344,7 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
     }
   };
 
+  // FIXED: AI Message Handler with proper incident ID tracking
   const handleSendAIMessage = async () => {
     if (!inputMessage.trim() || isStreaming || !incident) return;
 
@@ -365,18 +363,36 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
     try {
       abortControllerRef.current = new AbortController();
 
+      // CRITICAL: Use consistent incident ID for conversation tracking
+      // Priority: incident.id > incident.incident_id > incidentId prop > title (fallback)
+      const trackingId = incident.id || (incident as any).incident_id || incidentId || incident.title;
+      
+      console.log('🔑 Using tracking ID:', trackingId);
+      console.log('📤 Sending question:', inputMessage);
+
+      // Build description with user question
+      const enhancedDescription = `${incident.description}\n\nUser Question: ${inputMessage}`;
+
+      const requestBody = {
+        incident_id: trackingId,  // MUST be consistent
+        title: incident.title,
+        description: enhancedDescription,
+        service: incident.location || 'system',
+        severity: incident.severity || 'medium'
+      };
+
+      console.log('📦 Request body:', requestBody);
+
       const response = await fetch('http://localhost:8000/analyze/agentic-stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: incident.title,
-          description: `${incident.description}\n\nUser Question: ${inputMessage}`,
-          service: incident.location || 'system'
-        }),
+        body: JSON.stringify(requestBody),
         signal: abortControllerRef.current.signal
       });
 
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
 
       const reader = response.body?.getReader();
       if (!reader) throw new Error('No reader available');
@@ -384,39 +400,67 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
       const decoder = new TextDecoder();
       let accumulatedText = '';
       let similarIncidents: any[] = [];
-      let buffer = '';
+      let metadata: any = null;
 
+      // Process stream
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        buffer += decoder.decode(value, { stream: false });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n');
 
         for (const line of lines) {
           if (line.startsWith('data: ')) {
-            const data = line.slice(6).trim();
-            if (!data || data === '[DONE]') continue;
-
             try {
-              const parsed = JSON.parse(data);
+              const jsonStr = line.substring(6).trim();
+              if (!jsonStr) continue;
+
+              const parsed = JSON.parse(jsonStr);
               
-              if (parsed.token !== undefined) {
-                accumulatedText += parsed.token;
-                setStreamingMessage(accumulatedText);
-              }
-              
-              if (parsed.done === true && parsed.similar_incidents) {
-                similarIncidents = parsed.similar_incidents;
+              switch (parsed.type) {
+                case 'status':
+                  console.log('📊 Status:', parsed.message);
+                  break;
+
+                case 'metadata':
+                  metadata = parsed;
+                  if (parsed.similar_past_incidents) {
+                    similarIncidents = parsed.similar_past_incidents;
+                  }
+                  if (parsed.conversation_length !== undefined) {
+                    console.log(`💬 Conversation length: ${parsed.conversation_length} messages`);
+                  }
+                  break;
+
+                case 'token':
+                  if (parsed.content !== undefined) {
+                    accumulatedText += parsed.content;
+                    setStreamingMessage(accumulatedText);
+                  }
+                  break;
+
+                case 'done':
+                  console.log('✅ Stream complete', parsed);
+                  if (parsed.conversation_messages) {
+                    console.log(`📊 Total conversation: ${parsed.conversation_messages} messages`);
+                  }
+                  if (parsed.quality_score) {
+                    console.log(`📈 Quality score: ${parsed.quality_score}`);
+                  }
+                  break;
+
+                case 'error':
+                  throw new Error(parsed.message || 'AI service error');
               }
             } catch (e) {
-              console.error('Error parsing SSE data:', e);
+              console.error('Error parsing SSE:', e, line);
             }
           }
         }
       }
 
+      // Create final bot message
       const botMessage: ChatMessage = {
         id: Date.now() + 1,
         type: 'bot',
@@ -427,9 +471,10 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
 
       setMessages(prev => [...prev, botMessage]);
       setStreamingMessage('');
+
     } catch (err: any) {
       if (err.name !== 'AbortError') {
-        console.error('AI Error:', err);
+        console.error('❌ AI Error:', err);
         const errorMessage: ChatMessage = {
           id: Date.now() + 1,
           type: 'bot',
@@ -441,6 +486,38 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
     } finally {
       setIsStreaming(false);
       setStreamingMessage('');
+      if (abortControllerRef.current) {
+        abortControllerRef.current = null;
+      }
+    }
+  };
+
+  // NEW: Clear conversation history
+  const handleClearConversation = async () => {
+    if (!incident) return;
+    
+    const trackingId = incident.id || (incident as any).incident_id || incidentId || incident.title;
+    
+    try {
+      console.log('🧹 Clearing conversation for:', trackingId);
+      
+      await fetch(`http://localhost:8000/conversation/${encodeURIComponent(trackingId)}`, {
+        method: 'DELETE'
+      });
+      
+      // Reset to welcome message
+      setMessages([
+        {
+          id: Date.now(),
+          type: 'bot',
+          content: `Hello! I'm your AI assistant for this incident.\n\n**${incident.title}**\n\nI can help you with:\n• Root cause analysis\n• Similar past incidents\n• Recommended actions\n• Impact assessment\n\nAsk me anything!`,
+          timestamp: new Date()
+        }
+      ]);
+      
+      console.log('✅ Conversation cleared');
+    } catch (err) {
+      console.error('❌ Failed to clear conversation:', err);
     }
   };
 
@@ -541,7 +618,7 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
         animate={{ opacity: 1, y: 0 }}
         className="flex items-center justify-between"
       >
-            <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4">
           <Button
             onClick={onBack}
             className="gap-2 bg-gradient-to-r from-slate-600 to-slate-700 text-white hover:from-slate-700 hover:to-slate-800 shadow-md hover:shadow-lg transition-all"
@@ -550,12 +627,12 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
             Back
           </Button>
           <div>
-                <h1 className="text-2xl font-bold text-white flex items-center gap-3">
-                  {incident.title}
-                  {(incident.status === 'investigating' || incident.acknowledged_by) && (
-                    <Badge className="bg-green-600 text-white border-none">Acknowledged</Badge>
-                  )}
-                </h1>
+            <h1 className="text-2xl font-bold text-white flex items-center gap-3">
+              {incident.title}
+              {(incident.status === 'investigating' || incident.acknowledged_by) && (
+                <Badge className="bg-green-600 text-white border-none">Acknowledged</Badge>
+              )}
+            </h1>
             <div className="flex items-center gap-3 mt-2">
               <Badge className={getSeverityColor(incident.severity)}>
                 {incident.severity}
@@ -569,14 +646,14 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
       </motion.div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column - Incident Details */}
+        {/* Left Column - Incident Details (keeping your existing code) */}
         <motion.div 
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: 0.2 }}
           className="lg:col-span-2 space-y-6"
         >
-          {/* Incident Information */}
+          {/* Your existing incident details cards remain the same */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -681,7 +758,6 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
                   </div>
                 </motion.div>
 
-                {/* Add Documentation Button (if resolved) */}
                 {incident.status === 'resolved' && (
                   <motion.div
                     initial={{ opacity: 0, y: 10 }}
@@ -698,7 +774,6 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
                   </motion.div>
                 )}
 
-                {/* Description */}
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -709,7 +784,6 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
                   <p className="mt-2 text-white leading-relaxed">{incident.description}</p>
                 </motion.div>
 
-                {/* Incident Metadata Grid */}
                 <div className="grid grid-cols-2 gap-6">
                   <motion.div
                     initial={{ opacity: 0, y: 10 }}
@@ -737,7 +811,6 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
                     <p className="text-white font-medium">{formatDate(incident.timestamp)}</p>
                   </motion.div>
 
-                  {/* NEW: Assigned To / Handled By Section */}
                   {(incident.acknowledged_by || incident.escalated_by) && (
                     <motion.div
                       initial={{ opacity: 0, y: 10 }}
@@ -750,7 +823,6 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
                         {incident.escalated_by ? 'Escalated By' : 'Handled By'}
                       </label>
                       <div className="flex items-center gap-3">
-                        {/* Avatar */}
                         <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${getAvatarColor(
                           incident.acknowledged_by_name || incident.escalated_by_name || 
                           incident.acknowledged_by || incident.escalated_by
@@ -763,7 +835,6 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
                           </span>
                         </div>
                         
-                        {/* User Info */}
                         <div className="flex flex-col">
                           <span className="text-white font-semibold">
                             {incident.acknowledged_by_name || incident.escalated_by_name || 
@@ -803,7 +874,7 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
             </Card>
           </motion.div>
 
-          {/* Comments Section */}
+          {/* Comments Section - keeping your existing code */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -823,7 +894,6 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
               </CardHeader>
               <CardContent className="pt-6">
                 <div className="space-y-4">
-                  {/* Comment Input */}
                   <div className="flex gap-2">
                     <Input
                       value={newComment}
@@ -846,7 +916,6 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
                     </Button>
                   </div>
 
-                  {/* Comments List */}
                   <div className="space-y-3 max-h-96 overflow-y-auto">
                     {comments.length === 0 ? (
                       <motion.div
@@ -869,14 +938,12 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
                           className="p-4 bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 transition-colors"
                         >
                           <div className="flex items-start gap-3">
-                            {/* Avatar with initials */}
                             <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${getAvatarColor(comment.userFullname || comment.user_email)} flex items-center justify-center flex-shrink-0 shadow-md`}>
                               <span className="text-sm font-bold text-white">
                                 {getInitials(comment.userFullname || comment.user_email || comment.user_id)}
                               </span>
                             </div>
                             
-                            {/* Comment content */}
                             <div className="flex-1 min-w-0">
                               <div className="flex items-start justify-between gap-2 mb-1">
                                 <div className="flex flex-col">
@@ -906,7 +973,7 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
           </motion.div>
         </motion.div>
 
-        {/* Right Column - AI Assistant */}
+        {/* Right Column - FIXED AI Assistant */}
         <motion.div
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
@@ -922,17 +989,28 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
                   </div>
                   <div className="flex flex-col">
                     <span>AI Assistant</span>
-                    <span className="text-xs font-normal text-slate-300">Powered by Ollama</span>
+                    <span className="text-xs font-normal text-slate-300">Conversation-Aware</span>
                   </div>
                 </CardTitle>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setIsChatOpen(!isChatOpen)}
-                  className="text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-colors"
-                >
-                  {isChatOpen ? <X className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleClearConversation}
+                    className="text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-colors"
+                    title="Clear conversation"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setIsChatOpen(!isChatOpen)}
+                    className="text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-colors"
+                  >
+                    {isChatOpen ? <X className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
+                  </Button>
+                </div>
               </div>
             </CardHeader>
 
@@ -945,7 +1023,6 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
                   transition={{ duration: 0.3 }}
                 >
                   <CardContent className="p-4 bg-gradient-to-b from-slate-50/50 to-transparent dark:from-slate-900/30 dark:to-transparent">
-                    {/* Chat Messages */}
                     <div className="space-y-4 max-h-96 overflow-y-auto mb-4 pr-2 scrollbar-thin scrollbar-thumb-purple-500/20 scrollbar-track-transparent">
                       {messages.map((msg, index) => (
                         <motion.div
@@ -1009,7 +1086,6 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
                         </motion.div>
                       ))}
 
-                      {/* Streaming Message */}
                       {streamingMessage && (
                         <motion.div
                           initial={{ opacity: 0, scale: 0.95 }}
@@ -1033,7 +1109,6 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
                       <div ref={messagesEndRef} />
                     </div>
 
-                    {/* Chat Input */}
                     <motion.div
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
@@ -1068,7 +1143,7 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
         </motion.div>
       </div>
 
-      {/* Save Resolution Modal */}
+      {/* Modals */}
       <SaveResolutionModal
         isOpen={showSaveResolutionModal}
         onClose={() => setShowSaveResolutionModal(false)}
@@ -1078,7 +1153,6 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
         }}
       />
 
-      {/* Resolve Incident Modal */}
       <ResolveIncidentModal
         isOpen={showResolveModal}
         onClose={() => setShowResolveModal(false)}
@@ -1088,7 +1162,6 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
         }}
       />
       
-      {/* Notification Modals */}
       {notification?.type === 'success' && (
         <SuccessModal
           isOpen={notification.show}

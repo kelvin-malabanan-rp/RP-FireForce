@@ -17,7 +17,8 @@ import {
   Users,
   MapPin,
   Calendar,
-  Activity
+  Activity,
+  User
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Badge } from "../ui/badge";
@@ -43,6 +44,16 @@ import type { Incident } from "../../types";
 import { CreateIncidentModal } from "../modals/CreateIncidentModal";
 import { IncidentDetailsPage } from "./IncidentDetailsPage";
 
+// Extended Incident type to include email fields
+interface ExtendedIncident extends Incident {
+  assigned_to_email?: string;
+  assignedToEmail?: string;
+  reported_by?: string;
+  reportedBy?: string;
+  acknowledged_by?: string;
+  acknowledged_by_name?: string;
+}
+
 type ViewMode = 'grid' | 'list';
 type StatusFilter = 'all' | 'open' | 'investigating' | 'acknowledged' | 'resolved' | 'escalated';
 type SeverityFilter = 'all' | 'critical' | 'high' | 'medium' | 'low';
@@ -50,7 +61,7 @@ type TimeframeFilter = 'all' | '24h' | '7d' | '30d';
 
 export function IncidentsPage() {
   // State management
-  const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [incidents, setIncidents] = useState<ExtendedIncident[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,23 +72,12 @@ export function IncidentsPage() {
   const [selectedIncidentId, setSelectedIncidentId] = useState<string | null>(() => {
     return localStorage.getItem('selectedIncidentId');
   });
-  // ✅ ADD THIS CODE - Check URL for incident ID
-useEffect(() => {
-  const urlParams = new URLSearchParams(window.location.search);
-  const incidentIdFromUrl = urlParams.get('id');
   
-  if (incidentIdFromUrl) {
-    console.log('📧 Opening incident from URL:', incidentIdFromUrl);
-    setSelectedIncidentId(incidentIdFromUrl);
-    // Optional: Clean up URL
-    window.history.replaceState({}, '', '/incidents');
-  }
-}, []);
-
+  // Check URL for incident ID
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const incidentIdFromUrl = urlParams.get('id');
-
+    
     if (incidentIdFromUrl) {
       console.log('📧 Opening incident from URL:', incidentIdFromUrl);
       setSelectedIncidentId(incidentIdFromUrl);
@@ -228,6 +228,26 @@ useEffect(() => {
       active: (statusCounts['open'] || 0) + (statusCounts['investigating'] || 0) + (statusCounts['acknowledged'] || 0),
     };
   }, [incidents]);
+
+  // Helper: Get assigned person (email or name, not user ID)
+  const getAssignedPerson = (incident: ExtendedIncident): string | null => {
+    // First check for explicit email fields
+    if (incident.assigned_to_email) return incident.assigned_to_email;
+    if (incident.assignedToEmail) return incident.assignedToEmail;
+    
+    // If acknowledged, use that person's info
+    if (incident.acknowledged_by_name) return incident.acknowledged_by_name;
+    if (incident.acknowledged_by && !incident.acknowledged_by.startsWith('user-')) {
+      return incident.acknowledged_by;
+    }
+    
+    // Only use assigned_to if it's not a user ID format
+    if (incident.assigned_to && !incident.assigned_to.startsWith('user-')) {
+      return incident.assigned_to;
+    }
+    
+    return null;
+  };
 
   // Helper: Get status badge styling
   const getStatusBadge = (status: string) => {
@@ -703,8 +723,9 @@ useEffect(() => {
                       >
                         {incident.title || 'Untitled Incident'}
                       </CardTitle>
-                      <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                        {incident.id || 'Unknown ID'}
+                      <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1.5">
+                        <User className="h-3.5 w-3.5" />
+                        {incident.reported_by || incident.reportedBy || 'Unknown Reporter'}
                       </p>
                     </div>
                     <Badge className={getStatusBadge(incident.status || 'unknown')}>
@@ -729,10 +750,10 @@ useEffect(() => {
 
                   {/* Metadata */}
                   <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-slate-700">
-                    {incident.assigned_to && (
+                    {getAssignedPerson(incident) && (
                       <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
                         <Users className="h-4 w-4" />
-                        <span>Assigned to: {incident.assigned_to}</span>
+                        <span className="truncate">Assigned to: {getAssignedPerson(incident)}</span>
                       </div>
                     )}
                     {incident.location && (
@@ -810,8 +831,9 @@ useEffect(() => {
                         <div className="font-semibold text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
                           {incident.title || 'Untitled Incident'}
                         </div>
-                        <div className="text-xs text-slate-500 dark:text-slate-400">
-                          {incident.id || 'Unknown ID'}
+                        <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                          <User className="h-3 w-3" />
+                          Reported by: {incident.reported_by || incident.reportedBy || 'Unknown Reporter'}
                         </div>
                         <div className="text-sm text-slate-600 dark:text-slate-400 line-clamp-1">
                           {incident.description || 'No description available'}
@@ -842,10 +864,10 @@ useEffect(() => {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
-                        {incident.assigned_to ? (
+                        {getAssignedPerson(incident) ? (
                           <>
                             <Users className="h-3.5 w-3.5 flex-shrink-0" />
-                            <span className="truncate max-w-[120px]">{incident.assigned_to}</span>
+                            <span className="truncate max-w-[150px]">{getAssignedPerson(incident)}</span>
                           </>
                         ) : (
                           <span className="text-slate-400 dark:text-slate-500">Unassigned</span>
