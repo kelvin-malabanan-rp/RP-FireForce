@@ -11,59 +11,85 @@ export class OnCallService {
 		this.dbService = new DatabaseService(env);
 	}
 
-	//ONCALL BY TEAM ID
+	// ✅ Helper: Check if today's date is in the dates array
+	private isOnCallToday(datesJson: string): boolean {
+		try {
+			const dates = JSON.parse(datesJson) as string[];
+			const today = new Date().toISOString().split('T')[0]; // Get YYYY-MM-DD
+			return dates.includes(today);
+		} catch (error) {
+			console.error('[oncall] Error parsing dates JSON:', error);
+			return false;
+		}
+	}
+
+	// ✅ Helper: Check if a specific date is in the dates array
+	private isOnCallOnDate(datesJson: string, targetDate: string): boolean {
+		try {
+			const dates = JSON.parse(datesJson) as string[];
+			const dateOnly = targetDate.split('T')[0]; // Get YYYY-MM-DD
+			return dates.includes(dateOnly);
+		} catch (error) {
+			console.error('[oncall] Error parsing dates JSON:', error);
+			return false;
+		}
+	}
+
+	// ✅ UPDATED: Check against dates array
 	async getCurrentOnCallByTeamId(teamId: string): Promise<CurrentOnCall | null> {
 		try {
-			const now = new Date().toISOString();
-
 			const sql = `
 				SELECT
 					oa.id, oa.schedule_id, oa.team_id, oa.user_id, oa.role,
-					oa.start_time, oa.end_time,
+					oa.dates,
 					u.email, u.first_name, u.last_name, u.phone_number,
 					t.name as team_name, t.timezone
 				FROM oncall_assignments oa
-						 JOIN users u ON oa.user_id = u.id
-						 JOIN oncall_teams t ON oa.team_id = t.id
+				JOIN users u ON oa.user_id = u.id
+				JOIN oncall_teams t ON oa.team_id = t.id
 				WHERE oa.is_active = 1
-				  AND oa.start_time <= ?
-				  AND oa.end_time > ?
 				  AND oa.team_id = ?
-				ORDER BY oa.team_id, oa.role
+				ORDER BY oa.role
 			`;
 
 			const { results } = await this.dbService.db
 				.prepare(sql)
-				.bind(now, now, teamId)
+				.bind(teamId)
 				.all();
 
 			if (!results || results.length === 0) {
 				return await this.generateCurrentAssignment(teamId);
 			}
 
-			return this.parseOnCallResults(results as any[]);
+			// ✅ Filter by checking if today is in their dates array
+			const activeToday = (results as any[]).filter(row =>
+				this.isOnCallToday(row.dates)
+			);
+
+			if (activeToday.length === 0) {
+				return null;
+			}
+
+			return this.parseOnCallResults(activeToday);
 		} catch (e) {
 			console.error('[oncall] getCurrentOnCallByTeamId error:', e);
 			return null;
 		}
 	}
 
-	// ALL ON CALL USERS - Grouped by role (across all teams)
+	// ✅ UPDATED: Check against dates array
 	async getAllCurrentOnCall(): Promise<any> {
 		try {
-			const now = new Date().toISOString();
-
 			const sql = `
 				SELECT
 					oa.id, oa.schedule_id, oa.team_id,
 					oa.user_id,
 					oa.role,
-					oa.start_time, oa.end_time,
+					oa.dates,
 					u.email,
 					u.first_name || ' ' || u.last_name as fullname,
 					t.name as team_name,
 					t.timezone,
-					DATE('now') as today,
 					pt.id as push_token_id,
 					pt.token as push_token,
 					pt.fcm_token as fcm_token,
@@ -74,8 +100,6 @@ export class OnCallService {
 						 LEFT JOIN push_token_user_assoc ptua ON ptua.user_id = u.id
 						 LEFT JOIN push_tokens pt ON pt.id = ptua.push_token_id AND pt.is_active = 1
 				WHERE oa.is_active = 1
-				  AND oa.start_time <= DATETIME('now')
-				  AND oa.end_time > DATETIME('now')
 				ORDER BY
 					CASE oa.role
 						WHEN 'primary' THEN 1
@@ -87,31 +111,32 @@ export class OnCallService {
 
 			const { results } = await this.dbService.db.prepare(sql).all();
 
-			// ✅ Group by ROLE only (flatten all teams)
+			// ✅ Filter by checking if today is in their dates array
+			const activeToday = (results as any[]).filter(row =>
+				this.isOnCallToday(row.dates)
+			);
+
 			const groupedByRole = {
 				primary: [] as any[],
 				backup: [] as any[],
 				escalation: [] as any[]
 			};
 
-			results.forEach((row: any) => {
+			activeToday.forEach((row: any) => {
 				const member = {
-					userId: row.user_id,        // ✅ This should work - user_id from query
+					userId: row.user_id,
 					fullname: row.fullname,
 					email: row.email,
-					role: row.role,             // ✅ Add role to member object
+					role: row.role,
 					teamId: row.team_id,
 					teamName: row.team_name,
 					timezone: row.timezone,
-					startTime: row.start_time,
-					endTime: row.end_time,
 					pushTokenId: row.push_token_id || null,
 					pushToken: row.push_token || null,
 					fcmToken: row.fcm_token || null,
 					deviceType: row.device_type || null
 				};
 
-				// Add to appropriate role array
 				if (row.role === 'primary') {
 					groupedByRole.primary.push(member);
 				} else if (row.role === 'backup') {
@@ -121,7 +146,6 @@ export class OnCallService {
 				}
 			});
 
-			// ✅ DEBUG: Log what we're returning
 			console.log('[oncall] getAllCurrentOnCall results:', {
 				primary: groupedByRole.primary.length,
 				backup: groupedByRole.backup.length,
@@ -143,14 +167,12 @@ export class OnCallService {
 		}
 	}
 
-	// ✅ FIXED: Emergency override now returns userId correctly
 	async usersForEmergencyOverride(emails: string[]): Promise<any[]> {
 		try {
 			if (!emails || emails.length === 0) {
 				return [];
 			}
 
-			// Build placeholders dynamically
 			const placeholders = emails.map(() => '?').join(', ');
 
 			const sql = `
@@ -166,8 +188,8 @@ export class OnCallService {
 					pt.fcm_token as fcm_token,
 					pt.device_type as device_type
 				FROM users u
-						 LEFT JOIN push_token_user_assoc ptua ON ptua.user_id = u.id
-						 LEFT JOIN push_tokens pt ON pt.id = ptua.push_token_id AND pt.is_active = 1
+				LEFT JOIN push_token_user_assoc ptua ON ptua.user_id = u.id
+				LEFT JOIN push_tokens pt ON pt.id = ptua.push_token_id AND pt.is_active = 1
 				WHERE u.email IN (${placeholders})
 				  AND u.is_active = 1
 				ORDER BY u.first_name, u.last_name
@@ -175,10 +197,9 @@ export class OnCallService {
 
 			const { results } = await this.dbService.db.prepare(sql).bind(...emails).all();
 
-			// ✅ Map to include both id and userId for compatibility
 			const mappedResults = (results || []).map((row: any) => ({
 				id: row.id,
-				userId: row.id,              // ✅ CRITICAL: Add userId field
+				userId: row.id,
 				email: row.email,
 				firstName: row.first_name,
 				lastName: row.last_name,
@@ -190,7 +211,6 @@ export class OnCallService {
 				deviceType: row.device_type || null,
 			}));
 
-			// ✅ DEBUG: Log what we're returning
 			console.log('[oncall] usersForEmergencyOverride results:', mappedResults.length);
 			if (mappedResults.length > 0) {
 				console.log('[oncall] Sample emergency user:', {
@@ -218,7 +238,7 @@ export class OnCallService {
 					ot.description,
 					ot.timezone
 				FROM oncall_teams ot
-						 INNER JOIN oncall_team_members otm ON otm.team_id = ot.id
+				INNER JOIN oncall_team_members otm ON otm.team_id = ot.id
 				WHERE otm.user_id = ?
 				  AND otm.is_active = 1
 				  AND ot.is_active = 1
@@ -252,8 +272,8 @@ export class OnCallService {
 		const assignment: CurrentOnCall = {
 			scheduleId: rows[0].schedule_id,
 			teamId: rows[0].team_id,
-			startTime: new Date(rows[0].start_time),
-			endTime: new Date(rows[0].end_time),
+			startTime: new Date(),  // Current time
+			endTime: new Date(Date.now() + 24 * 60 * 60 * 1000), // +24 hours
 			escalation: []
 		};
 
@@ -277,7 +297,7 @@ export class OnCallService {
 		let sql = `
 			SELECT s.*, t.timezone
 			FROM oncall_schedules s
-					 JOIN oncall_teams t ON s.team_id = t.id
+			JOIN oncall_teams t ON s.team_id = t.id
 			WHERE s.is_active = 1
 		`;
 		const params: any[] = [];
@@ -323,7 +343,7 @@ export class OnCallService {
 			SELECT u.id, u.email, u.first_name, u.last_name, u.phone_number,
 				   tm.role, tm.order_index
 			FROM oncall_team_members tm
-					 JOIN users u ON tm.user_id = u.id
+			JOIN users u ON tm.user_id = u.id
 			WHERE tm.team_id = ? AND tm.is_active = 1
 			ORDER BY tm.order_index, u.first_name
 		`;
@@ -338,27 +358,115 @@ export class OnCallService {
 		}));
 	}
 
+	// ✅ UPDATED: Save assignment with dates array for today
 	private async saveAssignment(a: CurrentOnCall): Promise<void> {
+		const today = new Date().toISOString().split('T')[0];
+
 		const sql = `
 			INSERT OR REPLACE INTO oncall_assignments
-			(id, schedule_id, user_id, team_id, start_time, end_time, role, is_active)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+			(id, schedule_id, user_id, team_id, dates, role, is_active)
+			VALUES (?, ?, ?, ?, ?, ?, ?)
 		`;
+
 		if (a.primary) {
+			const assignmentId = `assignment-${a.scheduleId}-${a.primary.id}-${Date.now()}`;
 			await this.dbService.db.prepare(sql).bind(
-				`assignment-${a.scheduleId}-${a.primary.id}-${Date.now()}`,
+				assignmentId,
 				a.scheduleId, a.primary.id, a.teamId,
-				a.startTime.toISOString(), a.endTime.toISOString(),
+				JSON.stringify([today]), // Single date for today
 				'primary', 1
 			).run();
 		}
+
 		if (a.backup) {
+			const assignmentId = `assignment-${a.scheduleId}-${a.backup.id}-${Date.now()}`;
 			await this.dbService.db.prepare(sql).bind(
-				`assignment-${a.scheduleId}-${a.backup.id}-${Date.now()}`,
+				assignmentId,
 				a.scheduleId, a.backup.id, a.teamId,
-				a.startTime.toISOString(), a.endTime.toISOString(),
+				JSON.stringify([today]), // Single date for today
 				'backup', 1
 			).run();
+		}
+	}
+
+	// ✅ NEW: Create assignment with array of dates
+	async createAssignmentWithDates(params: {
+		scheduleId: string;
+		teamId: string;
+		userId: string;
+		role: 'primary' | 'backup' | 'escalation';
+		dates: string[];  // Array of date strings: ["2025-10-15","2025-10-16"]
+	}): Promise<string> {
+		try {
+			const { scheduleId, teamId, userId, role, dates } = params;
+
+			if (!dates || dates.length === 0) {
+				throw new Error('At least one date is required');
+			}
+
+			const assignmentId = crypto.randomUUID();
+			await this.dbService.db?.prepare(`
+				INSERT INTO oncall_assignments
+				(id, schedule_id, user_id, team_id, dates, role, is_active, created_at)
+				VALUES (?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
+			`).bind(
+				assignmentId,
+				scheduleId,
+				userId,
+				teamId,
+				JSON.stringify(dates),
+				role
+			).run();
+
+			console.log(`[oncall] ✅ Created assignment with ${dates.length} date(s) for user ${userId}`);
+			return assignmentId;
+		} catch (error) {
+			console.error('[oncall] Error creating assignment with dates:', error);
+			throw error;
+		}
+	}
+
+	// ✅ NEW: Update assignment dates
+	async updateAssignmentDates(params: {
+		assignmentId: string;
+		dates: string[];
+	}): Promise<void> {
+		try {
+			const { assignmentId, dates } = params;
+
+			await this.dbService.db?.prepare(`
+				UPDATE oncall_assignments
+				SET dates = ?, updated_at = CURRENT_TIMESTAMP
+				WHERE id = ?
+			`).bind(
+				JSON.stringify(dates),
+				assignmentId
+			).run();
+
+			console.log(`[oncall] ✅ Updated assignment ${assignmentId} with ${dates.length} date(s)`);
+		} catch (error) {
+			console.error('[oncall] Error updating assignment dates:', error);
+			throw error;
+		}
+	}
+
+	// ✅ NEW: Get dates for an assignment
+	async getAssignmentDates(assignmentId: string): Promise<string[]> {
+		try {
+			const result = await this.dbService.db?.prepare(`
+				SELECT dates
+				FROM oncall_assignments
+				WHERE id = ?
+			`).bind(assignmentId).first();
+
+			if (!result || !result.dates) {
+				return [];
+			}
+
+			return JSON.parse(result.dates as string) as string[];
+		} catch (error) {
+			console.error('[oncall] Error getting assignment dates:', error);
+			return [];
 		}
 	}
 
@@ -366,58 +474,74 @@ export class OnCallService {
 		const out: any[] = [];
 		const now = new Date();
 		for (let i = 0; i < days; i++) {
-			const d = new Date(now); d.setDate(d.getDate() + i);
-			const start = new Date(d); start.setHours(0,0,0,0);
-			const end = new Date(d);   end.setHours(23,59,59,999);
-			const assignment = await this.getOnCallForTimeRange(teamId, start, end);
-			out.push({ date: d.toISOString().slice(0,10), dayOfWeek: d.toLocaleDateString('en-US',{weekday:'long'}), assignment });
+			const d = new Date(now);
+			d.setDate(d.getDate() + i);
+			const dateStr = d.toISOString().split('T')[0];
+			const assignment = await this.getOnCallForDate(teamId, dateStr);
+			out.push({
+				date: dateStr,
+				dayOfWeek: d.toLocaleDateString('en-US',{weekday:'long'}),
+				assignment
+			});
 		}
 		return out;
 	}
 
-	private async getOnCallForTimeRange(teamId: string, start: Date, end: Date): Promise<CurrentOnCall | null> {
+	// ✅ NEW: Get on-call for a specific date
+	private async getOnCallForDate(teamId: string, date: string): Promise<CurrentOnCall | null> {
 		const sql = `
 			SELECT oa.*, u.email, u.first_name, u.last_name, u.phone_number
 			FROM oncall_assignments oa
 					 JOIN users u ON oa.user_id = u.id
 			WHERE oa.team_id = ?
 			  AND oa.is_active = 1
-			  AND oa.start_time <= ?
-			  AND oa.end_time > ?
 			ORDER BY oa.role
 		`;
-		const { results } = await this.dbService.db.prepare(sql).bind(teamId, end.toISOString(), start.toISOString()).all();
+		const { results } = await this.dbService.db.prepare(sql).bind(teamId).all();
+
 		if (!results || results.length === 0) return null;
-		return this.parseOnCallResults(results as any[]);
+
+		// Filter by checking if the specific date is in their dates array
+		const activeOnDate = (results as any[]).filter(row =>
+			this.isOnCallOnDate(row.dates, date)
+		);
+
+		if (activeOnDate.length === 0) return null;
+
+		return this.parseOnCallResults(activeOnDate);
 	}
 
-	// ---------- HELPERS FOR HANDLERS ----------
-
-	/** Find the active assignment (schedule + user) for a window so handlers don't query directly. */
 	async findActiveAssignmentForWindow(
 		teamId: string,
 		role: 'primary' | 'backup',
 		start: Date,
 		end: Date
 	): Promise<{ scheduleId: string; userId: string } | null> {
-		const sql = `
-			SELECT id as schedule_id, user_id
-			FROM oncall_assignments
-			WHERE team_id = ?
-			  AND role = ?
-			  AND start_time <= ?
-			  AND end_time >= ?
-			  AND is_active = 1
-			ORDER BY start_time DESC
-			LIMIT 1
-		`;
-		const row = await this.dbService.db
-			.prepare(sql)
-			.bind(teamId, role, start.toISOString(), end.toISOString())
-			.first();
+		const startDate = start.toISOString().split('T')[0];
 
-		if (!row) return null;
-		return { scheduleId: (row as any).schedule_id, userId: (row as any).user_id };
+		const sql = `
+			SELECT oa.schedule_id, oa.user_id, oa.dates
+			FROM oncall_assignments oa
+			WHERE oa.team_id = ?
+			  AND oa.role = ?
+			  AND oa.is_active = 1
+		`;
+
+		const { results } = await this.dbService.db.prepare(sql).bind(teamId, role).all();
+
+		if (!results || results.length === 0) return null;
+
+		// Find first assignment that includes the start date
+		for (const row of results as any[]) {
+			if (this.isOnCallOnDate(row.dates, startDate)) {
+				return {
+					scheduleId: row.schedule_id,
+					userId: row.user_id
+				};
+			}
+		}
+
+		return null;
 	}
 
 	async createOverride(
@@ -492,14 +616,13 @@ export class OnCallService {
 		return Array.from(map.values());
 	}
 
-	// Role-based escalation for oncall-schedule-controller
-
+	// ---------- Escalation encapsulated ----------
 	async escalateIncident(args: {
 		teamId: string;
 		incidentId: string;
 		reason: string;
 		priority: 'low' | 'medium' | 'high' | 'critical';
-		userRole?: 'primary' | 'backup' | 'escalation'; // Current user's role
+		userRole?: 'primary' | 'backup' | 'escalation';
 	}) {
 		try {
 			const now = new Date().toISOString();
@@ -507,11 +630,9 @@ export class OnCallService {
 			console.log(`[oncall] Escalating incident ${args.incidentId} for team ${args.teamId}`);
 			console.log(`[oncall] Current user role: ${args.userRole || 'unknown'}`);
 
-			// Define role hierarchy (primary → backup → escalation → lead)
 			const roleHierarchy = ['primary', 'backup', 'escalation', 'lead'];
 			let targetRole: string | null = null;
 
-			// Determine next role in hierarchy
 			if (args.userRole) {
 				const currentIndex = roleHierarchy.indexOf(args.userRole);
 				if (currentIndex >= 0 && currentIndex < roleHierarchy.length - 1) {
@@ -519,139 +640,95 @@ export class OnCallService {
 				}
 			}
 
-			// If no userRole provided or at end of chain, default to backup
-			if (!targetRole) {
-				targetRole = 'backup';
-			}
-
+			if (!targetRole) targetRole = 'backup';
 			console.log(`[oncall] Escalating to role: ${targetRole}`);
 
-			// 1) Find user with target role in current on-call
+			// Try to find the escalation target in active assignments
 			let target = await this.dbService.db.prepare(`
-            SELECT
-                ocs.user_id,
-                ocs.role,
-                u.email,
-                u.first_name,
-                u.last_name,
-                u.phone_number
-            FROM on_call_schedule ocs
-            JOIN users u ON ocs.user_id = u.id
-            WHERE ocs.team_id = ?
-            AND ocs.role = ?
-            AND ocs.is_active = 1
-            AND ocs.start_time <= ?
-            AND ocs.end_time >= ?
-            LIMIT 1
-        `).bind(args.teamId, targetRole, now, now).first();
+			SELECT oa.user_id, oa.role, u.email, u.first_name, u.last_name, u.phone_number
+			FROM oncall_assignments oa
+			JOIN users u ON oa.user_id = u.id
+			WHERE oa.team_id = ?
+			  AND oa.role = ?
+			  AND oa.is_active = 1
+		`).bind(args.teamId, targetRole).first();
 
-			// If target role not found in current schedule, try team members with that role
+			// Fallback to team members with matching role
 			if (!target) {
-				console.log(`[oncall] No active ${targetRole} in schedule, checking team members`);
-
+				console.log(`[oncall] No active ${targetRole} found in assignments, checking team members...`);
 				target = await this.dbService.db.prepare(`
-                SELECT
-                    tm.user_id,
-                    tm.role,
-                    u.email,
-                    u.first_name,
-                    u.last_name,
-                    u.phone_number
-                FROM team_members tm
-                JOIN users u ON tm.user_id = u.id
-                WHERE tm.team_id = ?
-                AND tm.role = ?
-                AND tm.is_active = 1
-                LIMIT 1
-            `).bind(args.teamId, targetRole).first();
+				SELECT tm.user_id, tm.role, u.email, u.first_name, u.last_name, u.phone_number
+				FROM oncall_team_members tm
+				JOIN users u ON tm.user_id = u.id
+				WHERE tm.team_id = ?
+				  AND tm.role = ?
+				  AND tm.is_active = 1
+				LIMIT 1
+			`).bind(args.teamId, targetRole).first();
 			}
 
-			// If still not found, escalate to team lead
+			// Escalate to team lead if no one found
 			if (!target) {
 				console.log(`[oncall] No ${targetRole} found, escalating to team lead`);
+				target = await this.dbService.db.prepare(`
+				SELECT u.id as user_id, 'lead' as role, u.email, u.first_name, u.last_name, u.phone_number
+				FROM oncall_team_members tm
+				JOIN users u ON tm.user_id = u.id
+				WHERE tm.team_id = ?
+				  AND tm.role IN ('lead', 'manager')
+				  AND tm.is_active = 1
+				LIMIT 1
+			`).bind(args.teamId).first();
 
-				const lead = await this.dbService.db.prepare(`
-                SELECT
-                    u.id as user_id,
-                    u.email,
-                    u.first_name,
-                    u.last_name,
-                    u.phone_number,
-                    'lead' as role
-                FROM team_members tm
-                JOIN users u ON tm.user_id = u.id
-                WHERE tm.team_id = ?
-                AND tm.role IN ('lead', 'manager')
-                AND tm.is_active = 1
-                LIMIT 1
-            `).bind(args.teamId).first();
-
-				if (!lead) {
-					throw new Error('No escalation path available - no users found for escalation');
+				if (!target) {
+					console.error(`[oncall] No escalation path found for team ${args.teamId}`);
+					throw new Error('No escalation path available');
 				}
-
-				target = lead;
 			}
 
-			console.log(`[oncall] Escalation target:`, {
-				userId: (target as any).user_id,
-				email: (target as any).email,
-				role: (target as any).role
-			});
+			console.log(`[oncall] Escalating to: ${targetRole} (${target?.email})`);
 
-			// 2) Create escalation record
+			// Record escalation
 			const escId = crypto.randomUUID();
 			await this.dbService.db.prepare(`
-            INSERT INTO incident_escalations
-            (id, incident_id, team_id, escalated_to_user_id, escalation_level, reason, priority, created_at, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active')
-        `).bind(
+			INSERT INTO incident_escalations
+			(id, incident_id, team_id, escalated_to_user_id, escalation_level, reason, priority, created_at, status)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active')
+		`).bind(
 				escId,
 				args.incidentId,
 				args.teamId,
-				(target as any).user_id,
-				(target as any).role, // Store role as escalation_level
+				target.user_id,
+				target.role,
 				args.reason,
 				args.priority,
 				now
 			).run();
 
-			console.log(`[oncall] Created escalation record ${escId}`);
-
-			// 3) Update incident priority and escalation info
+			// Update the incident itself
 			await this.dbService.db.prepare(`
-            UPDATE incidents
-            SET escalation_level = ?,
-                updated_at = ?,
-                priority = CASE
-                    WHEN ? = 'critical' THEN 'critical'
-                    WHEN priority = 'critical' THEN 'critical'
-                    ELSE ?
-                END
-            WHERE id = ?
-        `).bind(
-				(target as any).role,
-				now,
-				args.priority,
-				args.priority,
-				args.incidentId
-			).run();
+			UPDATE incidents
+			SET escalation_level = ?,
+				priority = CASE
+					WHEN ? = 'critical' THEN 'critical'
+					WHEN priority = 'critical' THEN 'critical'
+					ELSE ?
+				END,
+				updated_at = ?
+			WHERE id = ?
+		`).bind(target.role, args.priority, args.priority, now, args.incidentId).run();
 
-			console.log(`[oncall] Updated incident ${args.incidentId}`);
-
-			// 4) Get push token for escalated user
+			// Fetch push tokens for notification
 			const userWithToken = await this.dbService.db.prepare(`
-            SELECT
-                u.id as userId,
-                u.email,
-                u.first_name || ' ' || u.last_name as fullname,
-                pt.token as pushToken,
-                pt.fcm_token as fcmToken
-            FROM users u
-            LEFT JOIN push_token_user_assoc pta ON u.id = pta.user_id
-            LEFT JOIN push_tokens pt ON pta.push_token_id = pt.id AND pt.is_active = 1
-            WHERE u.id = ?
-        `).bind((target as any).user_id).first();
+			SELECT
+				u.id as userId, u.email,
+				u.first_name || ' ' || u.last_name as fullname,
+				pt.token as pushToken, pt.fcm_token as fcmToken
+			FROM users u
+			LEFT JOIN push_token_user_assoc pta ON u.id = pta.user_id
+			LEFT JOIN push_tokens pt ON pta.push_token_id = pt.id AND pt.is_active = 1
+			WHERE u.id = ?
+		`).bind(target.user_id).first();
 
 			const result = {
 				success: true,
@@ -659,13 +736,12 @@ export class OnCallService {
 					id: escId,
 					incidentId: args.incidentId,
 					teamId: args.teamId,
-					escalatedToRole: (target as any).role,
-					escalatedToLevel: (target as any).role, // For backwards compatibility
+					escalatedToRole: target.role,
 					notifiedUsers: [{
-						userId: (target as any).user_id,
-						email: (target as any).email,
-						fullname: `${(target as any).first_name} ${(target as any).last_name}`,
-						role: (target as any).role,
+						userId: target.user_id,
+						email: target.email,
+						fullname: `${target.first_name} ${target.last_name}`,
+						role: target.role,
 						pushToken: (userWithToken as any)?.pushToken || null,
 						fcmToken: (userWithToken as any)?.fcmToken || null,
 					}]
@@ -676,16 +752,62 @@ export class OnCallService {
 				status: 'active',
 			};
 
-			console.log(`[oncall] ✅ Escalation completed successfully to ${(target as any).role}`);
+			console.log(`[oncall] ✅ Escalation completed successfully to ${target.role}`);
 			return result;
-
 		} catch (error) {
 			console.error(`[oncall] ❌ Escalation failed:`, error);
 			throw error;
 		}
 	}
 
-	// ---------------- NEW: Manage Schedule ----------------
+
+	// ✅ NEW: Create schedule with individual dates
+	async createScheduleWithDates(params: {
+		teamId: string;
+		name: string;
+		assignments: Array<{
+			userId: string;
+			role: 'primary' | 'backup' | 'escalation';
+			dates: string[];  // ["2025-10-15","2025-10-16","2025-10-17"]
+		}>;
+	}): Promise<{ scheduleId: string; assignmentCount: number }> {
+		try {
+			const { teamId, name, assignments } = params;
+
+			// Create schedule
+			const scheduleId = crypto.randomUUID();
+			await this.dbService.db?.prepare(`
+				INSERT INTO oncall_schedules
+				(id, team_id, name, rotation_type, rotation_start, rotation_length_hours, is_active, created_at, updated_at)
+				VALUES (?, ?, ?, 'manual', CURRENT_TIMESTAMP, 0, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+			`).bind(scheduleId, teamId, name).run();
+
+			// Deactivate other schedules
+			await this.dbService.db?.prepare(`
+				UPDATE oncall_schedules SET is_active = 0 WHERE team_id = ? AND id != ?
+			`).bind(teamId, scheduleId).run();
+
+			// Create assignments with dates
+			for (const assignment of assignments) {
+				await this.createAssignmentWithDates({
+					scheduleId,
+					teamId,
+					userId: assignment.userId,
+					role: assignment.role,
+					dates: assignment.dates
+				});
+			}
+
+			console.log(`[oncall] ✅ Schedule created with ${assignments.length} assignment(s)`);
+			return {
+				scheduleId,
+				assignmentCount: assignments.length
+			};
+		} catch (error) {
+			console.error('[oncall] Error creating schedule with dates:', error);
+			throw error;
+		}
+	}
 
 	async getScheduleConfig(teamId: string): Promise<{
 		teamId: string;
@@ -711,16 +833,8 @@ export class OnCallService {
 		const { results: memberRows } = await this.dbService.db
 			.prepare(
 				`SELECT
-					 otm.id,
-					 otm.team_id,
-					 otm.user_id,
-					 otm.role,
-					 otm.order_index,
-					 otm.is_active,
-					 u.username,
-					 u.email,
-					 u.first_name,
-					 u.last_name
+					 otm.id, otm.team_id, otm.user_id, otm.role, otm.order_index, otm.is_active,
+					 u.username, u.email, u.first_name, u.last_name
 				 FROM oncall_team_members otm
 						  LEFT JOIN users u ON otm.user_id = u.id
 				 WHERE otm.team_id = ?
@@ -801,8 +915,7 @@ export class OnCallService {
 	async trackIncidentNotification(incidentId: string, userId: string, notificationType: 'initial' | 'escalation'): Promise<void> {
 		const id = crypto.randomUUID();
 		await this.dbService.db.prepare(`
-			INSERT INTO incident_notifications
-				(id, incident_id, user_id, notification_type, sent_at)
+			INSERT INTO incident_notifications (id, incident_id, user_id, notification_type, sent_at)
 			VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
 		`).bind(id, incidentId, userId, notificationType).run();
 	}
@@ -844,8 +957,7 @@ export class OnCallService {
 				});
 
 				await this.dbService.db.prepare(`
-					INSERT INTO incident_notifications
-						(id, incident_id, user_id, notification_type, sent_at)
+					INSERT INTO incident_notifications (id, incident_id, user_id, notification_type, sent_at)
 					VALUES (?, ?, ?, 'all_clear', CURRENT_TIMESTAMP)
 				`).bind(crypto.randomUUID(), incidentId, user.userId).run();
 			} catch (error) {
@@ -881,77 +993,6 @@ export class OnCallService {
 		} catch (error) {
 			console.error(`[oncall] Failed to send notification to ${(user as any).email}:`, error);
 		}
-
-		const notificationId = crypto.randomUUID();
-		await this.dbService.db.prepare(`
-			INSERT INTO notifications (id, alert_id, user_id, type, status)
-			VALUES (?, ?, ?, ?, 'sent')
-		`).bind(notificationId, alert.id, userId, type).run();
-	}
-
-	async createSchedule(params: {
-		teamId: string;
-		name: string;
-		rotationType: 'daily' | 'weekly' | 'biweekly' | 'monthly';
-		rotationLengthHours: number;
-		rotationStartISO: string;
-		members: Array<{
-			userId: string;
-			role: 'primary' | 'backup' | 'escalation';
-			orderIndex: number;
-			isActive: boolean;
-		}>;
-	}): Promise<{ scheduleId: string; memberCount: number }> {
-		try {
-			const { teamId, name, rotationType, rotationLengthHours, rotationStartISO, members } = params;
-
-			const scheduleId = crypto.randomUUID();
-
-			await this.dbService.db.prepare(`
-				INSERT INTO oncall_schedules
-				(id, team_id, name, rotation_type, rotation_start, rotation_length_hours, is_active, created_at, updated_at)
-				VALUES (?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-			`).bind(
-				scheduleId,
-				teamId,
-				name,
-				rotationType,
-				rotationStartISO,
-				rotationLengthHours
-			).run();
-
-			await this.dbService.db.prepare(`
-				UPDATE oncall_schedules
-				SET is_active = 0
-				WHERE team_id = ? AND id != ?
-			`).bind(teamId, scheduleId).run();
-
-			for (const member of members) {
-				const memberId = crypto.randomUUID();
-				await this.dbService.db.prepare(`
-					INSERT INTO oncall_team_members
-						(id, team_id, user_id, role, order_index, is_active, created_at)
-					VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-				`).bind(
-					memberId,
-					teamId,
-					member.userId,
-					member.role,
-					member.orderIndex,
-					member.isActive ? 1 : 0
-				).run();
-			}
-
-			console.log('[oncall] ✅ Schedule created:', scheduleId);
-
-			return {
-				scheduleId,
-				memberCount: members.length
-			};
-		} catch (error) {
-			console.error('[oncall] Error creating schedule:', error);
-			throw error;
-		}
 	}
 
 	async deleteSchedule(scheduleId: string): Promise<void> {
@@ -975,11 +1016,8 @@ export class OnCallService {
 	}): Promise<any[]> {
 		try {
 			let sql = `
-				SELECT
-					s.*,
-					t.name as team_name,
-					t.timezone,
-					COUNT(DISTINCT tm.id) as member_count
+				SELECT s.*, t.name as team_name, t.timezone,
+					   COUNT(DISTINCT tm.id) as member_count
 				FROM oncall_schedules s
 						 JOIN oncall_teams t ON s.team_id = t.id
 						 LEFT JOIN oncall_team_members tm ON tm.team_id = s.team_id
@@ -1000,7 +1038,6 @@ export class OnCallService {
 			sql += ' GROUP BY s.id, t.name, t.timezone ORDER BY s.created_at DESC';
 
 			const { results } = await this.dbService.db.prepare(sql).bind(...queryParams).all();
-
 			return results as any[];
 		} catch (error) {
 			console.error('[oncall] Error getting all schedules:', error);
@@ -1011,15 +1048,11 @@ export class OnCallService {
 	async getCalendarData(days: number = 30, teamId?: string): Promise<any[]> {
 		try {
 			const teams = await this.getOnCallTeams();
-
-			const filteredTeams = teamId
-				? teams.filter(t => t.id === teamId)
-				: teams;
+			const filteredTeams = teamId ? teams.filter(t => t.id === teamId) : teams;
 
 			const calendarData = await Promise.all(
 				filteredTeams.map(async (team) => {
 					const schedule = await this.getOnCallSchedule(team.id, days);
-
 					return {
 						teamId: team.id,
 						teamName: team.name,
@@ -1034,107 +1067,6 @@ export class OnCallService {
 			return calendarData;
 		} catch (error) {
 			console.error('[oncall] Error building calendar data:', error);
-			throw error;
-		}
-	}
-
-	async updateSchedule(params: {
-		scheduleId: string;
-		name?: string;
-		rotationType?: 'daily' | 'weekly' | 'biweekly' | 'monthly';
-		rotationLengthHours?: number;
-		rotationStartISO?: string;
-		isActive?: boolean;
-		members?: Array<{
-			userId: string;
-			role: 'primary' | 'backup' | 'escalation';
-			orderIndex: number;
-			isActive: boolean;
-		}>;
-	}): Promise<void> {
-		try {
-			const { scheduleId, name, rotationType, rotationLengthHours, rotationStartISO, isActive, members } = params;
-
-			const updates: string[] = [];
-			const queryParams: any[] = [];
-
-			if (name !== undefined) {
-				updates.push('name = ?');
-				queryParams.push(name);
-			}
-
-			if (rotationType !== undefined) {
-				updates.push('rotation_type = ?');
-				queryParams.push(rotationType);
-			}
-
-			if (rotationLengthHours !== undefined) {
-				updates.push('rotation_length_hours = ?');
-				queryParams.push(rotationLengthHours);
-			}
-
-			if (rotationStartISO !== undefined) {
-				updates.push('rotation_start = ?');
-				queryParams.push(rotationStartISO);
-			}
-
-			if (isActive !== undefined) {
-				updates.push('is_active = ?');
-				queryParams.push(isActive ? 1 : 0);
-			}
-
-			updates.push('updated_at = CURRENT_TIMESTAMP');
-
-			if (updates.length > 1) {
-				queryParams.push(scheduleId);
-
-				const sql = `
-					UPDATE oncall_schedules
-					SET ${updates.join(', ')}
-					WHERE id = ?
-				`;
-
-				await this.dbService.db.prepare(sql).bind(...queryParams).run();
-				console.log('[oncall] ✅ Schedule updated:', scheduleId);
-			}
-
-			if (members && Array.isArray(members)) {
-				const schedule = await this.dbService.db.prepare(
-					'SELECT team_id FROM oncall_schedules WHERE id = ?'
-				).bind(scheduleId).first();
-
-				if (!schedule) {
-					throw new Error('Schedule not found');
-				}
-
-				const teamId = (schedule as any).team_id;
-
-				await this.dbService.db.prepare(
-					'DELETE FROM oncall_team_members WHERE team_id = ?'
-				).bind(teamId).run();
-
-				for (const member of members) {
-					const memberId = crypto.randomUUID();
-					await this.dbService.db.prepare(`
-						INSERT INTO oncall_team_members
-							(id, team_id, user_id, role, order_index, is_active, created_at)
-						VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-					`).bind(
-						memberId,
-						teamId,
-						member.userId,
-						member.role,
-						member.orderIndex,
-						member.isActive ? 1 : 0
-					).run();
-				}
-
-				console.log('[oncall] ✅ Team members updated:', members.length);
-				await this.refreshCurrentAssignments(teamId);
-			}
-
-		} catch (error) {
-			console.error('[oncall] Error updating schedule:', error);
 			throw error;
 		}
 	}

@@ -1,8 +1,8 @@
 /* ======= DROP (order matters - drop dependent tables first) ======= */
 DROP TABLE IF EXISTS notification_responses;
 DROP TABLE IF EXISTS audit_log;
-DROP TABLE IF EXISTS incident_reminders;           -- ✅ NEW
-DROP TABLE IF EXISTS incident_reminder_config;     -- ✅ NEW
+DROP TABLE IF EXISTS incident_reminders;
+DROP TABLE IF EXISTS incident_reminder_config;
 DROP TABLE IF EXISTS incident_escalations;
 DROP TABLE IF EXISTS escalation_chains;
 DROP TABLE IF EXISTS oncall_overrides;
@@ -146,7 +146,6 @@ CREATE INDEX idx_inc_notif_status        ON incident_notifications(status);
 
 /* ======= REMINDER SYSTEM ======= */
 
--- ✅ NEW: Stores reminder configuration per incident
 CREATE TABLE incident_reminder_config (
 										  incident_id      TEXT PRIMARY KEY,
 										  max_reminders    INTEGER DEFAULT 3,
@@ -156,7 +155,6 @@ CREATE TABLE incident_reminder_config (
 );
 CREATE INDEX idx_reminder_config_incident ON incident_reminder_config(incident_id);
 
--- ✅ NEW: Tracks which reminders have been sent
 CREATE TABLE incident_reminders (
 									id                TEXT PRIMARY KEY,
 									incident_id       TEXT NOT NULL,
@@ -169,7 +167,8 @@ CREATE INDEX idx_reminders_incident ON incident_reminders(incident_id);
 CREATE INDEX idx_reminders_number   ON incident_reminders(incident_id, reminder_number);
 CREATE INDEX idx_reminders_sent_at  ON incident_reminders(sent_at);
 
-/* ======= ON-CALL ======= */
+/* ======= ON-CALL SYSTEM ======= */
+
 CREATE TABLE oncall_teams (
 							  id          TEXT PRIMARY KEY,
 							  name        TEXT,
@@ -208,20 +207,22 @@ CREATE TABLE oncall_schedules (
 CREATE INDEX idx_oncall_schedules_team   ON oncall_schedules(team_id);
 CREATE INDEX idx_oncall_schedules_active ON oncall_schedules(is_active);
 
+-- ✅ SIMPLIFIED: Just an array of individual dates
 CREATE TABLE oncall_assignments (
 									id          TEXT PRIMARY KEY,
 									schedule_id TEXT,
 									user_id     TEXT,
 									team_id     TEXT,
-									start_time  DATETIME,
-									end_time    DATETIME,
+									dates       TEXT NOT NULL,  -- ✅ JSON array: ["2025-10-15","2025-10-16","2025-10-17"]
 									role        TEXT,
 									is_active   INTEGER,
-									created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+									created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+									FOREIGN KEY (schedule_id) REFERENCES oncall_schedules(id) ON DELETE CASCADE,
+									FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+									FOREIGN KEY (team_id) REFERENCES oncall_teams(id) ON DELETE CASCADE
 );
 CREATE INDEX idx_oncall_assignments_team     ON oncall_assignments(team_id);
 CREATE INDEX idx_oncall_assignments_user     ON oncall_assignments(user_id);
-CREATE INDEX idx_oncall_assignments_time     ON oncall_assignments(start_time, end_time);
 CREATE INDEX idx_oncall_assignments_active   ON oncall_assignments(is_active);
 CREATE INDEX idx_oncall_assignments_schedule ON oncall_assignments(schedule_id);
 
@@ -267,7 +268,6 @@ CREATE UNIQUE INDEX uq_escalation_chain_team_level ON escalation_chains(team_id,
 CREATE INDEX idx_escalation_chains_team  ON escalation_chains(team_id);
 CREATE INDEX idx_escalation_chains_level ON escalation_chains(team_id, level);
 
--- ✅ UPDATED: Added triggered_at field for auto-escalation tracking
 CREATE TABLE incident_escalations (
 									  id                     TEXT PRIMARY KEY,
 									  incident_id            TEXT,
@@ -278,14 +278,14 @@ CREATE TABLE incident_escalations (
 									  reason                 TEXT,
 									  priority               TEXT,
 									  status                 TEXT,
-									  triggered_at           DATETIME DEFAULT CURRENT_TIMESTAMP,  -- ✅ NEW
+									  triggered_at           DATETIME DEFAULT CURRENT_TIMESTAMP,
 									  created_at             DATETIME DEFAULT CURRENT_TIMESTAMP,
 									  acknowledged_at        DATETIME,
 									  resolved_at            DATETIME
 );
 CREATE INDEX idx_incident_escalations_incident     ON incident_escalations(incident_id);
 CREATE INDEX idx_incident_escalations_status       ON incident_escalations(status);
-CREATE INDEX idx_incident_escalations_triggered_at ON incident_escalations(triggered_at);  -- ✅ NEW
+CREATE INDEX idx_incident_escalations_triggered_at ON incident_escalations(triggered_at);
 
 /* ======= AUDIT TRAIL TABLES ======= */
 
@@ -353,12 +353,7 @@ VALUES
 ('team-2', 'Application Support', 'Application-level incident response team', 'America/Los_Angeles', 1),
 ('team-3', 'Database Operations', 'Database reliability and performance team', 'America/Chicago', 1),
 ('team-4', 'Network Operations', 'Network infrastructure and connectivity team', 'America/Denver', 1),
-('team-5', 'Security Response', 'Security incidents and threat response team', 'America/New_York', 1),
-('team-6', 'DevOps', 'CI/CD pipeline and deployment automation team', 'America/Los_Angeles', 1),
-('team-7', 'API Services', 'API gateway and microservices team', 'America/New_York', 1),
-('team-8', 'Frontend Engineering', 'Client-side application and user interface team', 'America/Los_Angeles', 1),
-('team-9', 'Data Engineering', 'Data pipeline and analytics infrastructure team', 'America/Chicago', 1),
-('team-10', 'Cloud Infrastructure', 'Cloud platform and resource management team', 'America/New_York', 1);
+('team-5', 'Security Response', 'Security incidents and threat response team', 'America/New_York', 1);
 
 INSERT OR IGNORE INTO oncall_team_members (id, team_id, user_id, role, order_index, is_active)
 VALUES
@@ -374,12 +369,7 @@ VALUES
 ('member-10', 'team-2', 'user-10', 'escalation', 4, 1),
 ('member-11', 'team-3', 'user-11', 'primary', 0, 1),
 ('member-12', 'team-3', 'user-2', 'backup', 1, 1),
-('member-13', 'team-3', 'user-5', 'escalation', 2, 1),
-('member-14', 'team-4', 'user-3', 'primary', 0, 1),
-('member-15', 'team-4', 'user-6', 'backup', 1, 1),
-('member-16', 'team-5', 'user-1', 'primary', 0, 1),
-('member-17', 'team-5', 'user-4', 'backup', 1, 1),
-('member-18', 'team-5', 'user-12', 'primary', 2, 1);
+('member-13', 'team-3', 'user-5', 'escalation', 2, 1);
 
 INSERT OR IGNORE INTO escalation_chains (id, team_id, user_id, level, is_active)
 VALUES
@@ -391,33 +381,82 @@ VALUES
 ('ec-6', 'team-2', 'user-10', 3, 1),
 ('ec-7', 'team-3', 'user-11', 1, 1),
 ('ec-8', 'team-3', 'user-2', 2, 1),
-('ec-9', 'team-3', 'user-5', 3, 1),
-('ec-10', 'team-5', 'user-12', 1, 1);
+('ec-9', 'team-3', 'user-5', 3, 1);
 
 INSERT OR IGNORE INTO oncall_schedules (id, team_id, name, rotation_type, rotation_start, rotation_length_hours, is_active)
 VALUES
-('schedule-1', 'team-1', 'Weekly Platform Rotation', 'weekly', datetime('now', 'weekday 1'), 168, 1),
-('schedule-2', 'team-2', 'Daily App Support', 'daily', datetime('now'), 24, 1),
-('schedule-3', 'team-3', 'Database Ops Weekly', 'weekly', datetime('now', 'weekday 1'), 168, 1);
+('schedule-1', 'team-1', 'October 2025 Platform Schedule', 'manual', datetime('now'), 0, 1),
+('schedule-2', 'team-2', 'October 2025 App Support', 'manual', datetime('now'), 0, 1),
+('schedule-3', 'team-3', 'October 2025 Database Ops', 'manual', datetime('now'), 0, 1);
 
-INSERT OR IGNORE INTO oncall_assignments (id, schedule_id, user_id, team_id, start_time, end_time, role, is_active)
-VALUES
-('assign-1', 'schedule-1', 'user-4', 'team-1', datetime('now', '-1 day'), datetime('now', '+6 days'), 'primary', 1),
-('assign-2', 'schedule-1', 'user-2', 'team-1', datetime('now', '-1 day'), datetime('now', '+6 days'), 'backup', 1),
-('assign-3', 'schedule-1', 'user-1', 'team-1', datetime('now', '-1 day'), datetime('now', '+6 days'), 'escalation', 1),
-('assign-4', 'schedule-1', 'user-2', 'team-1', datetime('now', '+6 days'), datetime('now', '+13 days'), 'primary', 1),
-('assign-5', 'schedule-1', 'user-4', 'team-1', datetime('now', '+6 days'), datetime('now', '+13 days'), 'backup', 1),
-('assign-6', 'schedule-1', 'user-3', 'team-1', datetime('now', '+6 days'), datetime('now', '+13 days'), 'escalation', 1),
-('assign-7', 'schedule-2', 'user-6', 'team-2', datetime('now', '-1 day'), datetime('now'), 'primary', 1),
-('assign-8', 'schedule-2', 'user-8', 'team-2', datetime('now', '-1 day'), datetime('now'), 'backup', 1),
-('assign-9', 'schedule-2', 'user-7', 'team-2', datetime('now'), datetime('now', '+1 day'), 'primary', 1),
-('assign-10', 'schedule-2', 'user-9', 'team-2', datetime('now'), datetime('now', '+1 day'), 'backup', 1),
-('assign-11', 'schedule-3', 'user-11', 'team-3', datetime('now', '-1 day'), datetime('now', '+6 days'), 'primary', 1),
-('assign-12', 'schedule-3', 'user-2', 'team-3', datetime('now', '-1 day'), datetime('now', '+6 days'), 'backup', 1),
-('assign-13', 'schedule-3', 'user-12', 'team-5', datetime('now', '-1 day'), datetime('now', '+6 days'), 'primary', 1);
+-- ✅ TEAM-1: Kelvin works Oct 15, 16, 17, 22, 23, 24, 29, 30, 31
+INSERT OR IGNORE INTO oncall_assignments (id, schedule_id, user_id, team_id, dates, role, is_active)
+VALUES ('assign-1', 'schedule-1', 'user-4', 'team-1',
+'["2025-10-15","2025-10-16","2025-10-17","2025-10-22","2025-10-23","2025-10-24","2025-10-29","2025-10-30","2025-10-31"]',
+'primary', 1);
+
+-- ✅ TEAM-1: Sarah works Oct 13, 14, 18, 19, 20, 21, 25, 26, 27, 28
+INSERT OR IGNORE INTO oncall_assignments (id, schedule_id, user_id, team_id, dates, role, is_active)
+VALUES ('assign-2', 'schedule-1', 'user-2', 'team-1',
+'["2025-10-13","2025-10-14","2025-10-18","2025-10-19","2025-10-20","2025-10-21","2025-10-25","2025-10-26","2025-10-27","2025-10-28"]',
+'backup', 1);
+
+-- ✅ TEAM-1: Marcus only works holidays (Nov 28, 29, 30, Dec 25, 26, Jan 1)
+INSERT OR IGNORE INTO oncall_assignments (id, schedule_id, user_id, team_id, dates, role, is_active)
+VALUES ('assign-3', 'schedule-1', 'user-3', 'team-1',
+'["2025-11-28","2025-11-29","2025-11-30","2025-12-25","2025-12-26","2026-01-01"]',
+'backup', 1);
+
+-- ✅ TEAM-1: Admin always available (every day for 90 days)
+INSERT OR IGNORE INTO oncall_assignments (id, schedule_id, user_id, team_id, dates, role, is_active)
+VALUES ('assign-4', 'schedule-1', 'user-1', 'team-1',
+'["2025-10-13","2025-10-14","2025-10-15","2025-10-16","2025-10-17","2025-10-18","2025-10-19","2025-10-20","2025-10-21","2025-10-22","2025-10-23","2025-10-24","2025-10-25","2025-10-26","2025-10-27","2025-10-28","2025-10-29","2025-10-30","2025-10-31","2025-11-01","2025-11-02","2025-11-03","2025-11-04","2025-11-05","2025-11-06","2025-11-07","2025-11-08","2025-11-09","2025-11-10"]',
+'escalation', 1);
+
+-- ✅ TEAM-2: James works first half of Oct, Nov, Dec
+INSERT OR IGNORE INTO oncall_assignments (id, schedule_id, user_id, team_id, dates, role, is_active)
+VALUES ('assign-5', 'schedule-2', 'user-6', 'team-2',
+'["2025-10-01","2025-10-02","2025-10-03","2025-10-04","2025-10-05","2025-10-06","2025-10-07","2025-10-08","2025-10-09","2025-10-10","2025-10-11","2025-10-12","2025-10-13","2025-10-14","2025-10-15","2025-11-01","2025-11-02","2025-11-03","2025-11-04","2025-11-05","2025-11-06","2025-11-07","2025-11-08","2025-11-09","2025-11-10","2025-11-11","2025-11-12","2025-11-13","2025-11-14","2025-11-15"]',
+'primary', 1);
+
+-- ✅ TEAM-2: Emily works second half of Oct (16-31)
+INSERT OR IGNORE INTO oncall_assignments (id, schedule_id, user_id, team_id, dates, role, is_active)
+VALUES ('assign-6', 'schedule-2', 'user-7', 'team-2',
+'["2025-10-16","2025-10-17","2025-10-18","2025-10-19","2025-10-20","2025-10-21","2025-10-22","2025-10-23","2025-10-24","2025-10-25","2025-10-26","2025-10-27","2025-10-28","2025-10-29","2025-10-30","2025-10-31"]',
+'primary', 1);
+
+-- ✅ TEAM-2: David works all Saturdays and Sundays in October
+INSERT OR IGNORE INTO oncall_assignments (id, schedule_id, user_id, team_id, dates, role, is_active)
+VALUES ('assign-7', 'schedule-2', 'user-8', 'team-2',
+'["2025-10-11","2025-10-12","2025-10-18","2025-10-19","2025-10-25","2025-10-26"]',
+'backup', 1);
+
+-- ✅ TEAM-2: Alex always available
+INSERT OR IGNORE INTO oncall_assignments (id, schedule_id, user_id, team_id, dates, role, is_active)
+VALUES ('assign-8', 'schedule-2', 'user-10', 'team-2',
+'["2025-10-01","2025-10-02","2025-10-03","2025-10-04","2025-10-05","2025-10-06","2025-10-07","2025-10-08","2025-10-09","2025-10-10","2025-10-11","2025-10-12","2025-10-13","2025-10-14","2025-10-15","2025-10-16","2025-10-17","2025-10-18","2025-10-19","2025-10-20","2025-10-21","2025-10-22","2025-10-23","2025-10-24","2025-10-25","2025-10-26","2025-10-27","2025-10-28","2025-10-29","2025-10-30","2025-10-31"]',
+'escalation', 1);
+
+-- ✅ TEAM-3: Keannu works weekdays only (Mon-Fri)
+INSERT OR IGNORE INTO oncall_assignments (id, schedule_id, user_id, team_id, dates, role, is_active)
+VALUES ('assign-9', 'schedule-3', 'user-11', 'team-3',
+'["2025-10-13","2025-10-14","2025-10-15","2025-10-16","2025-10-17","2025-10-20","2025-10-21","2025-10-22","2025-10-23","2025-10-24","2025-10-27","2025-10-28","2025-10-29","2025-10-30","2025-10-31"]',
+'primary', 1);
+
+-- ✅ TEAM-3: Sarah works weekends only (Sat-Sun)
+INSERT OR IGNORE INTO oncall_assignments (id, schedule_id, user_id, team_id, dates, role, is_active)
+VALUES ('assign-10', 'schedule-3', 'user-2', 'team-3',
+'["2025-10-11","2025-10-12","2025-10-18","2025-10-19","2025-10-25","2025-10-26"]',
+'backup', 1);
+
+-- ✅ TEAM-3: Priya always available
+INSERT OR IGNORE INTO oncall_assignments (id, schedule_id, user_id, team_id, dates, role, is_active)
+VALUES ('assign-11', 'schedule-3', 'user-5', 'team-3',
+'["2025-10-01","2025-10-02","2025-10-03","2025-10-04","2025-10-05","2025-10-06","2025-10-07","2025-10-08","2025-10-09","2025-10-10","2025-10-11","2025-10-12","2025-10-13","2025-10-14","2025-10-15","2025-10-16","2025-10-17","2025-10-18","2025-10-19","2025-10-20","2025-10-21","2025-10-22","2025-10-23","2025-10-24","2025-10-25","2025-10-26","2025-10-27","2025-10-28","2025-10-29","2025-10-30","2025-10-31"]',
+'escalation', 1);
 
 INSERT OR IGNORE INTO escalation_policies (id, team_id, name, steps, timeout_minutes, is_active)
 VALUES
 ('escalation-1', 'team-1', 'Platform Escalation', '[{"step":1,"notify":["primary"],"wait_minutes":5},{"step":2,"notify":["backup"],"wait_minutes":10},{"step":3,"notify":["primary","backup"],"wait_minutes":15}]', 15, 1),
 ('escalation-2', 'team-2', 'App Support Escalation', '[{"step":1,"notify":["primary"],"wait_minutes":3},{"step":2,"notify":["backup"],"wait_minutes":7},{"step":3,"notify":["escalation"],"wait_minutes":10}]', 10, 1),
-('escalation-3', 'team-3', 'Database Ops Escalation', '[{"step":1,"notify":["primary"],"wait_minutes":5},{"step":2,"notify":["backup"],"wait_minutes":10},{"step":3,"notify":["escalation"],"wait_minutes":15}]', 15, 1);
+('escalation-3', 'team-3', 'Database Ops Escalation', '[{"step":1,"notify":["primary"],"wait_minutes":1},{"step":2,"notify":["backup"],"wait_minutes":1},{"step":3,"notify":["escalation"],"wait_minutes":1}]', 15, 1);
