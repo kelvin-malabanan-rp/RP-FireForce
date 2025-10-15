@@ -17,6 +17,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { retrieveUserSession } from '@/constants/local-storage';
 
+type TimeFrame = '24h' | '7d' | '30d';
+
 export default function HomeScreen() {
     const router = useRouter();
     const [incidents, setIncidents] = useState<Incident[]>([]);
@@ -25,6 +27,7 @@ export default function HomeScreen() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [userName, setUserName] = useState<string>('');
+    const [selectedTimeFrame, setSelectedTimeFrame] = useState<TimeFrame>('24h');
 
     const AUTO_REFRESH_INTERVAL = 30000;
 
@@ -40,6 +43,11 @@ export default function HomeScreen() {
 
         return () => clearInterval(interval);
     }, []);
+
+    // Reload data when time frame changes
+    useEffect(() => {
+        loadData();
+    }, [selectedTimeFrame]);
 
     const loadUserSession = async () => {
         try {
@@ -63,7 +71,7 @@ export default function HomeScreen() {
 
             const [incidentsResponse, statsResponse] = await Promise.all([
                 getAllIncidents(),
-                getAllIncidentStats('24h')
+                getAllIncidentStats(selectedTimeFrame)
             ]);
 
             if (incidentsResponse.data && Array.isArray(incidentsResponse.data)) {
@@ -107,8 +115,34 @@ export default function HomeScreen() {
         return 'Good Evening';
     };
 
+    // Filter incidents based on selected time frame
+    const getFilteredIncidents = () => {
+        const now = new Date().getTime();
+        let cutoffTime: number;
+
+        switch (selectedTimeFrame) {
+            case '24h':
+                cutoffTime = now - (24 * 60 * 60 * 1000);
+                break;
+            case '7d':
+                cutoffTime = now - (7 * 24 * 60 * 60 * 1000);
+                break;
+            case '30d':
+                cutoffTime = now - (30 * 24 * 60 * 60 * 1000);
+                break;
+            default:
+                cutoffTime = now - (24 * 60 * 60 * 1000);
+        }
+
+        return incidents.filter(incident => {
+            const incidentTime = new Date(incident.timestamp || incident.createdAt || '').getTime();
+            return incidentTime >= cutoffTime;
+        });
+    };
+
     const getRecentIncidents = () => {
-        return incidents
+        const filtered = getFilteredIncidents();
+        return filtered
             .sort((a, b) => new Date(b.timestamp || b.createdAt || '').getTime() -
                 new Date(a.timestamp || a.createdAt || '').getTime())
             .slice(0, 3);
@@ -157,6 +191,19 @@ export default function HomeScreen() {
         return `${days}d ago`;
     };
 
+    const getTimeFrameLabel = () => {
+        switch (selectedTimeFrame) {
+            case '24h':
+                return 'Last 24 Hours';
+            case '7d':
+                return 'Last 7 Days';
+            case '30d':
+                return 'Last 30 Days';
+            default:
+                return 'Last 24 Hours';
+        }
+    };
+
     if (loading) {
         return (
             <View style={styles.loadingContainer}>
@@ -167,17 +214,18 @@ export default function HomeScreen() {
     }
 
     const recentIncidents = getRecentIncidents();
+    const filteredIncidents = getFilteredIncidents();
 
-    // Calculate stats directly from incidents data for accuracy
-    const activeIncidents = incidents.filter(i =>
+    // Calculate stats from filtered incidents
+    const activeIncidents = filteredIncidents.filter(i =>
         i.status === 'open' || i.status === 'investigating'
     ).length;
 
-    const resolvedIncidents = incidents.filter(i => i.status === 'resolved').length;
+    const resolvedIncidents = filteredIncidents.filter(i => i.status === 'resolved').length;
 
-    const criticalIncidents = incidents.filter(i => i.severity === 'critical').length;
+    const criticalIncidents = filteredIncidents.filter(i => i.severity === 'critical').length;
 
-    const totalIncidents = incidents.length;
+    const totalIncidents = filteredIncidents.length;
 
     return (
         <View style={styles.container}>
@@ -200,6 +248,57 @@ export default function HomeScreen() {
                         <Text style={styles.greeting}>{getGreeting()} 👋</Text>
                         <Text style={styles.subtitle}>{userName}</Text>
                     </View>
+                </View>
+
+                {/* Time Frame Selector */}
+                <View style={styles.timeFrameContainer}>
+                    <View style={styles.timeFrameSelector}>
+                        <TouchableOpacity
+                            style={[
+                                styles.timeFrameButton,
+                                selectedTimeFrame === '24h' && styles.timeFrameButtonActive
+                            ]}
+                            onPress={() => setSelectedTimeFrame('24h')}
+                        >
+                            <Text style={[
+                                styles.timeFrameText,
+                                selectedTimeFrame === '24h' && styles.timeFrameTextActive
+                            ]}>
+                                24H
+                            </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={[
+                                styles.timeFrameButton,
+                                selectedTimeFrame === '7d' && styles.timeFrameButtonActive
+                            ]}
+                            onPress={() => setSelectedTimeFrame('7d')}
+                        >
+                            <Text style={[
+                                styles.timeFrameText,
+                                selectedTimeFrame === '7d' && styles.timeFrameTextActive
+                            ]}>
+                                7D
+                            </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={[
+                                styles.timeFrameButton,
+                                selectedTimeFrame === '30d' && styles.timeFrameButtonActive
+                            ]}
+                            onPress={() => setSelectedTimeFrame('30d')}
+                        >
+                            <Text style={[
+                                styles.timeFrameText,
+                                selectedTimeFrame === '30d' && styles.timeFrameTextActive
+                            ]}>
+                                30D
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+                    <Text style={styles.timeFrameLabel}>{getTimeFrameLabel()}</Text>
                 </View>
 
                 {/* Stats Grid */}
@@ -270,7 +369,9 @@ export default function HomeScreen() {
                         <View style={styles.emptyState}>
                             <Ionicons name="checkmark-circle-outline" size={64} color="#64748B" />
                             <Text style={styles.emptyStateTitle}>All Clear!</Text>
-                            <Text style={styles.emptyStateText}>No recent incidents to display</Text>
+                            <Text style={styles.emptyStateText}>
+                                No incidents in {getTimeFrameLabel().toLowerCase()}
+                            </Text>
                         </View>
                     ) : (
                         recentIncidents.map((incident) => (
@@ -384,7 +485,7 @@ const styles = StyleSheet.create({
     },
     header: {
         paddingHorizontal: 20,
-        marginBottom: 24,
+        marginBottom: 20,
     },
     greeting: {
         fontSize: 28,
@@ -395,6 +496,44 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: '#94A3B8',
         marginTop: 4,
+        fontFamily: FONT_FAMILY.POPPINS_REGULAR,
+    },
+    timeFrameContainer: {
+        paddingHorizontal: 20,
+        marginBottom: 20,
+    },
+    timeFrameSelector: {
+        flexDirection: 'row',
+        backgroundColor: 'rgba(30, 41, 59, 0.95)',
+        borderRadius: 12,
+        padding: 4,
+        gap: 4,
+        borderWidth: 1,
+        borderColor: '#334155',
+    },
+    timeFrameButton: {
+        flex: 1,
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+        borderRadius: 8,
+        alignItems: 'center',
+    },
+    timeFrameButtonActive: {
+        backgroundColor: '#F97316',
+    },
+    timeFrameText: {
+        fontSize: 14,
+        color: '#94A3B8',
+        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
+    },
+    timeFrameTextActive: {
+        color: '#FFFFFF',
+    },
+    timeFrameLabel: {
+        fontSize: 12,
+        color: '#64748B',
+        textAlign: 'center',
+        marginTop: 8,
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     statsGrid: {
@@ -465,6 +604,7 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: '#94A3B8',
         marginTop: 8,
+        textAlign: 'center',
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     incidentCard: {

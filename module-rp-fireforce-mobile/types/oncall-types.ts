@@ -24,15 +24,6 @@ export interface OnCallScheduleProps {
 
 // Additional types needed for the controller and component
 
-export interface OnCallTeam {
-    id: string;
-    name: string;
-    description?: string;
-    members?: number;
-    createdAt?: string;
-    updatedAt?: string;
-}
-
 export interface OnCallAssignment {
     primary?: OnCallUser;
     backup?: OnCallUser;
@@ -170,4 +161,22 @@ export interface EmergencyOverrideUser {
     pushToken: string | null;
     fcmToken: string | null;
     deviceType: string | null;
+}
+
+export interface OnCallTeamMember {
+    id: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+    phoneNumber: string | null;
+    role: 'primary' | 'backup' | 'escalation';
+    scheduleId?: string;           // ✅ Added
+    assignedDates?: string[];      // ✅ Added - array of date strings
+}
+
+export interface OnCallTeam {
+    id: string;
+    name: string;
+    timezone: string;
+    members: OnCallTeamMember[];
 }

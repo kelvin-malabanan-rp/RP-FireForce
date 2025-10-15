@@ -586,24 +586,25 @@ export async function handleGetOnCallCalendarData(
 	}
 }
 
-// ✅ NEW: Get detailed team with members and current assignments
+// ✅ Get detailed team with members and current assignments
 export async function handleGetTeamDetails(
 	request: Request,
 	env: Env,
-	headers: HeadersInit
+	corsHeaders: Record<string, string>
 ): Promise<Response> {
 	try {
 		const url = new URL(request.url);
 		const teamId = url.searchParams.get('teamId');
 
+		// Validate required parameter
 		if (!teamId) {
-			return json({
-				success: false,
-				httpStatus: 'ERROR',
-				error: 'teamId is required'
-			}, {
+			return new Response(JSON.stringify({
+				httpStatus: "BAD_REQUEST",
+				message: "teamId parameter is required",
+				data: null
+			}), {
 				status: 400,
-				headers
+				headers: corsHeaders
 			});
 		}
 
@@ -614,13 +615,13 @@ export async function handleGetTeamDetails(
 		const team = teams.find(t => t.id === teamId);
 
 		if (!team) {
-			return json({
-				success: false,
-				httpStatus: 'NOT_FOUND',
-				error: 'Team not found'
-			}, {
+			return new Response(JSON.stringify({
+				httpStatus: "NOT_FOUND",
+				message: `Team with ID ${teamId} not found`,
+				data: null
+			}), {
 				status: 404,
-				headers
+				headers: corsHeaders
 			});
 		}
 
@@ -630,33 +631,43 @@ export async function handleGetTeamDetails(
 		// Get schedule config
 		const scheduleConfig = await svc.getScheduleConfig(teamId);
 
-		return json({
-			success: true,
-			httpStatus: 'OK',
-			data: {
-				team: {
-					id: team.id,
-					name: team.name,
-					timezone: team.timezone,
-					memberCount: team.members.length
-				},
-				members: team.members,
-				currentOnCall: currentOnCall,
-				scheduleConfig: scheduleConfig
-			}
-		}, {
-			headers
+		// Structure response data
+		const responseData = {
+			team: {
+				id: team.id,
+				name: team.name,
+				timezone: team.timezone,
+				memberCount: team.members.length
+			},
+			members: team.members,
+			currentOnCall: currentOnCall,
+			scheduleConfig: scheduleConfig
+		};
+
+		// Structure response in ApiResponse format
+		const response: ApiResponse<typeof responseData> = {
+			httpStatus: "OK",
+			message: "Team details retrieved successfully",
+			data: responseData
+		};
+
+		console.log(`✅ Team details retrieved successfully for team: ${teamId}`);
+
+		return new Response(JSON.stringify(response), {
+			status: 200,
+			headers: corsHeaders
 		});
-	} catch (err) {
-		console.error('Error getting team details:', err);
-		return json({
-			success: false,
-			httpStatus: 'ERROR',
-			error: 'Failed to get team details',
-			message: (err as Error).message
-		}, {
+
+	} catch (error) {
+		console.error('❌ Error getting team details:', error);
+
+		return new Response(JSON.stringify({
+			httpStatus: "INTERNAL_SERVER_ERROR",
+			message: "An error occurred while retrieving team details",
+			data: null
+		}), {
 			status: 500,
-			headers
+			headers: corsHeaders
 		});
 	}
 }

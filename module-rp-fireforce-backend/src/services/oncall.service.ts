@@ -168,7 +168,6 @@ export class OnCallService {
 	}
 
 	// ✅ NEW: Get all on-call members EXCEPT those active today
-	// ✅ Returns ALL on-call users (no date filter)
 	async getAllOnCallUsers(): Promise<any> {
 		try {
 			const sql = `
@@ -656,31 +655,66 @@ export class OnCallService {
 
 	async getOnCallTeams(): Promise<OnCallTeam[]> {
 		const sql = `
-			SELECT t.id, t.name, t.timezone,
-				   u.id as user_id, u.email, u.first_name, u.last_name, u.phone_number,
-				   tm.role, tm.order_index
+			SELECT
+				t.id,
+				t.name,
+				t.timezone,
+				u.id as user_id,
+				u.email,
+				u.first_name,
+				u.last_name,
+				u.phone_number,
+				tm.role,
+				tm.order_index,
+				oa.dates as assignment_dates,
+				oa.schedule_id
 			FROM oncall_teams t
 					 LEFT JOIN oncall_team_members tm ON t.id = tm.team_id AND tm.is_active = 1
 					 LEFT JOIN users u ON tm.user_id = u.id
+					 LEFT JOIN oncall_assignments oa ON oa.team_id = t.id AND oa.user_id = u.id AND oa.is_active = 1
 			WHERE t.is_active = 1
 			ORDER BY t.name, tm.order_index
 		`;
+
 		const { results } = await this.dbService.db.prepare(sql).all();
 
 		const map = new Map<string, OnCallTeam>();
+
 		for (const r of (results as any[])) {
-			if (!map.has(r.id)) map.set(r.id, { id: r.id, name: r.name, timezone: r.timezone, members: [] });
+			if (!map.has(r.id)) {
+				map.set(r.id, {
+					id: r.id,
+					name: r.name,
+					timezone: r.timezone,
+					members: []
+				});
+			}
+
 			if (r.user_id) {
+				// Parse dates from JSON string
+				let dates: string[] = [];
+				if (r.assignment_dates) {
+					try {
+						dates = JSON.parse(r.assignment_dates);
+					} catch (error) {
+						console.error(`Error parsing dates for user ${r.user_id}:`, error);
+						dates = [];
+					}
+				}
+
 				map.get(r.id)!.members.push({
 					id: r.user_id,
 					email: r.email,
 					firstName: r.first_name,
 					lastName: r.last_name,
 					phoneNumber: r.phone_number,
-					role: r.role
+					role: r.role,
+					scheduleId: r.schedule_id,
+					assignedDates: dates  // ✅ Array of dates like ["2025-10-15", "2025-10-16"]
 				});
 			}
 		}
+
 		return Array.from(map.values());
 	}
 
