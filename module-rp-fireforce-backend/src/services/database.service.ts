@@ -197,11 +197,10 @@ export class DatabaseService {
 				otm.team_id AS teamId,
 				otm.role AS teamRole
 			FROM users u
-					 JOIN oncall_team_members otm
-						  ON u.id = otm.user_id
+					 LEFT JOIN oncall_team_members otm
+							   ON u.id = otm.user_id
 			WHERE u.email = ?
-			  AND u.is_active = 1
-			  AND otm.team_id = 'team-1'
+			  AND u.is_active = 1;
 		`;
 
 		try {
