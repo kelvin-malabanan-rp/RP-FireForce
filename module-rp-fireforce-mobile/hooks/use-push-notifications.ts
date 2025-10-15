@@ -446,6 +446,132 @@ export const usePushNotifications = () => {
         return { sent: sentCount, failed: failedCount, skipped: skippedCount, results };
     };
 
+
+    // ✅ Escalation-specific notification sender
+    const sendEscalationNotifications = async (
+        users: Array<{
+            fullname: string;
+            email: string;
+            role: string;
+            pushToken?: string | null;
+            fcmToken?: string | null;
+            userId?: string;
+        }>,
+        incident: any,
+        escalatedToRole: string,
+        escalationReason: string
+    ) => {
+        let sent = 0, failed = 0, skipped = 0;
+        const results: any[] = [];
+
+        // ✅ Deduplicate emails - send ONE email per unique address
+        const uniqueEmails = new Set<string>();
+
+        for (const user of users) {
+            // ✅ SEND EMAIL FIRST - Only once per unique email
+            if (!uniqueEmails.has(user.email)) {
+                uniqueEmails.add(user.email);
+
+                try {
+                    await sendEscalationEmail({
+                        to: user.email,
+                        incidentId: incident.id,
+                        title: incident.title,
+                        description: incident.description,
+                        severity: incident.severity,
+                        escalatedToRole: escalatedToRole,
+                        reason: escalationReason,
+                        timestamp: new Date().toISOString(),
+                    });
+                    console.log(`[email] ✅ Escalation email sent to:`, user.email);
+                } catch (emailError) {
+                    console.error(`[email] ❌ Escalation email failed for:`, user.email, emailError);
+                }
+            }
+
+            // ✅ Then send push notification (one per device/token)
+            const token = user.pushToken || user.fcmToken;
+
+            if (!token) {
+                console.log(`[escalate] ⏭️ Skipping ${user.fullname} - No push token`);
+                skipped++;
+                results.push({
+                    email: user.email,
+                    fullname: user.fullname,
+                    role: user.role,
+                    status: 'skipped',
+                    reason: 'No push token',
+                });
+                continue;
+            }
+
+            try {
+                console.log(`[escalate] 📤 Sending to ${user.fullname} (${user.role})`);
+
+                const message = {
+                    to: token,
+                    sound: 'default',
+                    title: `🚨 ESCALATED: ${incident.title}`,
+                    body: `Escalated to ${escalatedToRole}. Reason: ${escalationReason}`,
+                    data: {
+                        incidentId: incident.id,
+                        type: 'escalation',
+                        severity: incident.severity,
+                        escalatedToRole,
+                        reason: escalationReason,
+                    },
+                    priority: 'high',
+                    channelId: getChannelBySeverity(incident.severity),
+                    categoryId: 'incident-actions',
+                };
+
+                const pushResponse = await fetch('https://exp.host/--/api/v2/push/send', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(message),
+                });
+
+                if (pushResponse.ok) {
+                    sent++;
+                    results.push({
+                        email: user.email,
+                        fullname: user.fullname,
+                        role: user.role,
+                        status: 'sent',
+                    });
+                    console.log(`[escalate] ✅ Sent to ${user.fullname}`);
+                } else {
+                    failed++;
+                    const errorText = await pushResponse.text();
+                    results.push({
+                        email: user.email,
+                        fullname: user.fullname,
+                        role: user.role,
+                        status: 'failed',
+                        error: errorText,
+                    });
+                    console.error(`[escalate] ❌ Failed to send to ${user.fullname}:`, errorText);
+                }
+            } catch (error) {
+                console.error(`[escalate] ❌ Failed to send to ${user.fullname}:`, error);
+                failed++;
+                results.push({
+                    email: user.email,
+                    fullname: user.fullname,
+                    role: user.role,
+                    status: 'failed',
+                    error: error instanceof Error ? error.message : 'Unknown error',
+                });
+            }
+        }
+
+        console.log(`[escalate] 📊 Results: ${sent} sent, ${failed} failed, ${skipped} skipped`);
+        return { sent, failed, skipped, results };
+    };
+
+
     // ✅ Helper 2: Wait for acknowledgment
     const waitForAcknowledgment = async (incidentId: string, timeoutMs: number): Promise<boolean> => {
         return new Promise((resolve) => {
@@ -771,6 +897,7 @@ export const usePushNotifications = () => {
         registerDevice,
         sendNotificationToOnCallTeam,
         sendStatusChangeNotification,
+        sendEscalationNotifications,
         clearIncidentNotifications,
         getNotificationSettings,
     };

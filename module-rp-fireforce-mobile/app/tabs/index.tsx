@@ -388,7 +388,6 @@ const styles = StyleSheet.create({
     },
     greeting: {
         fontSize: 28,
-        fontWeight: '700',
         color: '#FFFFFF',
         fontFamily: FONT_FAMILY.POPPINS_BOLD,
     },
@@ -417,7 +416,6 @@ const styles = StyleSheet.create({
     },
     statValue: {
         fontSize: 28,
-        fontWeight: '700',
         color: '#FFFFFF',
         marginTop: 6,
         fontFamily: FONT_FAMILY.POPPINS_BOLD,
@@ -430,7 +428,6 @@ const styles = StyleSheet.create({
     },
     sectionTitle: {
         fontSize: 18,
-        fontWeight: '700',
         color: '#FFFFFF',
         marginBottom: 12,
         fontFamily: FONT_FAMILY.POPPINS_BOLD,
@@ -447,7 +444,6 @@ const styles = StyleSheet.create({
     },
     viewAllText: {
         fontSize: 14,
-        fontWeight: '600',
         color: '#F97316',
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
@@ -461,7 +457,6 @@ const styles = StyleSheet.create({
     },
     emptyStateTitle: {
         fontSize: 20,
-        fontWeight: '700',
         color: '#FFFFFF',
         marginTop: 16,
         fontFamily: FONT_FAMILY.POPPINS_BOLD,
@@ -493,7 +488,6 @@ const styles = StyleSheet.create({
     },
     severityText: {
         fontSize: 11,
-        fontWeight: '700',
         color: '#FFFFFF',
         fontFamily: FONT_FAMILY.POPPINS_BOLD,
     },
@@ -509,14 +503,12 @@ const styles = StyleSheet.create({
     },
     statusText: {
         fontSize: 12,
-        fontWeight: '600',
         color: '#94A3B8',
         textTransform: 'capitalize',
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
     incidentTitle: {
         fontSize: 15,
-        fontWeight: '600',
         color: '#FFFFFF',
         marginBottom: 12,
         lineHeight: 22,
@@ -573,7 +565,6 @@ const styles = StyleSheet.create({
     },
     statusValue: {
         fontSize: 14,
-        fontWeight: '600',
         color: '#FFFFFF',
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },

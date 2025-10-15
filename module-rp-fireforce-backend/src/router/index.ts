@@ -28,7 +28,7 @@ import {
 	handleGetScheduleConfig, handleGetTeamDetails,
 	handleGetUsersForEmergencyOverride,
 	handleGetUserTeam, handleUpdateOnCallSchedule,
-	handleUpdateScheduleConfig
+	handleUpdateScheduleConfig, handleGetAllNotOnCallToday, handleGetAllOnCallUsers
 } from "../handlers/oncall.handler";
 import {handleGetAllUsers, handleGetUserById} from "../handlers/user-handlers";
 import {
@@ -152,6 +152,10 @@ export class Router {
 
 			if (path === '/api/oncall/current' && method === 'GET') {
 				return handleGetAllCurrentOnCall(request, this.env, CORS_HEADERS);
+			}
+
+			if (path === '/api/oncall/all' && method === 'GET') {
+				return handleGetAllOnCallUsers(request, this.env, CORS_HEADERS);
 			}
 
 			if (path === '/api/oncall/schedule' && method === 'GET') {

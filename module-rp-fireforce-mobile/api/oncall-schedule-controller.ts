@@ -184,6 +184,19 @@ export const getAllCurrentOnCall = async (
     }
 };
 
+export const getAllOnCallUsers = async (): Promise<API_RESPONSE<AllCurrentOnCallResponse>> => {
+    try {
+        const url = `${BASE_URL_DEV}/api/oncall/all`;
+
+        // ✅ Call the unified "all" endpoint
+        const response = await apiManager.get<API_RESPONSE<AllCurrentOnCallResponse>>(url);
+        return response.data;
+    } catch (error) {
+        console.error("Error fetching all on-call users:", error);
+        throw error;
+    }
+};
+
 // ESCALATE INCIDENT
 export const escalateIncident = async (
     params: {

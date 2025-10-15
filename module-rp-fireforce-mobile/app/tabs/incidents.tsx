@@ -16,7 +16,7 @@ import {
     createIncident,
     getAllIncidents
 } from "@/api/incident-controller";
-import {getAllCurrentOnCall} from "@/api/oncall-schedule-controller";
+import {getAllCurrentOnCall, getAllOnCallUsers} from "@/api/oncall-schedule-controller";
 import {
     CreateIncidentData,
     Team,
@@ -104,14 +104,17 @@ export default function IncidentsScreen() {
 
     const fetchTeamMembersAndTeams = async () => {
         try {
-            const onCallResponse = await getAllCurrentOnCall();
+            // ✅ Use the new API function instead of getAllCurrentOnCall
+            const onCallResponse = await getAllOnCallUsers();
 
             if (onCallResponse.httpStatus !== 'OK' || !onCallResponse.data) {
                 throw new Error('Failed to fetch on-call teams with members');
             }
 
+            // ✅ The API still returns data grouped by role
             const { primary = [], backup = [], escalation = [] } = onCallResponse.data;
             const allAssignments = [...primary, ...backup, ...escalation];
+
             const teamMap = new Map<string, any>();
 
             allAssignments.forEach((assignment: any) => {
@@ -140,6 +143,7 @@ export default function IncidentsScreen() {
                 }
             });
 
+            // ✅ Transform into your frontend Team[] structure
             const transformedTeams: Team[] = Array.from(teamMap.values()).map(team => ({
                 id: team.id,
                 name: team.name,
@@ -148,6 +152,7 @@ export default function IncidentsScreen() {
 
             setAvailableTeams(transformedTeams);
 
+            // ✅ Flatten to get all members
             const allMembersMap = new Map<string, TeamMember>();
             transformedTeams.forEach((team: Team) => {
                 team.members.forEach((member: TeamMember) => {

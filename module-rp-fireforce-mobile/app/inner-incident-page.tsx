@@ -35,6 +35,7 @@ import { createAuditLog } from "@/api/audit-trail";
 import { usePushNotificationContext } from '@/context/push-notification-context';
 import { LinearGradient } from "expo-linear-gradient";
 import {escalateIncident, oncallController} from '@/api/oncall-schedule-controller';
+import {usePushNotifications} from "@/hooks/use-push-notifications";
 
 export default function InnerIncidentPage() {
     const router = useRouter();
@@ -55,6 +56,7 @@ export default function InnerIncidentPage() {
     const [escalationPriority, setEscalationPriority] = useState<'low' | 'medium' | 'high' | 'critical'>('high');
     const [escalationReason, setEscalationReason] = useState('');
     const [escalating, setEscalating] = useState(false);
+    const { sendEscalationNotifications } = usePushNotifications();
 
     const parseApiDateTime = (dateTimeString: string): Date => {
         return new Date(dateTimeString);
@@ -266,7 +268,7 @@ export default function InnerIncidentPage() {
                 const notificationResult = await sendEscalationNotifications(
                     escalationData.object.notifiedUsers,
                     incident!,
-                    escalationData.escalatedToRole || 'escalation',
+                    escalationData.object.escalatedToRole || 'escalation',
                     escalationReason.trim()
                 );
 
@@ -322,88 +324,6 @@ export default function InnerIncidentPage() {
         } finally {
             setEscalating(false);
         }
-    };
-
-    // Helper function to send escalation notifications
-    const sendEscalationNotifications = async (
-        users: Array<{
-            fullname: string;
-            email: string;
-            role: string;
-            pushToken?: string | null;
-            fcmToken?: string | null;
-        }>,
-        incident: any,
-        escalatedToRole: string,
-        escalationReason: string
-    ) => {
-        let sent = 0, failed = 0, skipped = 0;
-        const results: any[] = [];
-
-        for (const user of users) {
-            const token = user.pushToken || user.fcmToken;
-
-            if (!token) {
-                console.log(`[escalate] ⏭️ Skipping ${user.fullname} - No push token`);
-                skipped++;
-                results.push({
-                    email: user.email,
-                    fullname: user.fullname,
-                    role: user.role,
-                    status: 'skipped',
-                    reason: 'No push token',
-                });
-                continue;
-            }
-
-            try {
-                console.log(`[escalate] 📤 Sending to ${user.fullname} (${user.role})`);
-
-                await fetch('https://exp.host/--/api/v2/push/send', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        to: token,
-                        title: `🚨 ESCALATED: ${incident.title}`,
-                        body: `Escalated to ${escalatedToRole}. Reason: ${escalationReason}`,
-                        data: {
-                            incidentId: incident.id,
-                            type: 'escalation',
-                            severity: incident.severity,
-                            escalatedToRole,
-                            reason: escalationReason,
-                        },
-                        priority: 'high',
-                        sound: 'default',
-                        channelId: 'incidents',
-                    }),
-                });
-
-                sent++;
-                results.push({
-                    email: user.email,
-                    fullname: user.fullname,
-                    role: user.role,
-                    status: 'sent',
-                });
-                console.log(`[escalate] ✅ Sent to ${user.fullname}`);
-            } catch (error) {
-                console.error(`[escalate] ❌ Failed to send to ${user.fullname}:`, error);
-                failed++;
-                results.push({
-                    email: user.email,
-                    fullname: user.fullname,
-                    role: user.role,
-                    status: 'failed',
-                    error: error instanceof Error ? error.message : 'Unknown error',
-                });
-            }
-        }
-
-        console.log(`[escalate] 📊 Results: ${sent} sent, ${failed} failed, ${skipped} skipped`);
-        return { sent, failed, skipped, results };
     };
 
     const handleSubmitComment = async () => {

@@ -405,7 +405,6 @@ const styles = StyleSheet.create({
     },
     emptyStateTitle: {
         fontSize: 24,
-        fontWeight: '700',
         color: '#FFFFFF',
         marginTop: 24,
         marginBottom: 12,
@@ -427,7 +426,6 @@ const styles = StyleSheet.create({
     },
     retryButtonText: {
         fontSize: 16,
-        fontWeight: '600',
         color: '#FFFFFF',
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
@@ -457,7 +455,6 @@ const styles = StyleSheet.create({
     },
     teamName: {
         fontSize: 20,
-        fontWeight: '700',
         color: '#FFFFFF',
         fontFamily: FONT_FAMILY.POPPINS_BOLD,
         textAlign: 'center',
@@ -493,13 +490,11 @@ const styles = StyleSheet.create({
     },
     statusBadgeText: {
         fontSize: 12,
-        fontWeight: '700',
         color: '#FFFFFF',
         fontFamily: FONT_FAMILY.POPPINS_BOLD,
     },
     statusTitle: {
         fontSize: 24,
-        fontWeight: '700',
         color: '#FFFFFF',
         marginBottom: 4,
         fontFamily: FONT_FAMILY.POPPINS_BOLD,
@@ -519,7 +514,6 @@ const styles = StyleSheet.create({
     },
     statusOffDutyTitle: {
         fontSize: 20,
-        fontWeight: '600',
         color: '#FFFFFF',
         marginTop: 12,
         marginBottom: 4,
@@ -541,7 +535,6 @@ const styles = StyleSheet.create({
     },
     cardTitle: {
         fontSize: 18,
-        fontWeight: '700',
         color: '#FFFFFF',
         marginBottom: 16,
         fontFamily: FONT_FAMILY.POPPINS_BOLD,
@@ -583,7 +576,6 @@ const styles = StyleSheet.create({
     },
     avatarText: {
         fontSize: 16,
-        fontWeight: '700',
         color: '#FFFFFF',
         fontFamily: FONT_FAMILY.POPPINS_BOLD,
     },
@@ -592,7 +584,6 @@ const styles = StyleSheet.create({
     },
     memberName: {
         fontSize: 16,
-        fontWeight: '600',
         color: '#FFFFFF',
         marginBottom: 2,
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
@@ -613,7 +604,6 @@ const styles = StyleSheet.create({
     },
     primaryBadgeText: {
         fontSize: 12,
-        fontWeight: '600',
         color: '#FFFFFF',
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
@@ -628,7 +618,6 @@ const styles = StyleSheet.create({
     },
     backupBadgeText: {
         fontSize: 12,
-        fontWeight: '600',
         color: '#FFFFFF',
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
@@ -669,7 +658,6 @@ const styles = StyleSheet.create({
     },
     scheduleDayOfWeek: {
         fontSize: 14,
-        fontWeight: '600',
         color: '#94A3B8',
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
@@ -710,7 +698,6 @@ const styles = StyleSheet.create({
     },
     scheduleRoleText: {
         fontSize: 11,
-        fontWeight: '700',
         color: '#64748B',
         fontFamily: FONT_FAMILY.POPPINS_BOLD,
     },
@@ -745,7 +732,6 @@ const styles = StyleSheet.create({
     actionButtonText: {
         flex: 1,
         fontSize: 16,
-        fontWeight: '600',
         color: '#FFFFFF',
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },

@@ -115,6 +115,64 @@ export async function handleGetAllCurrentOnCall(
 		});
 	}
 }
+// ALL ON CALL USERS (INCLUDING NON-ACTIVE TODAY)
+export async function handleGetAllOnCallUsers(
+	request: Request,
+	env: Env,
+	corsHeaders: Record<string, string>
+): Promise<Response> {
+	try {
+		const svc = new OnCallService(env);
+		const allOnCall = await svc.getAllOnCallUsers(); // ← New method, no date filtering
+
+		// ✅ Validate result
+		if (
+			!allOnCall ||
+			(
+				(!allOnCall.primary || allOnCall.primary.length === 0) &&
+				(!allOnCall.backup || allOnCall.backup.length === 0) &&
+				(!allOnCall.escalation || allOnCall.escalation.length === 0)
+			)
+		) {
+			const errorResponse: ApiResponse<null> = {
+				httpStatus: "NOT_FOUND",
+				message: "No on-call assignments found",
+				data: null
+			};
+
+			return new Response(JSON.stringify(errorResponse), {
+				status: 404,
+				headers: { ...corsHeaders, "Content-Type": "application/json" }
+			});
+		}
+
+		// ✅ Success response
+		const successResponse: ApiResponse<any> = {
+			httpStatus: "OK",
+			message: "Retrieved all on-call assignments successfully",
+			data: allOnCall
+		};
+
+		return new Response(JSON.stringify(successResponse), {
+			status: 200,
+			headers: { ...corsHeaders, "Content-Type": "application/json" }
+		});
+
+	} catch (err) {
+		console.error('Error getting all on-call users:', err);
+
+		const errorResponse: ApiResponse<null> = {
+			httpStatus: "ERROR",
+			message: (err as Error).message || "Failed to retrieve on-call users",
+			data: null
+		};
+
+		return new Response(JSON.stringify(errorResponse), {
+			status: 500,
+			headers: { ...corsHeaders, "Content-Type": "application/json" }
+		});
+	}
+}
 
 export async function handleGetOnCallSchedule(url: URL, env: Env, headers: HeadersInit): Promise<Response> {
 	try {
@@ -823,7 +881,7 @@ export async function handleUpdateOnCallSchedule(
 		console.log('[oncall-handler] Updating schedule:', body.scheduleId, 'with', body.assignments.length, 'assignment(s)');
 
 		const svc = new OnCallService(env);
-		
+
 		// Update schedule name if provided
 		if (body.name) {
 			await svc.updateScheduleName(body.scheduleId, body.name);

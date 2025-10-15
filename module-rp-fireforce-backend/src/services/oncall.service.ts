@@ -167,6 +167,74 @@ export class OnCallService {
 		}
 	}
 
+	// ✅ NEW: Get all on-call members EXCEPT those active today
+	// ✅ Returns ALL on-call users (no date filter)
+	async getAllOnCallUsers(): Promise<any> {
+		try {
+			const sql = `
+				SELECT
+					oa.id, oa.schedule_id, oa.team_id,
+					oa.user_id,
+					oa.role,
+					oa.dates,
+					u.email,
+					u.first_name || ' ' || u.last_name as fullname,
+					t.name as team_name,
+					t.timezone,
+					pt.id as push_token_id,
+					pt.token as push_token,
+					pt.fcm_token as fcm_token,
+					pt.device_type as device_type
+				FROM oncall_assignments oa
+						 JOIN users u ON oa.user_id = u.id
+						 JOIN oncall_teams t ON oa.team_id = t.id
+						 LEFT JOIN push_token_user_assoc ptua ON ptua.user_id = u.id
+						 LEFT JOIN push_tokens pt ON pt.id = ptua.push_token_id AND pt.is_active = 1
+				WHERE oa.is_active = 1
+				ORDER BY
+					CASE oa.role
+						WHEN 'primary' THEN 1
+						WHEN 'backup' THEN 2
+						WHEN 'escalation' THEN 3
+						END,
+					t.name
+			`;
+
+			const { results } = await this.dbService.db.prepare(sql).all();
+
+			const groupedByRole = {
+				primary: [] as any[],
+				backup: [] as any[],
+				escalation: [] as any[]
+			};
+
+			(results as any[]).forEach((row: any) => {
+				const member = {
+					userId: row.user_id,
+					fullname: row.fullname,
+					email: row.email,
+					role: row.role,
+					teamId: row.team_id,
+					teamName: row.team_name,
+					timezone: row.timezone,
+					pushTokenId: row.push_token_id || null,
+					pushToken: row.push_token || null,
+					fcmToken: row.fcm_token || null,
+					deviceType: row.device_type || null
+				};
+
+				if (row.role === 'primary') groupedByRole.primary.push(member);
+				else if (row.role === 'backup') groupedByRole.backup.push(member);
+				else if (row.role === 'escalation') groupedByRole.escalation.push(member);
+			});
+
+			return groupedByRole;
+		} catch (e) {
+			console.error('[oncall] getAllOnCallUsers error:', e);
+			return null;
+		}
+	}
+
 	async usersForEmergencyOverride(emails: string[]): Promise<any[]> {
 		try {
 			if (!emails || emails.length === 0) {
