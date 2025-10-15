@@ -744,7 +744,6 @@ export async function handleGetAllSchedules(
 	}
 }
 
-// ✅ NEW: Update an existing on-call schedule
 export async function handleUpdateOnCallSchedule(
 	request: Request,
 	env: Env,
@@ -753,48 +752,53 @@ export async function handleUpdateOnCallSchedule(
 	try {
 		const body = await request.json() as {
 			scheduleId: string;
+			teamId: string;
 			name?: string;
-			rotationType?: 'daily' | 'weekly' | 'biweekly' | 'monthly';
-			rotationLengthHours?: number;
-			rotationStartISO?: string;
-			isActive?: boolean;
-			members?: Array<{
+			assignments: Array<{
 				userId: string;
 				role: 'primary' | 'backup' | 'escalation';
-				orderIndex: number;
-				isActive: boolean;
+				dates: string[];  // ["2025-11-01", "2025-11-02"]
 			}>;
 		};
 
 		// Validation
-		if (!body?.scheduleId) {
+		if (!body?.scheduleId || !body?.teamId) {
 			return json({
 				success: false,
 				httpStatus: 'ERROR',
-				error: 'scheduleId is required'
+				error: 'scheduleId and teamId are required'
 			}, {
 				status: 400,
 				headers
 			});
 		}
 
-		// Check if at least one field to update is provided
-		if (!body.name && !body.rotationType && !body.rotationLengthHours &&
-			!body.rotationStartISO && body.isActive === undefined && !body.members) {
+		if (!body.assignments || !Array.isArray(body.assignments) || body.assignments.length === 0) {
 			return json({
 				success: false,
 				httpStatus: 'ERROR',
-				error: 'At least one field to update is required'
+				error: 'At least one assignment is required'
 			}, {
 				status: 400,
 				headers
 			});
 		}
 
-		console.log('[oncall-handler] Updating schedule:', body.scheduleId);
+		console.log('[oncall-handler] Updating schedule:', body.scheduleId, 'with', body.assignments.length, 'assignment(s)');
 
 		const svc = new OnCallService(env);
-		await svc.updateSchedule(body);
+		
+		// Update schedule name if provided
+		if (body.name) {
+			await svc.updateScheduleName(body.scheduleId, body.name);
+		}
+
+		// Update assignments for specific dates
+		await svc.updateScheduleAssignments({
+			scheduleId: body.scheduleId,
+			teamId: body.teamId,
+			assignments: body.assignments
+		});
 
 		return json({
 			success: true,

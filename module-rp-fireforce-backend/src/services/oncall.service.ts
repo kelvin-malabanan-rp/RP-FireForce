@@ -616,119 +616,93 @@ export class OnCallService {
 		return Array.from(map.values());
 	}
 
-	// ---------- Escalation encapsulated ----------
 	async escalateIncident(args: {
 		teamId: string;
 		incidentId: string;
 		reason: string;
 		priority: 'low' | 'medium' | 'high' | 'critical';
-		userRole?: 'primary' | 'backup' | 'escalation';
+		currentLevel?: number;
 	}) {
 		try {
 			const now = new Date().toISOString();
+			const currentLevel = args.currentLevel || 0;
 
-			console.log(`[oncall] Escalating incident ${args.incidentId} for team ${args.teamId}`);
-			console.log(`[oncall] Current user role: ${args.userRole || 'unknown'}`);
+			console.log(`[oncall] Escalating incident ${args.incidentId} for team ${args.teamId}, current level: ${currentLevel}`);
 
-			const roleHierarchy = ['primary', 'backup', 'escalation', 'lead'];
-			let targetRole: string | null = null;
-
-			if (args.userRole) {
-				const currentIndex = roleHierarchy.indexOf(args.userRole);
-				if (currentIndex >= 0 && currentIndex < roleHierarchy.length - 1) {
-					targetRole = roleHierarchy[currentIndex + 1];
-				}
-			}
-
-			if (!targetRole) targetRole = 'backup';
-			console.log(`[oncall] Escalating to role: ${targetRole}`);
-
-			// Try to find the escalation target in active assignments
 			let target = await this.dbService.db.prepare(`
-			SELECT oa.user_id, oa.role, u.email, u.first_name, u.last_name, u.phone_number
-			FROM oncall_assignments oa
-			JOIN users u ON oa.user_id = u.id
-			WHERE oa.team_id = ?
-			  AND oa.role = ?
-			  AND oa.is_active = 1
-		`).bind(args.teamId, targetRole).first();
-
-			// Fallback to team members with matching role
-			if (!target) {
-				console.log(`[oncall] No active ${targetRole} found in assignments, checking team members...`);
-				target = await this.dbService.db.prepare(`
-				SELECT tm.user_id, tm.role, u.email, u.first_name, u.last_name, u.phone_number
-				FROM oncall_team_members tm
-				JOIN users u ON tm.user_id = u.id
-				WHERE tm.team_id = ?
-				  AND tm.role = ?
-				  AND tm.is_active = 1
+				SELECT ec.level, ec.user_id, u.email, u.first_name, u.last_name, u.phone_number
+				FROM escalation_chains ec
+						 JOIN users u ON ec.user_id = u.id
+				WHERE ec.team_id = ? AND ec.level > ? AND ec.is_active = 1
+				ORDER BY ec.level
 				LIMIT 1
-			`).bind(args.teamId, targetRole).first();
-			}
+			`).bind(args.teamId, currentLevel).first();
 
-			// Escalate to team lead if no one found
 			if (!target) {
-				console.log(`[oncall] No ${targetRole} found, escalating to team lead`);
-				target = await this.dbService.db.prepare(`
-				SELECT u.id as user_id, 'lead' as role, u.email, u.first_name, u.last_name, u.phone_number
-				FROM oncall_team_members tm
-				JOIN users u ON tm.user_id = u.id
-				WHERE tm.team_id = ?
-				  AND tm.role IN ('lead', 'manager')
-				  AND tm.is_active = 1
-				LIMIT 1
-			`).bind(args.teamId).first();
+				console.log(`[oncall] No escalation chain found, trying team lead for team ${args.teamId}`);
 
-				if (!target) {
-					console.error(`[oncall] No escalation path found for team ${args.teamId}`);
-					throw new Error('No escalation path available');
+				const lead = await this.dbService.db.prepare(`
+					SELECT u.id as user_id, u.email, u.first_name, u.last_name, u.phone_number
+					FROM team_members tm
+							 JOIN users u ON tm.user_id = u.id
+					WHERE tm.team_id = ? AND tm.role IN ('lead','manager') AND tm.is_active = 1
+					LIMIT 1
+				`).bind(args.teamId).first();
+
+				if (!lead) {
+					console.log(`[oncall] No team lead found, falling back to current on-call for team ${args.teamId}`);
+
+					const current = await this.getCurrentOnCallByTeamId(args.teamId);
+					if (!current?.primary) {
+						throw new Error('No escalation path available');
+					}
+
+					target = {
+						user_id: current.primary.id,
+						email: current.primary.email,
+						first_name: current.primary.firstName,
+						last_name: current.primary.lastName,
+						phone_number: current.primary.phoneNumber,
+						level: 999
+					} as any;
+				} else {
+					target = { ...(lead as any), level: 999 };
 				}
 			}
 
-			console.log(`[oncall] Escalating to: ${targetRole} (${target?.email})`);
-
-			// Record escalation
 			const escId = crypto.randomUUID();
 			await this.dbService.db.prepare(`
-			INSERT INTO incident_escalations
-			(id, incident_id, team_id, escalated_to_user_id, escalation_level, reason, priority, created_at, status)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active')
-		`).bind(
-				escId,
-				args.incidentId,
-				args.teamId,
-				target.user_id,
-				target.role,
-				args.reason,
-				args.priority,
-				now
+				INSERT INTO incident_escalations
+				(id, incident_id, team_id, escalated_to_user_id, escalation_level, reason, priority, created_at, status)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active')
+			`).bind(
+				escId, args.incidentId, args.teamId, (target as any).user_id,
+				(target as any).level, args.reason, args.priority, now
 			).run();
 
-			// Update the incident itself
 			await this.dbService.db.prepare(`
-			UPDATE incidents
-			SET escalation_level = ?,
-				priority = CASE
-					WHEN ? = 'critical' THEN 'critical'
-					WHEN priority = 'critical' THEN 'critical'
-					ELSE ?
-				END,
-				updated_at = ?
-			WHERE id = ?
-		`).bind(target.role, args.priority, args.priority, now, args.incidentId).run();
+				UPDATE incidents
+				SET escalation_level = ?, updated_at = ?,
+					priority = CASE
+								   WHEN ? = 'critical' THEN 'critical'
+								   WHEN priority = 'critical' THEN 'critical'
+								   ELSE ?
+						END
+				WHERE id = ?
+			`).bind(
+				(target as any).level, now, args.priority, args.priority, args.incidentId
+			).run();
 
-			// Fetch push tokens for notification
 			const userWithToken = await this.dbService.db.prepare(`
-			SELECT
-				u.id as userId, u.email,
-				u.first_name || ' ' || u.last_name as fullname,
-				pt.token as pushToken, pt.fcm_token as fcmToken
-			FROM users u
-			LEFT JOIN push_token_user_assoc pta ON u.id = pta.user_id
-			LEFT JOIN push_tokens pt ON pta.push_token_id = pt.id AND pt.is_active = 1
-			WHERE u.id = ?
-		`).bind(target.user_id).first();
+				SELECT
+					u.id as userId, u.email,
+					u.first_name || ' ' || u.last_name as fullname,
+					pt.token as pushToken, pt.fcm_token as fcmToken
+				FROM users u
+						 LEFT JOIN push_token_user_assoc pta ON u.id = pta.user_id
+						 LEFT JOIN push_tokens pt ON pta.push_token_id = pt.id AND pt.is_active = 1
+				WHERE u.id = ?
+			`).bind((target as any).user_id).first();
 
 			const result = {
 				success: true,
@@ -736,12 +710,11 @@ export class OnCallService {
 					id: escId,
 					incidentId: args.incidentId,
 					teamId: args.teamId,
-					escalatedToRole: target.role,
+					escalatedToLevel: (target as any).level,
 					notifiedUsers: [{
-						userId: target.user_id,
-						email: target.email,
-						fullname: `${target.first_name} ${target.last_name}`,
-						role: target.role,
+						userId: (target as any).user_id,
+						email: (target as any).email,
+						fullname: `${(target as any).first_name} ${(target as any).last_name}`,
 						pushToken: (userWithToken as any)?.pushToken || null,
 						fcmToken: (userWithToken as any)?.fcmToken || null,
 					}]
@@ -752,14 +725,13 @@ export class OnCallService {
 				status: 'active',
 			};
 
-			console.log(`[oncall] ✅ Escalation completed successfully to ${target.role}`);
+			console.log(`[oncall] ✅ Escalation completed successfully`);
 			return result;
 		} catch (error) {
 			console.error(`[oncall] ❌ Escalation failed:`, error);
 			throw error;
 		}
 	}
-
 
 	// ✅ NEW: Create schedule with individual dates
 	async createScheduleWithDates(params: {
@@ -1070,4 +1042,92 @@ export class OnCallService {
 			throw error;
 		}
 	}
+
+async updateScheduleName(scheduleId: string, name: string): Promise<void> {
+  try {
+    await this.dbService.db.prepare(`
+      UPDATE oncall_schedules
+      SET name = ?
+      WHERE id = ?
+    `).bind(name, scheduleId).run();
+
+    console.log('[oncall] ✅ Schedule name updated:', scheduleId);
+  } catch (error) {
+    console.error('[oncall] Error updating schedule name:', error);
+    throw error;
+  }
 }
+
+async updateScheduleAssignments(params: {
+  scheduleId: string;
+  teamId: string;
+  assignments: Array<{
+    userId: string;
+    role: 'primary' | 'backup' | 'escalation';
+    dates: string[];
+  }>;
+}): Promise<void> {
+  try {
+    const { scheduleId, teamId, assignments } = params;
+
+    console.log('[oncall] Updating assignments for dates:', assignments.map(a => a.dates).flat());
+
+    // For each assignment, update or create the assignment for those specific dates
+    for (const assignment of assignments) {
+      const { userId, role, dates } = assignment;
+
+      // Check if assignment already exists for this user/role/schedule
+      const existing = await this.dbService.db.prepare(`
+        SELECT id, dates
+        FROM oncall_assignments
+        WHERE schedule_id = ?
+          AND user_id = ?
+          AND role = ?
+          AND team_id = ?
+          AND is_active = 1
+      `).bind(scheduleId, userId, role, teamId).first();
+
+      if (existing) {
+        // Merge dates: get existing dates and add new ones
+        const existingDates = JSON.parse((existing as any).dates || '[]') as string[];
+        const mergedDates = Array.from(new Set([...existingDates, ...dates]));
+
+        await this.dbService.db.prepare(`
+          UPDATE oncall_assignments
+          SET dates = ?
+          WHERE id = ?
+        `).bind(
+          JSON.stringify(mergedDates),
+          (existing as any).id
+        ).run();
+
+        console.log(`[oncall] ✅ Updated assignment ${(existing as any).id} with merged dates`);
+      } else {
+        // Create new assignment
+        const assignmentId = crypto.randomUUID();
+        await this.dbService.db.prepare(`
+          INSERT INTO oncall_assignments
+          (id, schedule_id, user_id, team_id, dates, role, is_active)
+          VALUES (?, ?, ?, ?, ?, ?, 1)
+        `).bind(
+          assignmentId,
+          scheduleId,
+          userId,
+          teamId,
+          JSON.stringify(dates),
+          role
+        ).run();
+
+        console.log(`[oncall] ✅ Created new assignment for ${role}: ${userId} on ${dates.length} date(s)`);
+      }
+    }
+
+    console.log('[oncall] ✅ All assignments updated successfully');
+  } catch (error) {
+    console.error('[oncall] Error updating schedule assignments:', error);
+    throw error;
+  }
+}
+
+}
+
