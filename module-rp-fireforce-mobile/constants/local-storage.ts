@@ -19,10 +19,13 @@ export const storeUserSession = async (param: UserSession) => {
             JSON.stringify({
                 id: param.id,
                 email: param.email,
-                password: null,
+                password: null, // Never store password
                 firstName: param?.firstName ?? "",
-                lastName: param.lastName,
-                token: param.token,
+                lastName: param?.lastName ?? "",
+                role: param?.role ?? "",
+                teamId: param?.teamId ?? null,
+                teamRole: param?.teamRole ?? null,
+                token: param?.token ?? "",
             })
         );
     } catch (error) {

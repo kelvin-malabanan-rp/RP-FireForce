@@ -48,7 +48,7 @@ export async function handleLogin(
 			});
 		}
 
-		// Check if email is from @rocketpartners.io domain
+		// Restrict to @rocketpartners.io domain
 		if (!body.email.endsWith('@rocketpartners.io')) {
 			return new Response(JSON.stringify({
 				httpStatus: "FORBIDDEN",
@@ -67,9 +67,7 @@ export async function handleLogin(
 		const user = await authService.validateCredentials(body.email, body.password);
 
 		if (!user) {
-			// Log failed attempt for security monitoring
 			console.log('Failed login attempt for email:', body.email);
-
 			return new Response(JSON.stringify({
 				httpStatus: "UNAUTHORIZED",
 				message: "Invalid email or password",
@@ -80,25 +78,26 @@ export async function handleLogin(
 			});
 		}
 
-		// Prepare login response data
+		// Prepare login response with team info
 		const loginResponse: LoginResponse = {
 			id: user.id,
 			email: user.email,
-			password: "",  // Never return the actual password
+			password: "", // Never return the actual password
 			firstName: user.firstName || "",
 			lastName: user.lastName || "",
-			token: ""  // Empty token for now since JWT is removed
+			role: user.role || "",
+			teamId: user.teamId || null,
+			teamRole: user.teamRole || null,
+			token: "" // JWT removed, placeholder for future
 		};
 
-		// Wrap in ApiResponse structure
 		const response: ApiResponse<LoginResponse> = {
 			httpStatus: "OK",
 			message: "Login successful",
 			data: loginResponse
 		};
 
-		// Log successful login
-		console.log(`Successful login: ${user.email} (${user.role})`);
+		console.log(`Successful login: ${user.email} (${user.role}) — Team: ${user.teamId}, Team Role: ${user.teamRole}`);
 
 		return new Response(JSON.stringify(response), {
 			status: 200,

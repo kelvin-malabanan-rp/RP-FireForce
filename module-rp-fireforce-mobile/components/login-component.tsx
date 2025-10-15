@@ -17,11 +17,22 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { ParticleNetwork } from "@/components/animations/particles-network";
 import { BlurView } from "expo-blur";
-import {Ionicons} from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
+import * as Notifications from 'expo-notifications';
+import { registerPushToken } from '@/api/alert-controller';
+import {
+    retrieveAlertSettings,
+    retrievePushToken,
+    retrieveRegistrationStatus,
+    storeAlertSettings,
+    storePushToken,
+    storeRegistrationStatus,
+    retrieveUserSession,
+} from "@/constants/local-storage";
 
 export const LoginComponent = ({ onLogin }: LoginProps) => {
     const [formData, setFormData] = useState<LoginData>({
-        email: "keannu.brillante@rocketpartners.io",
+        email: "kelvin.malabanan@rocketpartners.io",
         password: "password123",
     });
     const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -37,6 +48,101 @@ export const LoginComponent = ({ onLogin }: LoginProps) => {
         if (error) setError("");
     };
 
+    const autoRegisterDevice = async (userId: string) => {
+        try {
+            console.log('🔔 Auto-registering device for user:', userId);
+
+            // Configure notification handler
+            await Notifications.setNotificationHandler({
+                handleNotification: async () => ({
+                    shouldShowAlert: true,
+                    shouldPlaySound: true,
+                    shouldSetBadge: true,
+                    shouldShowBanner: false,
+                    shouldShowList: false,
+                }),
+            });
+
+            // Request permissions
+            const { status } = await Notifications.requestPermissionsAsync();
+            console.log('Permission status:', status);
+
+            if (status !== 'granted') {
+                console.log('⚠️ Permissions not granted, skipping registration');
+                return;
+            }
+
+            // Check if already registered
+            const savedRegStatus = await retrieveRegistrationStatus();
+            const savedToken = await retrievePushToken();
+
+            if (savedRegStatus === 'registered' && savedToken) {
+                console.log('✅ Device already registered, skipping API call');
+                return;
+            }
+
+            console.log('📝 Registering device...');
+
+            // Get Expo push token
+            const tokenData = await Notifications.getExpoPushTokenAsync();
+            await storePushToken(tokenData.data);
+
+            // Get FCM token for Android
+            let platformToken = null;
+            if (Platform.OS === 'android') {
+                platformToken = await Notifications.getDevicePushTokenAsync();
+            }
+
+            // Load or create default settings
+            let settings = await retrieveAlertSettings();
+            if (!settings) {
+                settings = {
+                    enableAlerts: true,
+                    criticalOnly: false,
+                    soundEnabled: true,
+                    vibrationEnabled: true,
+                    reminderConfig: {
+                        enabled: true,
+                        maxReminders: 3,
+                        intervalSeconds: 10
+                    }
+                };
+                await storeAlertSettings(settings);
+            }
+
+            // Register with backend
+            const response = await registerPushToken({
+                userId: userId,
+                token: tokenData.data,
+                deviceType: Platform.OS,
+                fcmToken: Platform.OS === 'android' && platformToken ? (platformToken as any).data : undefined,
+                settings
+            });
+
+            if (response.httpStatus === 'OK' || response.data?.success) {
+                await storeRegistrationStatus('registered');
+                console.log('✅ Device registered successfully');
+            } else {
+                await storeRegistrationStatus('failed');
+                console.warn('⚠️ Device registration failed:', response);
+            }
+
+            // Setup Android notification channel
+            if (Platform.OS === 'android') {
+                await Notifications.setNotificationChannelAsync('critical-alerts-v4', {
+                    name: 'Critical Incidents',
+                    importance: Notifications.AndroidImportance.MAX,
+                    vibrationPattern: [0, 250, 250, 250],
+                    lightColor: '#DC2626',
+                    sound: 'alarm_sound.mp3',
+                });
+            }
+        } catch (error) {
+            console.error('❌ Auto-registration error:', error);
+            await storeRegistrationStatus('failed');
+        }
+    };
+
     const handleLogin = async () => {
         if (!formData.email || !formData.password) {
             setError("Please fill in all fields");
@@ -48,26 +154,7 @@ export const LoginComponent = ({ onLogin }: LoginProps) => {
             return;
         }
 
-        // ✅ Show multi-device warning
-        Alert.alert(
-            "⚠️ Device Login",
-            "Signing in on this device will log you out from all other devices. Push notifications will only be sent to this device.\n\nDo you want to continue?",
-            [
-                {
-                    text: "Cancel",
-                    style: "cancel",
-                    onPress: () => console.log('[login] User cancelled login')
-                },
-                {
-                    text: "Continue",
-                    style: "default",
-                    onPress: async () => {
-                        await proceedWithLogin();
-                    }
-                }
-            ],
-            { cancelable: true }
-        );
+        await proceedWithLogin();
     };
 
     const proceedWithLogin = async () => {
@@ -79,6 +166,20 @@ export const LoginComponent = ({ onLogin }: LoginProps) => {
         if (errors) {
             setError(errors.authError || "");
             setIsLoading(false);
+        } else {
+            // ✅ Login successful - auto-register device
+            try {
+                const session = await retrieveUserSession();
+                if (session?.id) {
+                    // Run registration in background, don't wait
+                    autoRegisterDevice(session.id)
+                        .then(() => console.log('✅ Device registration completed'))
+                        .catch(err => console.warn('⚠️ Device registration failed:', err));
+                }
+            } catch (error) {
+                console.error('Error retrieving session for auto-registration:', error);
+            }
+            // Don't set isLoading to false here - let the onLogin callback handle navigation
         }
     };
 
@@ -111,20 +212,11 @@ export const LoginComponent = ({ onLogin }: LoginProps) => {
                         tint="dark"
                         style={styles.loginCard}
                     >
-                        {/* ✅ Error display */}
                         {error ? (
                             <View style={styles.errorContainer}>
                                 <Text style={styles.errorText}>{error}</Text>
                             </View>
                         ) : null}
-
-                        {/* ✅ Device Warning Info */}
-                        <View style={styles.infoContainer}>
-                            <Ionicons name="information-circle" size={16} color="#F59E0B" />
-                            <Text style={styles.infoText}>
-                                Logging in will activate push notifications on this device only
-                            </Text>
-                        </View>
 
                         <View style={styles.form}>
                             <View style={styles.inputGroup}>
@@ -182,14 +274,12 @@ export const LoginComponent = ({ onLogin }: LoginProps) => {
                                 </View>
                             </View>
 
-                            {/* ✅ Forgot Password */}
                             <View style={styles.options}>
                                 <TouchableOpacity style={styles.forgotPassword}>
                                     <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
                                 </TouchableOpacity>
                             </View>
 
-                            {/* ✅ Login Button */}
                             <TouchableOpacity
                                 style={styles.loginButtonWrapper}
                                 onPress={handleLogin}
@@ -217,10 +307,9 @@ export const LoginComponent = ({ onLogin }: LoginProps) => {
                             </TouchableOpacity>
                         </View>
 
-                        {/* ✅ Footer */}
                         <View style={styles.footer}>
                             <Text style={styles.footerText}>
-                                Don&#39;t have an account? Ask your organization to setup FireForce Account
+                                Don&apos;t have an account? Ask your organization to setup FireForce Account
                             </Text>
                         </View>
                     </BlurView>
@@ -292,25 +381,6 @@ const styles = StyleSheet.create({
         color: '#FCA5A5',
         fontSize: 14,
         textAlign: "center",
-        fontFamily: FONT_FAMILY.POPPINS_REGULAR,
-    },
-    // ✅ NEW: Info container for device warning
-    infoContainer: {
-        backgroundColor: 'rgba(245, 158, 11, 0.15)',
-        borderWidth: 1,
-        borderColor: 'rgba(245, 158, 11, 0.3)',
-        borderRadius: 12,
-        padding: 12,
-        marginBottom: 20,
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-    },
-    infoText: {
-        color: '#FCD34D',
-        fontSize: 12,
-        flex: 1,
-        lineHeight: 16,
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     form: {

@@ -12,70 +12,88 @@ import {
     Platform
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { CurrentOnCall, OnCallUser, OnCallTeam, OnCallScheduleDay } from '@/types/oncall-types';
 import { oncallController } from '@/api/oncall-schedule-controller';
 import { FONT_FAMILY } from '@/constants/fonts';
 import { retrieveUserSession } from "@/constants/local-storage";
-import {LinearGradient} from "expo-linear-gradient";
+import { LinearGradient } from "expo-linear-gradient";
 
 export default function OnCallTab() {
     const router = useRouter();
-    const params = useLocalSearchParams();
-    const teamId = (params.teamId as string) || 'team-1';
     const [currentOnCall, setCurrentOnCall] = useState<CurrentOnCall | null>(null);
     const [schedule, setSchedule] = useState<OnCallScheduleDay[]>([]);
-    const [teams, setTeams] = useState<OnCallTeam[]>([]);
-    const [selectedTeamId, setSelectedTeamId] = useState(teamId);
+    const [myTeam, setMyTeam] = useState<OnCallTeam | null>(null);
     const [refreshing, setRefreshing] = useState(false);
     const [loading, setLoading] = useState(true);
-    const [userTeamId, setUserTeamId] = useState<string | null>(null);
+    const [userId, setUserId] = useState<string | null>(null);
+    const [userEmail, setUserEmail] = useState<string | null>(null);
     const [hasActiveOnCall, setHasActiveOnCall] = useState(true);
+    const [isUserOnCallToday, setIsUserOnCallToday] = useState(false);
+    const [userOnCallRole, setUserOnCallRole] = useState<'primary' | 'backup' | null>(null);
 
     useEffect(() => {
-        loadUserTeam();
+        loadUserData();
     }, []);
 
-    useEffect(() => {
-        if (selectedTeamId) {
-            loadOnCallData();
-        }
-    }, [selectedTeamId, userTeamId]);
-
-    const loadUserTeam = async () => {
+    const loadUserData = async () => {
         try {
             const session = await retrieveUserSession();
-            if (session?.id) {
-                const userTeam = await oncallController.getUserTeam(session.id);
-                if (userTeam) {
-                    setUserTeamId(userTeam.id);
-                    setSelectedTeamId(userTeam.id);
-                }
+            if (session?.id && session?.email) {
+                setUserId(session.id);
+                setUserEmail(session.email);
+                await loadOnCallData(session.id, session.email);
             }
         } catch (error) {
-            console.error('Error loading user team:', error);
+            console.error('Error loading user data:', error);
+            Alert.alert('Error', 'Failed to load user information');
         }
     };
 
-    const loadOnCallData = async () => {
+    const loadOnCallData = async (userIdParam: string, userEmailParam: string) => {
         try {
             setLoading(true);
-            const data = await oncallController.loadAllOnCallData(selectedTeamId);
+
+            // Get user's team
+            const userTeam = await oncallController.getUserTeam(userIdParam);
+            if (!userTeam) {
+                setHasActiveOnCall(false);
+                setLoading(false);
+                return;
+            }
+
+            setMyTeam(userTeam);
+
+            // Load on-call data for user's team
+            const data = await oncallController.loadAllOnCallData(userTeam.id);
 
             setCurrentOnCall(data.currentOnCall || null);
             setSchedule(data.schedule || []);
             setHasActiveOnCall(true);
 
-            const sortedTeams = userTeamId
-                ? [
-                    ...data.teams.filter(t => t.id === userTeamId),
-                    ...data.teams.filter(t => t.id !== userTeamId)
-                ]
-                : data.teams;
-            setTeams(sortedTeams);
+            // Check if user is on call TODAY (first day in schedule)
+            if (data.schedule && data.schedule.length > 0) {
+                const today = data.schedule[0];
+                const isPrimary = today.assignment?.primary?.email === userEmailParam;
+                const isBackup = today.assignment?.backup?.email === userEmailParam;
+
+                if (isPrimary) {
+                    setIsUserOnCallToday(true);
+                    setUserOnCallRole('primary');
+                } else if (isBackup) {
+                    setIsUserOnCallToday(true);
+                    setUserOnCallRole('backup');
+                } else {
+                    setIsUserOnCallToday(false);
+                    setUserOnCallRole(null);
+                }
+            } else {
+                setIsUserOnCallToday(false);
+                setUserOnCallRole(null);
+            }
         } catch (error: any) {
             if (error.message?.includes("No active on-call found")) {
-                console.warn(`No active on-call for team ${selectedTeamId}`);
+                console.warn('No active on-call schedule');
                 setCurrentOnCall(null);
                 setSchedule([]);
                 setHasActiveOnCall(false);
@@ -91,8 +109,9 @@ export default function OnCallTab() {
 
     const onRefresh = async () => {
         setRefreshing(true);
-        await loadUserTeam();
-        await loadOnCallData();
+        if (userId && userEmail) {
+            await loadOnCallData(userId, userEmail);
+        }
         setRefreshing(false);
     };
 
@@ -108,43 +127,60 @@ export default function OnCallTab() {
         });
     };
 
-    const getRoleColor = (role: string) => {
-        switch (role) {
-            case 'primary': return '#10B981';
-            case 'backup': return '#F59E0B';
-            case 'escalation': return '#6B7280';
-            default: return '#6B7280';
-        }
-    };
-
-    const getRoleIcon = (role: string): keyof typeof Ionicons.glyphMap => {
-        switch (role) {
-            case 'primary': return 'star';
-            case 'backup': return 'shield-checkmark';
-            case 'escalation': return 'arrow-up-circle';
-            default: return 'person';
-        }
+    const formatDate = (dateString: string) => {
+        return new Date(dateString).toLocaleDateString([], {
+            month: 'short',
+            day: 'numeric'
+        });
     };
 
     const handleCreateOverride = () => {
-        router.push({ pathname: '/create-override', params: { teamId: selectedTeamId } });
-    };
-
-    const handleEscalate = () => {
-        router.push({ pathname: '/escalate-incident', params: { teamId: selectedTeamId } });
+        if (myTeam) {
+            router.push({ pathname: '/create-override', params: { teamId: myTeam.id } });
+        }
     };
 
     const handleManageSchedule = () => {
-        router.push({ pathname: '/manage-schedule', params: { teamId: selectedTeamId } });
+        if (myTeam) {
+            router.push({ pathname: '/manage-schedule', params: { teamId: myTeam.id } });
+        }
     };
-
-    const isMyTeam = userTeamId && selectedTeamId === userTeamId;
 
     if (loading) {
         return (
             <View style={[styles.container, styles.loadingContainer]}>
                 <ActivityIndicator size="large" color="#F97316" />
-                <Text style={styles.loadingText}>Loading on-call schedule...</Text>
+                <Text style={styles.loadingText}>Loading your schedule...</Text>
+            </View>
+        );
+    }
+
+    if (!myTeam || !hasActiveOnCall) {
+        return (
+            <View style={styles.container}>
+                <StatusBar barStyle="light-content" />
+                <ScrollView
+                    contentContainerStyle={styles.emptyScrollContent}
+                    refreshControl={
+                        <RefreshControl
+                            refreshing={refreshing}
+                            onRefresh={onRefresh}
+                            tintColor="#F97316"
+                            colors={['#F97316']}
+                        />
+                    }
+                >
+                    <View style={styles.emptyStateContainer}>
+                        <Ionicons name="calendar-outline" size={80} color="#64748B" />
+                        <Text style={styles.emptyStateTitle}>No Active Schedule</Text>
+                        <Text style={styles.emptyStateText}>
+                            You&apos;re not assigned to an on-call team yet or there&apos;s no active schedule.
+                        </Text>
+                        <TouchableOpacity onPress={onRefresh} style={styles.retryButton}>
+                            <Text style={styles.retryButtonText}>Refresh</Text>
+                        </TouchableOpacity>
+                    </View>
+                </ScrollView>
             </View>
         );
     }
@@ -165,163 +201,172 @@ export default function OnCallTab() {
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={styles.scrollContent}
             >
-                {/* Team Selector */}
-                <View style={styles.teamSelector}>
-                    <Text style={styles.sectionTitle}>On Call Teams</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                        {teams.map(team => (
-                            <View key={team.id} style={styles.teamButtonWrapper}>
-                                {/* Badge outside the button */}
-                                {userTeamId === team.id && (
-                                    <View style={styles.myTeamBadge}>
-                                        <Text style={styles.myTeamBadgeText}>My Team</Text>
-                                    </View>
-                                )}
-
-                                <TouchableOpacity
-                                    onPress={() => setSelectedTeamId(team.id)}
-                                >
-                                    {selectedTeamId === team.id ? (
-                                        <LinearGradient
-                                            colors={['#F97316', '#DC2626']}
-                                            start={{ x: 0, y: 0 }}
-                                            end={{ x: 1, y: 0 }}
-                                            style={styles.teamButtonActive}
-                                        >
-                                            <Text style={styles.teamButtonTextActive}>
-                                                {team.name}
-                                            </Text>
-                                        </LinearGradient>
-                                    ) : (
-                                        <View style={styles.teamButton}>
-                                            <Text style={styles.teamButtonText}>
-                                                {team.name}
-                                            </Text>
-                                        </View>
-                                    )}
-                                </TouchableOpacity>
-                            </View>
-                        ))}
-                    </ScrollView>
+                {/* Team Header */}
+                <View style={styles.teamHeader}>
+                    <View style={styles.teamHeaderLeft}>
+                        <Ionicons name="people" size={24} color="#F97316" />
+                    </View>
+                    <View style={styles.teamHeaderText}>
+                        <Text style={styles.teamName}>{myTeam.name}</Text>
+                        <Text style={styles.teamSubtitle}>Your On-Call Team</Text>
+                    </View>
+                    <View style={styles.teamHeaderRight}>
+                        <TouchableOpacity onPress={onRefresh}>
+                            <Ionicons name="refresh" size={24} color="#F97316" />
+                        </TouchableOpacity>
+                    </View>
                 </View>
 
-                {/* Current On-Call Section */}
-                {hasActiveOnCall ? (
-                    <>
-                        {currentOnCall && (
-                            <View style={styles.currentOnCallCard}>
-                                <View style={styles.cardHeader}>
-                                    <Text style={styles.sectionTitle}>Currently On-Call</Text>
-                                    <TouchableOpacity onPress={onRefresh}>
-                                        <Ionicons name="refresh" size={20} color="#F97316" />
-                                    </TouchableOpacity>
+                {/* Your Status Card */}
+                {isUserOnCallToday ? (
+                    <View style={styles.statusCard}>
+                        <LinearGradient
+                            colors={userOnCallRole === 'primary' ? ['#10B981', '#059669'] : ['#F59E0B', '#D97706']}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                            style={styles.statusGradient}
+                        >
+                            <View style={styles.statusHeader}>
+                                <Ionicons name="shield-checkmark" size={32} color="#FFFFFF" />
+                                <View style={styles.statusBadge}>
+                                    <Text style={styles.statusBadgeText}>
+                                        {userOnCallRole === 'primary' ? 'PRIMARY' : 'BACKUP'}
+                                    </Text>
                                 </View>
+                            </View>
+                            <Text style={styles.statusTitle}>You&apos;re On-Call Today!</Text>
+                            <Text style={styles.statusSubtitle}>
+                                {currentOnCall ? `Until ${formatTime(currentOnCall.endTime)}` : ''}
+                            </Text>
+                        </LinearGradient>
+                    </View>
+                ) : (
+                    <View style={styles.statusCard}>
+                        <View style={styles.statusOffDuty}>
+                            <Ionicons name="moon-outline" size={32} color="#64748B" />
+                            <Text style={styles.statusOffDutyTitle}>You&apos;re Off-Duty</Text>
+                            <Text style={styles.statusOffDutySubtitle}>Not on call today</Text>
+                        </View>
+                    </View>
+                )}
 
-                                {currentOnCall.primary && (
-                                    <View style={styles.onCallPerson}>
-                                        <View style={styles.roleIndicator}>
-                                            <Ionicons
-                                                name={getRoleIcon('primary')}
-                                                size={20}
-                                                color={getRoleColor('primary')}
-                                            />
-                                            <Text style={[styles.roleText, { color: getRoleColor('primary') }]}>
-                                                Primary
+                {/* Current On-Call Team */}
+                {currentOnCall && (
+                    <View style={styles.currentOnCallCard}>
+                        <Text style={styles.cardTitle}>Currently On-Call</Text>
+
+                        {currentOnCall.primary && (
+                            <View style={styles.memberCard}>
+                                <View style={styles.memberHeader}>
+                                    <View style={styles.memberInfo}>
+                                        <View style={styles.avatarContainer}>
+                                            <Text style={styles.avatarText}>
+                                                {currentOnCall.primary.firstName[0]}{currentOnCall.primary.lastName[0]}
                                             </Text>
                                         </View>
-                                        <Text style={styles.personName}>{formatUserName(currentOnCall.primary)}</Text>
-                                        <Text style={styles.personEmail}>{currentOnCall.primary.email}</Text>
-                                    </View>
-                                )}
-
-                                {currentOnCall.backup && (
-                                    <View style={styles.onCallPerson}>
-                                        <View style={styles.roleIndicator}>
-                                            <Ionicons
-                                                name={getRoleIcon('backup')}
-                                                size={20}
-                                                color={getRoleColor('backup')}
-                                            />
-                                            <Text style={[styles.roleText, { color: getRoleColor('backup') }]}>
-                                                Backup
-                                            </Text>
+                                        <View style={styles.memberDetails}>
+                                            <Text style={styles.memberName}>{formatUserName(currentOnCall.primary)}</Text>
+                                            <Text style={styles.memberEmail}>{currentOnCall.primary.email}</Text>
                                         </View>
-                                        <Text style={styles.personName}>{formatUserName(currentOnCall.backup)}</Text>
-                                        <Text style={styles.personEmail}>{currentOnCall.backup.email}</Text>
                                     </View>
-                                )}
-
-                                <View style={styles.timeInfo}>
-                                    <Text style={styles.timeLabel}>On-call until:</Text>
-                                    <Text style={styles.timeValue}>{formatTime(currentOnCall.endTime)}</Text>
+                                    <View style={styles.primaryBadge}>
+                                        <Ionicons name="star" size={14} color="#FFFFFF" />
+                                        <Text style={styles.primaryBadgeText}>Primary</Text>
+                                    </View>
                                 </View>
                             </View>
                         )}
 
-                        {/* Upcoming Schedule */}
-                        <View style={styles.scheduleCard}>
-                            <Text style={styles.sectionTitle}>7-Day Schedule</Text>
-                            {schedule.map((day, index) => (
-                                <View
-                                    key={index}
-                                    style={[
-                                        styles.scheduleDay,
-                                        index === schedule.length - 1 && { borderBottomWidth: 0 }
-                                    ]}
-                                >
-                                    <View style={styles.dayHeader}>
-                                        <Text style={styles.dayDate}>{day.date}</Text>
-                                        <Text style={styles.dayOfWeek}>{day.dayOfWeek}</Text>
+                        {currentOnCall.backup && (
+                            <View style={[styles.memberCard, { marginTop: 12 }]}>
+                                <View style={styles.memberHeader}>
+                                    <View style={styles.memberInfo}>
+                                        <View style={[styles.avatarContainer, styles.avatarBackup]}>
+                                            <Text style={styles.avatarText}>
+                                                {currentOnCall.backup.firstName[0]}{currentOnCall.backup.lastName[0]}
+                                            </Text>
+                                        </View>
+                                        <View style={styles.memberDetails}>
+                                            <Text style={styles.memberName}>{formatUserName(currentOnCall.backup)}</Text>
+                                            <Text style={styles.memberEmail}>{currentOnCall.backup.email}</Text>
+                                        </View>
                                     </View>
+                                    <View style={styles.backupBadge}>
+                                        <Ionicons name="shield-checkmark" size={14} color="#FFFFFF" />
+                                        <Text style={styles.backupBadgeText}>Backup</Text>
+                                    </View>
+                                </View>
+                            </View>
+                        )}
+                    </View>
+                )}
 
+                {/* Upcoming Schedule */}
+                <View style={styles.scheduleCard}>
+                    <View style={styles.cardTitleRow}>
+                        <Text style={styles.cardTitle}>7-Day Schedule</Text>
+                        <Ionicons name="calendar-outline" size={20} color="#F97316" />
+                    </View>
+
+                    {schedule.map((day, index) => {
+                        const isToday = index === 0;
+                        const isFirstItem = index === 0;
+
+                        return (
+                            <View
+                                key={index}
+                                style={[
+                                    styles.scheduleItem,
+                                    isToday && styles.scheduleItemToday,
+                                    isFirstItem && styles.scheduleItemFirst
+                                ]}
+                            >
+                                <View style={styles.scheduleDate}>
+                                    {isToday && (
+                                        <View style={styles.todayDot} />
+                                    )}
+                                    <Text style={[styles.scheduleDayOfWeek, isToday && styles.todayText]}>
+                                        {day.dayOfWeek}
+                                    </Text>
+                                    <Text style={[styles.scheduleDateText, isToday && styles.todayText]}>
+                                        {day.date}
+                                    </Text>
+                                </View>
+
+                                <View style={styles.scheduleAssignments}>
                                     {day.assignment ? (
-                                        <View style={styles.dayAssignment}>
+                                        <>
                                             {day.assignment.primary && (
-                                                <Text style={styles.assignmentText}>
-                                                    Primary: {formatUserName(day.assignment.primary)}
-                                                </Text>
+                                                <View style={styles.scheduleAssignment}>
+                                                    <View style={styles.scheduleRoleIndicator}>
+                                                        <View style={styles.primaryDot} />
+                                                        <Text style={styles.scheduleRoleText}>P</Text>
+                                                    </View>
+                                                    <Text style={styles.schedulePersonName}>
+                                                        {formatUserName(day.assignment.primary)}
+                                                    </Text>
+                                                </View>
                                             )}
                                             {day.assignment.backup && (
-                                                <Text style={styles.assignmentText}>
-                                                    Backup: {formatUserName(day.assignment.backup)}
-                                                </Text>
+                                                <View style={styles.scheduleAssignment}>
+                                                    <View style={styles.scheduleRoleIndicator}>
+                                                        <View style={styles.backupDot} />
+                                                        <Text style={styles.scheduleRoleText}>B</Text>
+                                                    </View>
+                                                    <Text style={styles.schedulePersonName}>
+                                                        {formatUserName(day.assignment.backup)}
+                                                    </Text>
+                                                </View>
                                             )}
-                                        </View>
+                                        </>
                                     ) : (
-                                        <Text style={styles.noAssignment}>No assignment</Text>
+                                        <Text style={styles.noAssignmentText}>No assignment</Text>
                                     )}
                                 </View>
-                            ))}
-                        </View>
-                    </>
-                ) : (
-                    <View style={styles.noOnCallContainer}>
-                        <Ionicons name="alert-circle-outline" size={50} color="#64748B" />
-                        <Text style={styles.noOnCallText}>No active on-call schedule for this team</Text>
-                    </View>
-                )}
-
-                {/* Quick Actions */}
-                {isMyTeam && (
-                    <View style={styles.actionsCard}>
-                        <Text style={styles.sectionTitle}>Quick Actions</Text>
-
-                        <TouchableOpacity style={styles.actionButton} onPress={handleCreateOverride}>
-                            <Ionicons name="swap-horizontal" size={20} color="#3B82F6" />
-                            <Text style={styles.actionButtonText}>Create Override</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity style={styles.actionButton} onPress={handleEscalate}>
-                            <Ionicons name="arrow-up-circle" size={20} color="#EA580C" />
-                            <Text style={styles.actionButtonText}>Escalate Incident</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity style={styles.actionButton} onPress={handleManageSchedule}>
-                            <Ionicons name="calendar" size={20} color="#8B5CF6" />
-                            <Text style={styles.actionButtonText}>Manage Schedule</Text>
-                        </TouchableOpacity>
-                    </View>
-                )}
+                            </View>
+                        );
+                    })}
+                </View>
             </ScrollView>
         </View>
     );
@@ -330,11 +375,14 @@ export default function OnCallTab() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: 'transparent',
-        marginTop: 15,
+        backgroundColor: '#0F172A',
     },
     scrollContent: {
-        paddingBottom: 20,
+        paddingBottom: 50,
+        paddingTop: Platform.OS === 'ios' ? 100 : 80
+    },
+    emptyScrollContent: {
+        flexGrow: 1,
         paddingTop: Platform.OS === 'ios' ? 100 : 80
     },
     loadingContainer: {
@@ -349,241 +397,356 @@ const styles = StyleSheet.create({
         marginTop: 12,
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
-    teamSelector: {
-        backgroundColor: 'rgba(30, 41, 59, 0.6)',
-        padding: 16,
-        marginBottom: 16,
-        marginHorizontal: 16,
-        borderRadius: 16,
-        borderWidth: 1,
-        borderColor: '#334155',
+    emptyStateContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: 32,
     },
-    sectionTitle: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#FFFFFF',
-        marginBottom: 12,
-        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
-    },
-    teamButtonWrapper: {
-        marginTop: 10,
-        marginRight: 8,
-        position: 'relative',
-        // NO overflow property here
-    },
-    teamButton: {
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderRadius: 20,
-        backgroundColor: 'rgba(15, 23, 42, 0.6)',
-        borderWidth: 1,
-        borderColor: '#334155',
-        overflow: 'hidden', // ✅ Add here instead
-    },
-    teamButtonActive: {
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderRadius: 20,
-        overflow: 'hidden', // ✅ Add here instead
-    },
-    teamButtonText: {
-        fontSize: 14,
-        color: '#94A3B8',
-        fontWeight: '500',
-        fontFamily: FONT_FAMILY.POPPINS_MEDIUM,
-    },
-    teamButtonTextActive: {
-        fontSize: 14,
-        color: '#FFFFFF',
-        fontWeight: '600',
-        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD
-    },
-    myTeamBadge: {
-        position: 'absolute',
-        top: -8,
-        left: '18%',
-        transform: [{ translateX: -30 }], // Center it
-        backgroundColor: '#10B981',
-        paddingHorizontal: 8,
-        paddingVertical: 3,
-        borderRadius: 10,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.3,
-        shadowRadius: 3,
-        elevation: 4,
-        zIndex: 10,
-    },
-    myTeamBadgeText: {
-        fontSize: 9,
-        color: '#FFFFFF',
+    emptyStateTitle: {
+        fontSize: 24,
         fontWeight: '700',
+        color: '#FFFFFF',
+        marginTop: 24,
+        marginBottom: 12,
         fontFamily: FONT_FAMILY.POPPINS_BOLD,
     },
-    currentOnCallCard: {
-        backgroundColor: 'rgba(30, 41, 59, 0.6)',
-        borderRadius: 16,
-        padding: 16,
-        marginHorizontal: 16,
-        marginBottom: 16,
-        borderWidth: 1,
-        borderColor: '#334155',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.3,
-        shadowRadius: 4,
-        elevation: 2,
-    },
-    noOnCallContainer: {
-        backgroundColor: 'rgba(30, 41, 59, 0.6)',
-        borderRadius: 16,
-        padding: 30,
-        marginHorizontal: 16,
-        marginBottom: 16,
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderWidth: 1,
-        borderColor: '#334155',
-    },
-    noOnCallText: {
+    emptyStateText: {
         fontSize: 16,
         color: '#94A3B8',
-        marginTop: 10,
         textAlign: 'center',
+        lineHeight: 24,
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
-    cardHeader: {
+    retryButton: {
+        marginTop: 24,
+        paddingHorizontal: 24,
+        paddingVertical: 12,
+        backgroundColor: '#F97316',
+        borderRadius: 8,
+    },
+    retryButtonText: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#FFFFFF',
+        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
+    },
+    teamHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        backgroundColor: 'rgba(30, 41, 59, 0.95)',
+        padding: 20,
+        marginHorizontal: 16,
+        marginBottom: 16,
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: '#334155',
+    },
+    teamHeaderLeft: {
+        width: 40,
+        alignItems: 'flex-start',
+    },
+    teamHeaderText: {
+        flex: 1,
+        alignItems: 'center',
+    },
+    teamHeaderRight: {
+        width: 40,
+        alignItems: 'flex-end',
+    },
+    teamName: {
+        fontSize: 20,
+        fontWeight: '700',
+        color: '#FFFFFF',
+        fontFamily: FONT_FAMILY.POPPINS_BOLD,
+        textAlign: 'center',
+    },
+    teamSubtitle: {
+        fontSize: 13,
+        color: '#94A3B8',
+        marginTop: 2,
+        fontFamily: FONT_FAMILY.POPPINS_REGULAR,
+        textAlign: 'center',
+    },
+    statusCard: {
+        marginHorizontal: 16,
+        marginBottom: 16,
+        borderRadius: 16,
+        overflow: 'hidden',
+    },
+    statusGradient: {
+        padding: 24,
+        borderRadius: 16,
+    },
+    statusHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
         marginBottom: 16,
     },
-    onCallPerson: {
-        marginBottom: 16,
-        paddingBottom: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: '#334155',
+    statusBadge: {
+        backgroundColor: 'rgba(255, 255, 255, 0.2)',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 12,
     },
-    roleIndicator: {
-        flexDirection: 'row',
+    statusBadgeText: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: '#FFFFFF',
+        fontFamily: FONT_FAMILY.POPPINS_BOLD,
+    },
+    statusTitle: {
+        fontSize: 24,
+        fontWeight: '700',
+        color: '#FFFFFF',
+        marginBottom: 4,
+        fontFamily: FONT_FAMILY.POPPINS_BOLD,
+    },
+    statusSubtitle: {
+        fontSize: 15,
+        color: 'rgba(255, 255, 255, 0.9)',
+        fontFamily: FONT_FAMILY.POPPINS_REGULAR,
+    },
+    statusOffDuty: {
+        backgroundColor: 'rgba(30, 41, 59, 0.95)',
+        padding: 24,
+        borderRadius: 16,
         alignItems: 'center',
-        marginBottom: 8,
+        borderWidth: 1,
+        borderColor: '#334155',
     },
-    roleText: {
-        fontSize: 14,
-        fontWeight: '600',
-        marginLeft: 8,
-        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
-    },
-    personName: {
-        fontSize: 18,
+    statusOffDutyTitle: {
+        fontSize: 20,
         fontWeight: '600',
         color: '#FFFFFF',
+        marginTop: 12,
         marginBottom: 4,
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
-    personEmail: {
+    statusOffDutySubtitle: {
         fontSize: 14,
         color: '#94A3B8',
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
-    timeInfo: {
+    currentOnCallCard: {
+        backgroundColor: 'rgba(30, 41, 59, 0.95)',
+        borderRadius: 16,
+        padding: 20,
+        marginHorizontal: 16,
+        marginBottom: 16,
+        borderWidth: 1,
+        borderColor: '#334155',
+    },
+    cardTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#FFFFFF',
+        marginBottom: 16,
+        fontFamily: FONT_FAMILY.POPPINS_BOLD,
+    },
+    cardTitleRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginTop: 8,
+        marginBottom: 20,
     },
-    timeLabel: {
-        fontSize: 14,
+    memberCard: {
+        backgroundColor: 'rgba(15, 23, 42, 0.95)',
+        borderRadius: 12,
+        padding: 16,
+        borderWidth: 1,
+        borderColor: '#334155',
+    },
+    memberHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    memberInfo: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flex: 1,
+        gap: 12,
+    },
+    avatarContainer: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: '#10B981',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    avatarBackup: {
+        backgroundColor: '#F59E0B',
+    },
+    avatarText: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#FFFFFF',
+        fontFamily: FONT_FAMILY.POPPINS_BOLD,
+    },
+    memberDetails: {
+        flex: 1,
+    },
+    memberName: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#FFFFFF',
+        marginBottom: 2,
+        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
+    },
+    memberEmail: {
+        fontSize: 13,
         color: '#94A3B8',
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
-    timeValue: {
-        fontSize: 14,
+    primaryBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#10B981',
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 8,
+        gap: 4,
+    },
+    primaryBadgeText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: '#FFFFFF',
+        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
+    },
+    backupBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#F59E0B',
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 8,
+        gap: 4,
+    },
+    backupBadgeText: {
+        fontSize: 12,
         fontWeight: '600',
         color: '#FFFFFF',
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
     scheduleCard: {
-        backgroundColor: 'rgba(30, 41, 59, 0.6)',
+        backgroundColor: 'rgba(30, 41, 59, 0.95)',
         borderRadius: 16,
-        padding: 16,
+        padding: 20,
         marginHorizontal: 16,
-        marginBottom: 16,
+        marginBottom: 50,
         borderWidth: 1,
         borderColor: '#334155',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.3,
-        shadowRadius: 4,
-        elevation: 2,
     },
-    scheduleDay: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingVertical: 12,
+    scheduleItem: {
+        paddingVertical: 16,
         borderBottomWidth: 1,
         borderBottomColor: '#334155',
     },
-    dayHeader: {
-        flex: 1,
+    scheduleItemToday: {
+        backgroundColor: 'rgba(249, 115, 22, 0.1)',
+        marginHorizontal: -20,
+        paddingHorizontal: 20,
+        borderBottomColor: '#F97316',
     },
-    dayDate: {
-        fontSize: 16,
+    scheduleItemFirst: {
+        paddingTop: 8,
+    },
+    scheduleDate: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        marginBottom: 8,
+    },
+    todayDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: '#F97316',
+    },
+    scheduleDayOfWeek: {
+        fontSize: 14,
         fontWeight: '600',
-        color: '#FFFFFF',
+        color: '#94A3B8',
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
-    dayOfWeek: {
-        fontSize: 12,
-        color: '#94A3B8',
+    scheduleDateText: {
+        fontSize: 13,
+        color: '#64748B',
+        marginTop: 2,
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
-    dayAssignment: {
-        flex: 2,
-        alignItems: 'flex-end',
+    todayText: {
+        color: '#F97316',
     },
-    assignmentText: {
+    scheduleAssignments: {
+        flex: 1,
+        gap: 8,
+    },
+    scheduleAssignment: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    scheduleRoleIndicator: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+    },
+    primaryDot: {
+        width: 6,
+        height: 6,
+        borderRadius: 3,
+        backgroundColor: '#10B981',
+    },
+    backupDot: {
+        width: 6,
+        height: 6,
+        borderRadius: 3,
+        backgroundColor: '#F59E0B',
+    },
+    scheduleRoleText: {
+        fontSize: 11,
+        fontWeight: '700',
+        color: '#64748B',
+        fontFamily: FONT_FAMILY.POPPINS_BOLD,
+    },
+    schedulePersonName: {
         fontSize: 14,
-        color: '#CBD5E1',
-        marginBottom: 2,
+        color: '#FFFFFF',
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
-    noAssignment: {
+    noAssignmentText: {
         fontSize: 14,
         color: '#64748B',
         fontStyle: 'italic',
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     actionsCard: {
-        backgroundColor: 'rgba(30, 41, 59, 0.6)',
+        backgroundColor: 'rgba(30, 41, 59, 0.95)',
         borderRadius: 16,
-        padding: 16,
+        padding: 20,
         marginHorizontal: 16,
         marginBottom: 16,
         borderWidth: 1,
         borderColor: '#334155',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.3,
-        shadowRadius: 4,
-        elevation: 2,
     },
     actionButton: {
         flexDirection: 'row',
         alignItems: 'center',
-        padding: 12,
-        borderRadius: 8,
-        backgroundColor: 'rgba(15, 23, 42, 0.6)',
-        borderWidth: 1,
-        borderColor: '#334155',
-        marginBottom: 8,
+        justifyContent: 'space-between',
+        padding: 16,
+        borderRadius: 12,
+        gap: 12,
     },
     actionButtonText: {
+        flex: 1,
         fontSize: 16,
-        color: '#CBD5E1',
-        marginLeft: 12,
-        fontFamily: FONT_FAMILY.POPPINS_MEDIUM,
+        fontWeight: '600',
+        color: '#FFFFFF',
+        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
 });

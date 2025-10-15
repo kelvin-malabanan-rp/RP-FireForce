@@ -139,9 +139,9 @@ export class OnCallController {
         incidentId: string;
         reason: string;
         priority?: 'low' | 'medium' | 'high' | 'critical';
-        currentLevel?: number;
+        userRole:string | null;
     }): Promise<any> {
-        const url = `${this.baseUrl}/api/oncall/escalate`;
+        const url = `${BASE_URL_DEV}/api/oncall/escalate`;
         const res = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

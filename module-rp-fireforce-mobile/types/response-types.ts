@@ -1,25 +1,30 @@
 import {AllIncidents, CreatedIncidentData, Incident, IncidentStatsResponse} from "@/types/incident-types";
 
 export type AuthenticateResponse = {
-  httpStatus: string;
-  message: string;
-  data: {
-    id: string;
-    email: string;
-    password: string;
-    firstName: string;
-    lastName: string;
-    token: string;
-  }
+    httpStatus: string;
+    message: string;
+    data: {
+        id: string;
+        email: string;
+        password: string;
+        firstName: string;
+        lastName: string;
+        role: string;
+        teamId: string | null;
+        teamRole: string | null;
+        token: string;
+    };
 };
 
 export interface UserSession {
-  id: string;
-  email: string;
-  password: string;
-  firstName: string;
-  lastName: string;
-  token: string;
+    id: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+    role: string;
+    teamId: string | null;
+    teamRole: string | null;
+    token: string;
 }
 
 export type IncidentStatsResponseType = {

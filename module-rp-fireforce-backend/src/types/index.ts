@@ -125,8 +125,12 @@ export interface LoginResponse {
 	password: string;
 	firstName: string;
 	lastName: string;
+	role: string;
+	teamId: string | null;
+	teamRole: string | null;
 	token: string;
 }
+
 
 export interface ApiResponse<T> {
 	httpStatus: string;
@@ -151,15 +155,15 @@ export interface User {
 	id: string;
 	email: string;
 	passwordHash: string;
-	role: 'admin' | 'operator' | 'viewer';
-	firstName?: string;
-	lastName?: string;
-	isActive: boolean;
-	isVerified?: boolean;
-	phoneNumber?: string;
+	role: string;
+	firstName: string;
+	lastName: string;
+	isActive: number;
 	createdAt: string;
 	updatedAt: string;
-	lastLogin?: string;
+	lastLogin: string | null;
+	teamId?: string | null;
+	teamRole?: string | null;
 }
 
 // ========================================

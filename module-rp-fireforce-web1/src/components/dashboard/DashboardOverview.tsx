@@ -567,7 +567,8 @@ export function DashboardOverview({ onNavigateToIncident }: DashboardOverviewPro
                 )}
               </div>
             </CardContent>
-          </Card>          {/* Quick Actions */}
+          </Card>
+            {/* Quick Actions */}
           <Card className="border border-slate-200 dark:border-white/20 shadow-lg bg-gradient-to-br from-white to-slate-50 dark:from-slate-800 dark:to-slate-900">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-3">

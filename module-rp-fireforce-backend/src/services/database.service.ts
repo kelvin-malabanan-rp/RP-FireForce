@@ -183,12 +183,25 @@ export class DatabaseService {
 	// User authentication methods by email
 	async getUserByEmail(email: string): Promise<User | null> {
 		const query = `
-			SELECT id, email, password_hash as passwordHash, role,
-				   first_name as firstName, last_name as lastName,
-				   is_active as isActive, created_at as createdAt,
-				   updated_at as updatedAt, last_login as lastLogin
-			FROM users
-			WHERE email = ? AND is_active = 1
+			SELECT
+				u.id,
+				u.email,
+				u.password_hash AS passwordHash,
+				u.role,
+				u.first_name AS firstName,
+				u.last_name AS lastName,
+				u.is_active AS isActive,
+				u.created_at AS createdAt,
+				u.updated_at AS updatedAt,
+				u.last_login AS lastLogin,
+				otm.team_id AS teamId,
+				otm.role AS teamRole
+			FROM users u
+					 JOIN oncall_team_members otm
+						  ON u.id = otm.user_id
+			WHERE u.email = ?
+			  AND u.is_active = 1
+			  AND otm.team_id = 'team-1'
 		`;
 
 		try {
@@ -203,6 +216,7 @@ export class DatabaseService {
 			throw error;
 		}
 	}
+
 
 	// User authentication methods by id
 	async getUserById(userId: string): Promise<User | null> {

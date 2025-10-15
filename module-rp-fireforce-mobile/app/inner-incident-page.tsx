@@ -7,7 +7,9 @@ import {
     TouchableOpacity,
     TextInput,
     Alert,
-    ActivityIndicator, Platform,
+    ActivityIndicator,
+    Platform,
+    Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -28,10 +30,11 @@ import {
 import { FONT_FAMILY } from '@/constants/fonts';
 import { UserSession } from "@/types";
 import { retrieveUserSession } from "@/constants/local-storage";
-import {Ionicons} from "@expo/vector-icons";
-import {createAuditLog} from "@/api/audit-trail";
+import { Ionicons } from "@expo/vector-icons";
+import { createAuditLog } from "@/api/audit-trail";
 import { usePushNotificationContext } from '@/context/push-notification-context';
 import { LinearGradient } from "expo-linear-gradient";
+import { oncallController } from '@/api/oncall-schedule-controller';
 
 export default function InnerIncidentPage() {
     const router = useRouter();
@@ -46,6 +49,12 @@ export default function InnerIncidentPage() {
     const [submittingComment, setSubmittingComment] = useState(false);
     const [processingAction, setProcessingAction] = useState(false);
     const { sendStatusChangeNotification } = usePushNotificationContext();
+
+    // Escalation modal states
+    const [showEscalateModal, setShowEscalateModal] = useState(false);
+    const [escalationPriority, setEscalationPriority] = useState<'low' | 'medium' | 'high' | 'critical'>('high');
+    const [escalationReason, setEscalationReason] = useState('');
+    const [escalating, setEscalating] = useState(false);
 
     const parseApiDateTime = (dateTimeString: string): Date => {
         return new Date(dateTimeString);
@@ -83,7 +92,6 @@ export default function InnerIncidentPage() {
         try {
             const commentsResponse = await getAllIncidentComments(incidentId);
             if (commentsResponse.httpStatus === "OK" && commentsResponse.data) {
-                // commentsResponse.data is already the array
                 setComments(commentsResponse.data);
             }
         } catch (error) {
@@ -141,7 +149,6 @@ export default function InnerIncidentPage() {
                     onPress: async () => {
                         setProcessingAction(true);
                         try {
-                            // 1️⃣ Update incident status
                             const result = await updateIncidentStatus({
                                 incidentId: incident.id,
                                 newStatus: isInvestigating ? "resolved" : "investigating",
@@ -151,19 +158,16 @@ export default function InnerIncidentPage() {
                             if (result.data || result.object) {
                                 const resultData = result.data || result.object!;
 
-                                // ✅ Send status change notification to entire team
                                 await sendStatusChangeNotification({
                                     id: incident.id,
                                     title: incident.title,
                                     status: isInvestigating ? 'resolved' : 'investigating',
                                     resolvedBy: isInvestigating ? userSession.email : undefined,
                                     investigatedBy: !isInvestigating ? userSession.email : undefined,
-                                    excludeUserId: userSession.email, // Exclude the person who acted
-                                    teamId: incident.teamId // Pass team ID if available
+                                    excludeUserId: userSession.email,
+                                    teamId: incident.teamId
                                 });
 
-
-                                // 2️⃣ Build audit log payload
                                 const auditPayload = {
                                     action: isInvestigating ? "RESOLVE_INCIDENT" : "ACCEPT_INCIDENT",
                                     incidentId: incident.id,
@@ -193,16 +197,13 @@ export default function InnerIncidentPage() {
                                     },
                                 };
 
-                                // 3️⃣ Send to audit log API
                                 try {
                                     const auditResponse = await createAuditLog(auditPayload);
                                     console.log("✅ Audit log created:", auditResponse);
                                 } catch (auditError) {
                                     console.warn("⚠️ Failed to create audit log:", auditError);
-                                    // Don't fail the whole operation if audit logging fails
                                 }
 
-                                // 4️⃣ Show success alerts
                                 if (isInvestigating && resultData.notifiedCount) {
                                     Alert.alert(
                                         'Success',
@@ -213,7 +214,6 @@ export default function InnerIncidentPage() {
                                     Alert.alert("Success", "Incident accepted successfully. Now investigating.");
                                 }
 
-                                // 5️⃣ Update local state
                                 setIncident(prev => prev ? {
                                     ...prev,
                                     status: resultData.status as IncidentUI['status']
@@ -231,32 +231,61 @@ export default function InnerIncidentPage() {
         );
     };
 
-    // Handle ignore action
-    const handleIgnore = async () => {
-        if (!incident) return;
+    const handleEscalate = async () => {
+        if (!escalationReason.trim()) {
+            Alert.alert('Error', 'Please provide a reason for escalation');
+            return;
+        }
 
-        Alert.alert(
-            "Ignore Incident",
-            "Are you sure you want to ignore this incident?",
-            [
-                { text: "Cancel", style: "cancel" },
-                {
-                    text: "Ignore",
-                    style: "destructive",
-                    onPress: async () => {
-                        setProcessingAction(true);
-                        try {
-                            Alert.alert("Success", "Incident ignored");
-                            router.back();
-                        } catch (error) {
-                            Alert.alert("Error", "Failed to ignore incident");
-                        } finally {
-                            setProcessingAction(false);
+        setEscalating(true);
+        try {
+            await oncallController.escalateIncident({
+                teamId: 'team-1',
+                incidentId: incident!.id,
+                reason: escalationReason,
+                priority: escalationPriority,
+                userRole: userSession?.teamRole ?? null,
+            });
+
+            // Create audit log
+            if (userSession) {
+                try {
+                    await createAuditLog({
+                        action: "ESCALATE_INCIDENT",
+                        incidentId: incident!.id,
+                        userId: userSession.id,
+                        description: `${userSession.firstName} ${userSession.lastName} escalated incident "${incident!.title}"`,
+                        details: {
+                            incidentTitle: incident!.title,
+                            priority: escalationPriority,
+                            reason: escalationReason.trim(),
+                            severity: incident!.severity,
+                            actionFrom: "mobile_app"
+                        },
+                        metadata: {
+                            device: Platform.OS,
+                            timestamp: new Date().toISOString(),
+                            userEmail: userSession.email,
                         }
-                    }
+                    });
+                } catch (auditError) {
+                    console.warn("⚠️ Failed to create escalation audit log:", auditError);
                 }
-            ]
-        );
+            }
+
+            setShowEscalateModal(false);
+            setEscalationReason('');
+            setEscalationPriority('high');
+
+            Alert.alert('Success', 'Incident escalated successfully', [
+                { text: 'OK', onPress: () => router.push('/tabs/incidents') }
+            ]);
+        } catch (error) {
+            console.error('Error escalating incident:', error);
+            Alert.alert('Error', 'Failed to escalate incident');
+        } finally {
+            setEscalating(false);
+        }
     };
 
     const handleSubmitComment = async () => {
@@ -281,7 +310,6 @@ export default function InnerIncidentPage() {
             const response = await postIncidentComment(commentData);
 
             if (response.httpStatus === "OK") {
-                // ✅ Create audit log for comment
                 const auditPayload = {
                     action: "ADD_INCIDENT_COMMENT",
                     incidentId: incident.id,
@@ -290,7 +318,7 @@ export default function InnerIncidentPage() {
                     details: {
                         incidentTitle: incident.title,
                         commentLength: comment.trim().length,
-                        commentPreview: comment.trim().substring(0, 100), // First 100 chars
+                        commentPreview: comment.trim().substring(0, 100),
                         severity: incident.severity,
                         incidentStatus: incident.status,
                         actionFrom: "mobile_app"
@@ -299,17 +327,15 @@ export default function InnerIncidentPage() {
                         device: Platform.OS,
                         timestamp: new Date().toISOString(),
                         userEmail: userSession.email,
-                        commentId: response.data?.id // If the API returns the comment ID
+                        commentId: response.data?.id
                     }
                 };
 
-                // Send to audit log API
                 try {
                     const auditResponse = await createAuditLog(auditPayload);
                     console.log("✅ Comment audit log created:", auditResponse);
                 } catch (auditError) {
                     console.warn("⚠️ Failed to create comment audit log:", auditError);
-                    // Don't fail the whole operation if audit logging fails
                 }
 
                 Alert.alert("Success", "Comment added successfully");
@@ -332,10 +358,8 @@ export default function InnerIncidentPage() {
         try {
             const date = timestamp instanceof Date ? timestamp : new Date(timestamp);
 
-            // Check if date is valid
             if (isNaN(date.getTime())) return 'Invalid date';
 
-            // Format: "Jan 15, 2024 at 3:45 PM"
             return date.toLocaleString('en-US', {
                 month: 'short',
                 day: 'numeric',
@@ -362,6 +386,16 @@ export default function InnerIncidentPage() {
         }
     };
 
+    const getPriorityColor = (p: string) => {
+        switch (p) {
+            case 'low': return '#10B981';
+            case 'medium': return '#F59E0B';
+            case 'high': return '#F97316';
+            case 'critical': return '#DC2626';
+            default: return '#6B7280';
+        }
+    };
+
     if (loading) {
         return (
             <SafeAreaView style={[styles.container, styles.loadingContainer]}>
@@ -378,6 +412,8 @@ export default function InnerIncidentPage() {
             </SafeAreaView>
         );
     }
+
+    const priorities = ['low', 'medium', 'high', 'critical'] as const;
 
     return (
         <SafeAreaView style={styles.container}>
@@ -409,7 +445,6 @@ export default function InnerIncidentPage() {
                     </Text>
                 </View>
 
-                {/* Incident Details Card */}
                 <View style={styles.detailsCard}>
                     <View style={styles.titleSection}>
                         <Text style={styles.incidentTitle}>{incident.title}</Text>
@@ -419,7 +454,7 @@ export default function InnerIncidentPage() {
                                     incident.severity === 'low' ? ['#16A34A', '#15803D'] as const :
                                         incident.severity === 'medium' ? ['#D97706', '#B45309'] as const :
                                             incident.severity === 'high' ? ['#EA580C', '#C2410C'] as const :
-                                                ['#DC2626', '#B91C1C'] as const // critical
+                                                ['#DC2626', '#B91C1C'] as const
                                 }
                                 start={{ x: 0, y: 0 }}
                                 end={{ x: 1, y: 0 }}
@@ -434,7 +469,6 @@ export default function InnerIncidentPage() {
 
                     <Text style={styles.incidentDescription}>{incident.description}</Text>
 
-                    {/* Incident Metadata */}
                     <View style={styles.metadataSection}>
                         <View style={styles.metadataRow}>
                             <IconSymbol name="clock" size={16} color="#6B7280" />
@@ -486,7 +520,6 @@ export default function InnerIncidentPage() {
                     </View>
                 </View>
 
-                {/* Action Buttons */}
                 {incident.status !== 'resolved' && (
                     <View style={styles.actionButtonsContainer}>
                         {incident.status === 'open' && (
@@ -497,7 +530,7 @@ export default function InnerIncidentPage() {
                                     disabled={processingAction}
                                 >
                                     <LinearGradient
-                                        colors={['#16A34A', '#15803D'] as const} // ✅ Low severity green
+                                        colors={['#16A34A', '#15803D'] as const}
                                         start={{ x: 0, y: 0 }}
                                         end={{ x: 1, y: 0 }}
                                         style={styles.acceptButton}
@@ -515,11 +548,11 @@ export default function InnerIncidentPage() {
 
                                 <TouchableOpacity
                                     style={styles.actionButtonWrapper}
-                                    onPress={handleIgnore}
+                                    onPress={() => setShowEscalateModal(true)}
                                     disabled={processingAction}
                                 >
                                     <LinearGradient
-                                        colors={['#DC2626', '#B91C1C'] as const} // ✅ Critical severity red
+                                        colors={['#DC2626', '#B91C1C'] as const}
                                         start={{ x: 0, y: 0 }}
                                         end={{ x: 1, y: 0 }}
                                         style={styles.ignoreButton}
@@ -528,8 +561,8 @@ export default function InnerIncidentPage() {
                                             <ActivityIndicator color="#FFFFFF" size="small" />
                                         ) : (
                                             <>
-                                                <IconSymbol name="xmark" size={20} color="#FFFFFF" />
-                                                <Text style={styles.actionButtonText}>Decline</Text>
+                                                <IconSymbol name="arrow.up.circle" size={20} color="#FFFFFF" />
+                                                <Text style={styles.actionButtonText}>Escalate</Text>
                                             </>
                                         )}
                                     </LinearGradient>
@@ -539,7 +572,6 @@ export default function InnerIncidentPage() {
                     </View>
                 )}
 
-                {/* Resolve Button */}
                 {incident.status === 'investigating' && (
                     <View style={styles.actionButtonsContainer}>
                         <TouchableOpacity
@@ -548,7 +580,7 @@ export default function InnerIncidentPage() {
                             disabled={processingAction}
                         >
                             <LinearGradient
-                                colors={['#16A34A', '#15803D'] as const} // ✅ Low severity green
+                                colors={['#16A34A', '#15803D'] as const}
                                 start={{ x: 0, y: 0 }}
                                 end={{ x: 1, y: 0 }}
                                 style={styles.resolveButton}
@@ -566,7 +598,6 @@ export default function InnerIncidentPage() {
                     </View>
                 )}
 
-                {/* Comments Display Section */}
                 {comments.length > 0 && (
                     <View style={styles.commentsDisplaySection}>
                         <Text style={styles.commentsDisplayTitle}>Comments ({comments.length})</Text>
@@ -580,14 +611,14 @@ export default function InnerIncidentPage() {
                                             <Text style={styles.commentAuthor}>{commentItem.userFullname}</Text>
                                             <Text style={styles.commentAuthorEmail}>{commentItem.userEmail}</Text>
                                         </View>
-                                            <Text style={styles.commentTime}>
-                                                {new Date(commentItem.createdAt).toLocaleString([], {
-                                                    month: 'short',
-                                                    day: 'numeric',
-                                                    hour: '2-digit',
-                                                    minute: '2-digit',
-                                                })}
-                                            </Text>
+                                        <Text style={styles.commentTime}>
+                                            {new Date(commentItem.createdAt).toLocaleString([], {
+                                                month: 'short',
+                                                day: 'numeric',
+                                                hour: '2-digit',
+                                                minute: '2-digit',
+                                            })}
+                                        </Text>
                                     </View>
                                     <Text style={styles.commentText}>{commentItem.comment}</Text>
                                 </View>
@@ -596,7 +627,6 @@ export default function InnerIncidentPage() {
                     </View>
                 )}
 
-                {/* Comment Section */}
                 <View style={styles.commentSection}>
                     <Text style={styles.commentSectionTitle}>Add Comment</Text>
                     <TextInput
@@ -635,6 +665,131 @@ export default function InnerIncidentPage() {
                     </TouchableOpacity>
                 </View>
             </ScrollView>
+
+            {/* Escalation Modal */}
+            <Modal
+                visible={showEscalateModal}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setShowEscalateModal(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Escalate Incident</Text>
+                            <TouchableOpacity onPress={() => setShowEscalateModal(false)}>
+                                <Ionicons name="close" size={24} color="#94A3B8" />
+                            </TouchableOpacity>
+                        </View>
+
+                        <ScrollView style={styles.modalBody}>
+                            <View style={styles.modalSection}>
+                                <Text style={styles.modalLabel}>Incident</Text>
+                                <View style={styles.modalIncidentCard}>
+                                    <Text style={styles.modalIncidentTitle}>{incident.title}</Text>
+                                    <View style={styles.modalIncidentMeta}>
+                                        <Text style={styles.modalIncidentMetaText}>
+                                            Severity: {incident.severity.toUpperCase()}
+                                        </Text>
+                                        <Text style={styles.modalIncidentMetaText}>•</Text>
+                                        <Text style={styles.modalIncidentMetaText}>
+                                            Status: {incident.status.toUpperCase()}
+                                        </Text>
+                                    </View>
+                                </View>
+                            </View>
+
+                            <View style={styles.modalSection}>
+                                <Text style={styles.modalLabel}>Priority Level</Text>
+                                <View style={styles.priorityContainer}>
+                                    {priorities.map((p) => {
+                                        const isActive = escalationPriority === p;
+                                        const color = getPriorityColor(p);
+                                        return (
+                                            <TouchableOpacity
+                                                key={p}
+                                                style={[
+                                                    styles.priorityButton,
+                                                    {
+                                                        borderColor: color,
+                                                        flex: isActive ? 1.5 : 1,
+                                                    },
+                                                    isActive && { backgroundColor: `${color}22`, borderWidth: 2 },
+                                                ]}
+                                                onPress={() => setEscalationPriority(p)}
+                                            >
+                                                <View style={[styles.priorityDot, { backgroundColor: color }]} />
+                                                <Text
+                                                    style={[
+                                                        styles.priorityText,
+                                                        isActive && { color, fontWeight: '700' },
+                                                    ]}
+                                                    numberOfLines={1}
+                                                >
+                                                    {p.charAt(0).toUpperCase() + p.slice(1)}
+                                                </Text>
+                                                {isActive && (
+                                                    <Ionicons
+                                                        name="checkmark-circle"
+                                                        size={18}
+                                                        color={color}
+                                                        style={{ marginLeft: 4 }}
+                                                    />
+                                                )}
+                                            </TouchableOpacity>
+                                        );
+                                    })}
+                                </View>
+                            </View>
+
+                            <View style={styles.modalSection}>
+                                <Text style={styles.modalLabel}>Escalation Reason</Text>
+                                <TextInput
+                                    style={styles.modalTextArea}
+                                    placeholder="Describe why this incident needs escalation..."
+                                    placeholderTextColor="#6B7280"
+                                    value={escalationReason}
+                                    onChangeText={setEscalationReason}
+                                    multiline
+                                    numberOfLines={6}
+                                />
+                            </View>
+
+                            <View style={styles.modalInfoCard}>
+                                <Ionicons name="information-circle" size={20} color="#3B82F6" />
+                                <Text style={styles.modalInfoText}>
+                                    This will notify the next person in the escalation chain based on the current escalation level.
+                                </Text>
+                            </View>
+
+                            <TouchableOpacity
+                                style={styles.modalSubmitButtonWrapper}
+                                onPress={handleEscalate}
+                                disabled={escalating || !escalationReason.trim()}
+                            >
+                                <LinearGradient
+                                    colors={escalating || !escalationReason.trim()
+                                        ? ['#64748B', '#64748B']
+                                        : ['#F97316', '#DC2626']
+                                    }
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 1, y: 0 }}
+                                    style={styles.modalSubmitButton}
+                                >
+                                    {escalating ? (
+                                        <ActivityIndicator color="#FFFFFF" size="small" />
+                                    ) : (
+                                        <>
+                                            <Ionicons name="arrow-up-circle" size={20} color="#FFFFFF" />
+                                            <Text style={styles.modalSubmitButtonText}>Escalate Incident</Text>
+                                        </>
+                                    )}
+                                </LinearGradient>
+                            </TouchableOpacity>
+                        </ScrollView>
+                    </View>
+                </View>
+            </Modal>
         </SafeAreaView>
     );
 }
@@ -642,7 +797,7 @@ export default function InnerIncidentPage() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: 'transparent',
+        backgroundColor: '#0F172A',
     },
     loadingContainer: {
         justifyContent: 'center',
@@ -669,7 +824,7 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         paddingHorizontal: 20,
         paddingVertical: 16,
-        backgroundColor: 'rgba(30, 41, 59, 0.8)',
+        backgroundColor: 'rgba(30, 41, 59, 0.95)',
         borderBottomWidth: 1,
         borderBottomColor: '#334155',
     },
@@ -696,6 +851,7 @@ const styles = StyleSheet.create({
     },
     scrollView: {
         flex: 1,
+        backgroundColor: '#0F172A',
     },
     statusBanner: {
         flexDirection: 'row',
@@ -711,7 +867,7 @@ const styles = StyleSheet.create({
         fontFamily: FONT_FAMILY.POPPINS_BOLD,
     },
     detailsCard: {
-        backgroundColor: 'rgba(30, 41, 59, 0.6)',
+        backgroundColor: 'rgba(30, 41, 59, 0.95)',
         margin: 16,
         borderRadius: 16,
         padding: 20,
@@ -795,14 +951,6 @@ const styles = StyleSheet.create({
         overflow: 'hidden',
         minWidth: 0,
     },
-    actionButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 14,
-        borderRadius: 8,
-        gap: 8,
-    },
     acceptButton: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -834,7 +982,7 @@ const styles = StyleSheet.create({
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
     commentsDisplaySection: {
-        backgroundColor: 'rgba(30, 41, 59, 0.6)',
+        backgroundColor: 'rgba(30, 41, 59, 0.95)',
         margin: 16,
         marginTop: 0,
         borderRadius: 16,
@@ -894,7 +1042,7 @@ const styles = StyleSheet.create({
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     commentSection: {
-        backgroundColor: 'rgba(30, 41, 59, 0.6)',
+        backgroundColor: 'rgba(30, 41, 59, 0.95)',
         margin: 16,
         marginTop: 0,
         borderRadius: 16,
@@ -920,7 +1068,7 @@ const styles = StyleSheet.create({
         borderRadius: 8,
         padding: 14,
         fontSize: 14,
-        backgroundColor: 'rgba(15, 23, 42, 0.6)',
+        backgroundColor: 'rgba(15, 23, 42, 0.95)',
         color: '#FFFFFF',
         marginBottom: 16,
         minHeight: 100,
@@ -940,6 +1088,143 @@ const styles = StyleSheet.create({
     },
     submitCommentButtonText: {
         fontSize: 15,
+        fontWeight: '600',
+        color: '#FFFFFF',
+        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
+    },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.85)',
+        justifyContent: 'flex-end',
+    },
+    modalContent: {
+        backgroundColor: '#1E293B',
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        maxHeight: '85%',
+        borderTopWidth: 1,
+        borderTopColor: '#334155',
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: 20,
+        borderBottomWidth: 1,
+        borderBottomColor: '#334155',
+    },
+    modalTitle: {
+        fontSize: 20,
+        fontWeight: '700',
+        color: '#FFFFFF',
+        fontFamily: FONT_FAMILY.POPPINS_BOLD,
+    },
+    modalBody: {
+        padding: 20,
+    },
+    modalSection: {
+        marginBottom: 24,
+    },
+    modalLabel: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#FFFFFF',
+        marginBottom: 12,
+        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
+    },
+    modalIncidentCard: {
+        backgroundColor: 'rgba(15, 23, 42, 0.95)',
+        padding: 16,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#334155',
+    },
+    modalIncidentTitle: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: '#FFFFFF',
+        marginBottom: 8,
+        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
+    },
+    modalIncidentMeta: {
+        flexDirection: 'row',
+        gap: 8,
+    },
+    modalIncidentMetaText: {
+        fontSize: 12,
+        color: '#94A3B8',
+        fontFamily: FONT_FAMILY.POPPINS_REGULAR,
+    },
+    priorityContainer: {
+        flexDirection: 'row',
+        gap: 8,
+    },
+    priorityButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 12,
+        paddingHorizontal: 10,
+        borderRadius: 10,
+        borderWidth: 1,
+        backgroundColor: 'rgba(15, 23, 42, 0.95)',
+    },
+    priorityDot: {
+        width: 10,
+        height: 10,
+        borderRadius: 6,
+        marginRight: 6,
+    },
+    priorityText: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: '#94A3B8',
+        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
+    },
+    modalTextArea: {
+        backgroundColor: 'rgba(15, 23, 42, 0.95)',
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#334155',
+        padding: 14,
+        fontSize: 15,
+        color: '#FFFFFF',
+        minHeight: 140,
+        textAlignVertical: 'top',
+        fontFamily: FONT_FAMILY.POPPINS_REGULAR,
+    },
+    modalInfoCard: {
+        flexDirection: 'row',
+        backgroundColor: 'rgba(59, 130, 246, 0.15)',
+        padding: 14,
+        borderRadius: 10,
+        marginBottom: 24,
+        borderWidth: 1,
+        borderColor: '#3B82F6',
+    },
+    modalInfoText: {
+        flex: 1,
+        fontSize: 13,
+        color: '#93C5FD',
+        marginLeft: 10,
+        lineHeight: 20,
+        fontFamily: FONT_FAMILY.POPPINS_REGULAR,
+    },
+    modalSubmitButtonWrapper: {
+        borderRadius: 8,
+        overflow: 'hidden',
+        marginBottom: 20,
+    },
+    modalSubmitButton: {
+        flexDirection: 'row',
+        padding: 16,
+        borderRadius: 8,
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+    },
+    modalSubmitButtonText: {
+        fontSize: 16,
         fontWeight: '600',
         color: '#FFFFFF',
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,

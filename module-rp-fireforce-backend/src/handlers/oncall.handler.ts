@@ -258,7 +258,7 @@ export async function handleEscalateIncident(request: Request, env: Env, headers
 			incidentId: string;
 			reason: string;
 			priority?: 'low' | 'medium' | 'high' | 'critical';
-			currentLevel?: number;
+			userRole?: 'primary' | 'backup' | 'escalation';
 		};
 
 		if (!body.teamId || !body.incidentId || !body.reason) {
@@ -271,7 +271,7 @@ export async function handleEscalateIncident(request: Request, env: Env, headers
 			incidentId: body.incidentId,
 			reason: body.reason,
 			priority: body.priority ?? 'high',
-			currentLevel: body.currentLevel ?? 0,
+			userRole: body.userRole ?? 'primary',
 		});
 
 		return json({ success: true, object: result }, { headers });
