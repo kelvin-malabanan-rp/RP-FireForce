@@ -4,6 +4,7 @@ import { Image } from "expo-image";
 import React, { useState } from "react";
 import {
     ActivityIndicator,
+    Alert,
     KeyboardAvoidingView,
     Platform,
     ScrollView,
@@ -37,20 +38,41 @@ export const LoginComponent = ({ onLogin }: LoginProps) => {
     };
 
     const handleLogin = async () => {
-        setIsLoading(true);
-        setError("");
-
         if (!formData.email || !formData.password) {
             setError("Please fill in all fields");
-            setIsLoading(false);
             return;
         }
 
         if (!formData.email.includes("@rocketpartners.io")) {
             setError("Please enter a valid rocketpartners.io email address");
-            setIsLoading(false);
             return;
         }
+
+        // ✅ Show multi-device warning
+        Alert.alert(
+            "⚠️ Device Login",
+            "Signing in on this device will log you out from all other devices. Push notifications will only be sent to this device.\n\nDo you want to continue?",
+            [
+                {
+                    text: "Cancel",
+                    style: "cancel",
+                    onPress: () => console.log('[login] User cancelled login')
+                },
+                {
+                    text: "Continue",
+                    style: "default",
+                    onPress: async () => {
+                        await proceedWithLogin();
+                    }
+                }
+            ],
+            { cancelable: true }
+        );
+    };
+
+    const proceedWithLogin = async () => {
+        setIsLoading(true);
+        setError("");
 
         const errors = await onLogin(formData.email, formData.password);
 
@@ -96,8 +118,15 @@ export const LoginComponent = ({ onLogin }: LoginProps) => {
                             </View>
                         ) : null}
 
+                        {/* ✅ Device Warning Info */}
+                        <View style={styles.infoContainer}>
+                            <Ionicons name="information-circle" size={16} color="#F59E0B" />
+                            <Text style={styles.infoText}>
+                                Logging in will activate push notifications on this device only
+                            </Text>
+                        </View>
+
                         <View style={styles.form}>
-                            {/* ✅ Fixed: Added < before View */}
                             <View style={styles.inputGroup}>
                                 <Text style={styles.label}>Email Address</Text>
                                 <TextInput
@@ -125,7 +154,7 @@ export const LoginComponent = ({ onLogin }: LoginProps) => {
                                     <TextInput
                                         style={[
                                             styles.input,
-                                            styles.passwordInput, // ✅ New style for password
+                                            styles.passwordInput,
                                             focusedInput === 'password' && styles.inputFocused,
                                             error && styles.inputError
                                         ]}
@@ -135,7 +164,7 @@ export const LoginComponent = ({ onLogin }: LoginProps) => {
                                         onChangeText={(value) => handleChange("password", value)}
                                         onFocus={() => setFocusedInput('password')}
                                         onBlur={() => setFocusedInput(null)}
-                                        secureTextEntry={!showPassword} // ✅ Toggle based on state
+                                        secureTextEntry={!showPassword}
                                         autoCapitalize="none"
                                         autoCorrect={false}
                                         editable={!isLoading}
@@ -265,6 +294,25 @@ const styles = StyleSheet.create({
         textAlign: "center",
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
+    // ✅ NEW: Info container for device warning
+    infoContainer: {
+        backgroundColor: 'rgba(245, 158, 11, 0.15)',
+        borderWidth: 1,
+        borderColor: 'rgba(245, 158, 11, 0.3)',
+        borderRadius: 12,
+        padding: 12,
+        marginBottom: 20,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    infoText: {
+        color: '#FCD34D',
+        fontSize: 12,
+        flex: 1,
+        lineHeight: 16,
+        fontFamily: FONT_FAMILY.POPPINS_REGULAR,
+    },
     form: {
         gap: 20,
     },
@@ -359,7 +407,7 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
     passwordInput: {
-        paddingRight: 50, // ✅ Make room for the eye icon
+        paddingRight: 50,
     },
     eyeIcon: {
         position: 'absolute',

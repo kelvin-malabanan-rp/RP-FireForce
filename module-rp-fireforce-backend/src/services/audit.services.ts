@@ -1,20 +1,17 @@
-// services/auditService.ts
+// services/audit.services.ts
 import {
 	AuditLogPayload,
 	AuditLogResponse,
 	Env
 } from '../types';
 
-/**
- * AuditService - All-in-one service for audit trail and logging operations
- */
 export class AuditService {
 	private env: Env;
-	private db: D1Database; // Add this
+	private db: D1Database;
 
 	constructor(env: Env) {
 		this.env = env;
-		this.db = env.DB; // Initialize db
+		this.db = env.DB;
 	}
 
 	public generateUUID = (): string => {
@@ -36,62 +33,50 @@ export class AuditService {
 				userId,
 				description,
 				details,
-				oldValue,
-				newValue,
 				metadata
 			} = payload;
 
 			const auditId = this.generateUUID();
 
+			// ✅ Only use columns that exist in the schema
 			const query = `
-                INSERT INTO audit_log (
-                    id,
-                    incident_id,
-                    user_id,
-                    action,
-                    description,
-                    details,
-                    old_value,
-                    new_value,
-                    metadata,
-                    ip_address,
-                    user_agent,
-                    created_at
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-            `;
+				INSERT INTO audit_log (
+					id,
+					incident_id,
+					user_id,
+					action,
+					description,
+					details,
+					metadata,
+					created_at
+				)
+				VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+			`;
 
-			// Use D1 API - prepare().bind().run()
 			await this.db.prepare(query).bind(
 				auditId,
 				incidentId || null,
-				userId || null,
+				userId || 'system',
 				action,
 				description || null,
 				JSON.stringify(details || {}),
-				oldValue ? JSON.stringify(oldValue) : null,
-				newValue ? JSON.stringify(newValue) : null,
-				metadata ? JSON.stringify(metadata) : null,
-				null, // ip_address
-				null  // user_agent
+				JSON.stringify(metadata || {})
 			).run();
 
-			console.log(`📝 Audit log created: ${action} for incident ${incidentId}`);
+			console.log(`[audit-service] 📝 Audit log created: ${action} for ${incidentId ? `incident ${incidentId}` : 'system'} by ${userId || 'system'}`);
 
 			return {
 				id: auditId,
 				incident_id: incidentId || null,
-				user_id: userId || null,
+				user_id: userId || 'system',
 				action,
 				description: description || null,
 				details: details || {},
-				old_value: oldValue || null,
-				new_value: newValue || null,
 				metadata: metadata || null,
 				created_at: new Date().toISOString()
 			};
 		} catch (error) {
-			console.error('Error creating audit log:', error);
+			console.error('[audit-service] ❌ Error creating audit log:', error);
 			throw error;
 		}
 	}
@@ -120,15 +105,15 @@ export class AuditService {
 			} = filters || {};
 
 			let query = `
-            SELECT
-                al.*,
-                u.first_name,
-                u.last_name,
-                u.email
-            FROM audit_log al
-            LEFT JOIN users u ON al.user_id = u.id
-            WHERE 1=1
-        `;
+				SELECT
+					al.*,
+					u.first_name,
+					u.last_name,
+					u.email
+				FROM audit_log al
+						 LEFT JOIN users u ON al.user_id = u.id
+				WHERE 1=1
+			`;
 
 			const params: any[] = [];
 
@@ -156,7 +141,13 @@ export class AuditService {
 			params.push(limit, offset);
 
 			const result = await this.db.prepare(query).bind(...params).all();
-			const logs = result.results || [];
+
+			// ✅ Parse JSON fields
+			const logs = (result.results || []).map((row: any) => ({
+				...row,
+				details: row.details ? JSON.parse(row.details) : {},
+				metadata: row.metadata ? JSON.parse(row.metadata) : {}
+			}));
 
 			// Get total count
 			let countQuery = 'SELECT COUNT(*) as total FROM audit_log WHERE 1=1';
@@ -187,7 +178,7 @@ export class AuditService {
 
 			return { logs, total };
 		} catch (error) {
-			console.error('Error getting audit logs:', error);
+			console.error('[audit-service] Error getting audit logs:', error);
 			throw error;
 		}
 	}
@@ -198,21 +189,29 @@ export class AuditService {
 	async getIncidentAuditTrail(incidentId: string): Promise<any[]> {
 		try {
 			const query = `
-            SELECT
-                al.*,
-                u.first_name,
-                u.last_name,
-                u.email
-            FROM audit_log al
-            LEFT JOIN users u ON al.user_id = u.id
-            WHERE al.incident_id = ?
-            ORDER BY al.created_at ASC
-        `;
+				SELECT
+					al.*,
+					u.first_name,
+					u.last_name,
+					u.email
+				FROM audit_log al
+						 LEFT JOIN users u ON al.user_id = u.id
+				WHERE al.incident_id = ?
+				ORDER BY al.created_at ASC
+			`;
 
 			const result = await this.db.prepare(query).bind(incidentId).all();
-			return result.results || [];
+
+			// ✅ Parse JSON fields
+			const logs = (result.results || []).map((row: any) => ({
+				...row,
+				details: row.details ? JSON.parse(row.details) : {},
+				metadata: row.metadata ? JSON.parse(row.metadata) : {}
+			}));
+
+			return logs;
 		} catch (error) {
-			console.error('Error getting incident audit trail:', error);
+			console.error('[audit-service] Error getting incident audit trail:', error);
 			throw error;
 		}
 	}
@@ -232,35 +231,35 @@ export class AuditService {
 
 			// Action distribution
 			const actionStats = await this.db.prepare(`
-            SELECT
-                action,
-                COUNT(*) as count
-            FROM audit_log
-            ${dateFilter}
-            GROUP BY action
-            ORDER BY count DESC
-        `).bind(...params).all();
+				SELECT
+					action,
+					COUNT(*) as count
+				FROM audit_log
+						 ${dateFilter}
+				GROUP BY action
+				ORDER BY count DESC
+			`).bind(...params).all();
 
 			// User activity
 			const userStats = await this.db.prepare(`
-            SELECT
-                u.id,
-                u.first_name,
-                u.last_name,
-                u.email,
-                COUNT(*) as action_count
-            FROM audit_log al
-            LEFT JOIN users u ON al.user_id = u.id
-            ${dateFilter}
-            GROUP BY u.id, u.first_name, u.last_name, u.email
-            ORDER BY action_count DESC
-            LIMIT 10
-        `).bind(...params).all();
+				SELECT
+					u.id,
+					u.first_name,
+					u.last_name,
+					u.email,
+					COUNT(*) as action_count
+				FROM audit_log al
+						 LEFT JOIN users u ON al.user_id = u.id
+					${dateFilter}
+				GROUP BY u.id, u.first_name, u.last_name, u.email
+				ORDER BY action_count DESC
+				LIMIT 10
+			`).bind(...params).all();
 
 			// Total logs
 			const totalResult = await this.db.prepare(`
-            SELECT COUNT(*) as total FROM audit_log ${dateFilter}
-        `).bind(...params).first();
+				SELECT COUNT(*) as total FROM audit_log ${dateFilter}
+			`).bind(...params).first();
 
 			return {
 				total_logs: (totalResult as any)?.total || 0,
@@ -272,7 +271,7 @@ export class AuditService {
 				}
 			};
 		} catch (error) {
-			console.error('Error getting audit stats:', error);
+			console.error('[audit-service] Error getting audit stats:', error);
 			throw error;
 		}
 	}

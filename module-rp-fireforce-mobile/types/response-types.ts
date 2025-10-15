@@ -14,12 +14,12 @@ export type AuthenticateResponse = {
 };
 
 export interface UserSession {
-    id: string;
-    email: string;
-    password: string;
-    firstName: string;
-    lastName: string;
-    token: string;
+  id: string;
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+  token: string;
 }
 
 export type IncidentStatsResponseType = {
@@ -38,16 +38,16 @@ export type IncidentStatsResponseType = {
 };
 
 export interface ResponseCreatedIncident {
-    httpStatus: string;
-    message: string;
-    data: CreatedIncidentData;
-    changes: number;
+  httpStatus: string;
+  message: string;
+  data: CreatedIncidentData;
+  changes: number;
 }
 
 export interface GetIncidentsByIdResponse {
-    httpStatus: string;
-    message: string;
-    data: Incident;
+  httpStatus: string;
+  message: string;
+  data: Incident;
 }
 
 export interface AlertSettings {
@@ -56,6 +56,12 @@ export interface AlertSettings {
   soundEnabled: boolean;
   vibrationEnabled: boolean;
   pollInterval?: number;
+  // ✅ NEW: Reminder configuration
+  reminderConfig?: {
+    enabled: boolean;           // Enable/disable reminders
+    maxReminders: number;       // How many reminders (1-5)
+    intervalSeconds: number;    // Interval between reminders (10, 30, 60, 300)
+  };
   channelPreferences?: {
     critical: string;
     high: string;
@@ -64,11 +70,12 @@ export interface AlertSettings {
   };
 }
 
+// ✅ UPDATED: userId is now required
 export interface PushTokenRegistration {
+  userId: string;           // ✅ Changed from optional to required
   token: string;
   deviceType: string;
   settings?: AlertSettings;
-  userId?: string;
 }
 
 export interface DeviceInfo {
@@ -78,11 +85,12 @@ export interface DeviceInfo {
   registeredAt: string;
 }
 
-// Push Token Response Types
+// ✅ UPDATED: Added optional message field
 export type PushTokenRegistrationResponse = {
   success: boolean;
   deviceId: string;
   userId: string;
+  message?: string;         // ✅ Added to show "Other devices logged out" message
 };
 
 export type PushTokenStatusResponse = {
@@ -110,7 +118,7 @@ export type BackendHealthResponse = {
 };
 
 export type APIResponse<T> = {
-  httpStatus: string;   // keep number if that’s what your server returns
+  httpStatus: string;
   message: string;
   data: T;
 };

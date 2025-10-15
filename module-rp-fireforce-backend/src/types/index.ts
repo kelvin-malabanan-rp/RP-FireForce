@@ -407,8 +407,8 @@ export interface AuditDataForCSV {
 }
 
 /**
- * Flexible JSON structure for audit log details
- */
+* Details object stored in the details JSON field
+*/
 export interface AuditLogDetails {
 	[key: string]: any;
 }
@@ -421,10 +421,9 @@ export interface AuditLogPayload {
 	incidentId?: string | null;
 	userId?: string | null;
 	description?: string | null;
-	details?: AuditLogDetails;
-	oldValue?: Record<string, any> | null;
-	newValue?: Record<string, any> | null;
+	details?: AuditLogDetails | Record<string, any>;
 	metadata?: Record<string, any> | null;
+	// ❌ REMOVED: oldValue, newValue, ipAddress, userAgent - not in schema
 }
 
 /**
@@ -436,13 +435,12 @@ export interface AuditLogResponse {
 	user_id?: string | null;
 	action: string;
 	description?: string | null;
-	details?: AuditLogDetails;
-	old_value?: Record<string, any> | null;
-	new_value?: Record<string, any> | null;
+	details?: AuditLogDetails | Record<string, any>;
 	metadata?: Record<string, any> | null;
-	ip_address?: string | null;
-	user_agent?: string | null;
 	created_at: string;
+	// ❌ REMOVED: old_value, new_value, ip_address, user_agent - not in schema
+
+	// ✅ These come from JOIN with users table (optional)
 	first_name?: string;
 	last_name?: string;
 	email?: string;
@@ -451,7 +449,7 @@ export interface AuditLogResponse {
 /**
  * Filters for querying audit logs
  */
-export interface AuditFilters {
+export interface AuditLogFilters {
 	incidentId?: string;
 	userId?: string;
 	action?: string;
@@ -459,4 +457,26 @@ export interface AuditFilters {
 	endDate?: string;
 	limit?: number;
 	offset?: number;
+}
+
+/**
+ * Audit statistics response
+ */
+export interface AuditStatsResponse {
+	total_logs: number;
+	action_distribution: Array<{
+		action: string;
+		count: number;
+	}>;
+	top_users: Array<{
+		id: string;
+		first_name: string;
+		last_name: string;
+		email: string;
+		action_count: number;
+	}>;
+	period: {
+		start: string | null;
+		end: string | null;
+	};
 }

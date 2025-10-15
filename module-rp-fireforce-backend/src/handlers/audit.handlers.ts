@@ -42,10 +42,11 @@ export async function handleCreateAuditLog(
 
 		const { action, incidentId, userId, description, details, metadata } = body;
 
-		if (!action || !incidentId || !userId || !details) {
+		// ✅ Only action is required - everything else is optional
+		if (!action) {
 			const errorResponse: ApiResponse<null> = {
 				httpStatus: "ERROR",
-				message: "Missing required fields: action, incidentId, userId, and details are required",
+				message: "Missing required field: action",
 				data: null
 			};
 			return new Response(JSON.stringify(errorResponse), {
@@ -54,14 +55,21 @@ export async function handleCreateAuditLog(
 			});
 		}
 
+		// ✅ Build payload with optional fields, use 'system' as userId fallback
 		const auditPayload: AuditLogPayload = {
 			action,
-			incidentId,
-			userId,
-			description,
-			details,
-			metadata
+			incidentId: incidentId || null,
+			userId: userId || 'system',  // ✅ Use 'system' as fallback
+			description: description || '',
+			details: details || {},
+			metadata: metadata || {}
 		};
+
+		console.log('[audit-handler] Creating audit log:', {
+			action: auditPayload.action,
+			hasIncidentId: !!auditPayload.incidentId,
+			userId: auditPayload.userId
+		});
 
 		const auditService = new AuditService(env);
 		const result = await auditService.createAuditLog(auditPayload);
@@ -77,7 +85,7 @@ export async function handleCreateAuditLog(
 			headers: { ...corsHeaders, "Content-Type": "application/json" }
 		});
 	} catch (error: any) {
-		console.error("Error creating audit log:", error);
+		console.error('[audit-handler] Error creating audit log:', error);
 
 		const errorResponse: ApiResponse<null> = {
 			httpStatus: "ERROR",
@@ -132,7 +140,7 @@ export async function handleGetIncidentAuditTrail(
 			}
 		);
 	} catch (error) {
-		console.error('Error in handleGetIncidentAuditTrail:', error);
+		console.error('[audit-handler] Error in handleGetIncidentAuditTrail:', error);
 		return new Response(
 			JSON.stringify({
 				error: 'Failed to retrieve audit trail',
@@ -164,8 +172,8 @@ export async function handleGetAuditLogs(
 				u.first_name || ' ' || u.last_name as user_name,
 				i.title as incident_title
 			FROM audit_log al
-			LEFT JOIN users u ON al.user_id = u.id
-			LEFT JOIN incidents i ON al.incident_id = i.id
+					 LEFT JOIN users u ON al.user_id = u.id
+					 LEFT JOIN incidents i ON al.incident_id = i.id
 		`;
 
 		const params: any[] = [];
@@ -188,6 +196,7 @@ export async function handleGetAuditLogs(
 			action: row.action,
 			description: row.description,
 			details: row.details ? JSON.parse(row.details) : null,
+			metadata: row.metadata ? JSON.parse(row.metadata) : null, // ✅ Parse metadata too
 			incident_title: row.incident_title,
 			created_at: row.created_at
 		})) || [];
@@ -208,7 +217,7 @@ export async function handleGetAuditLogs(
 			headers: { ...corsHeaders, "Content-Type": "application/json" }
 		});
 	} catch (error: any) {
-		console.error("Error fetching audit logs:", error);
+		console.error('[audit-handler] Error fetching audit logs:', error);
 
 		const errorResponse: ApiResponse<null> = {
 			httpStatus: "ERROR",
@@ -250,7 +259,7 @@ export async function handleGetAuditStats(
 				action,
 				COUNT(*) as action_count
 			FROM audit_log
-			${whereClause}
+					 ${whereClause}
 			GROUP BY action
 		`;
 
@@ -278,7 +287,7 @@ export async function handleGetAuditStats(
 				unique_users: uniqueUsers,
 				unique_incidents: uniqueIncidents,
 				action_breakdown: actionBreakdown,
-				recent_activity_trend: 0 // Can be calculated based on time periods
+				recent_activity_trend: 0
 			}
 		};
 
@@ -287,7 +296,7 @@ export async function handleGetAuditStats(
 			headers: { ...corsHeaders, "Content-Type": "application/json" }
 		});
 	} catch (error: any) {
-		console.error("Error fetching audit stats:", error);
+		console.error('[audit-handler] Error fetching audit stats:', error);
 
 		const errorResponse: ApiResponse<null> = {
 			httpStatus: "ERROR",

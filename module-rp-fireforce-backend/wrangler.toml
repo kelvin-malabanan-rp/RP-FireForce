@@ -18,3 +18,6 @@ database_id = "c3c21ca1-204d-4db3-ab18-2cf69ec7418c"
 send_email = [
 	{type = "send_email", name = "EMAIL"}
 ]
+
+[triggers]
+crons = ["* * * * *"]  # Every 1 minute

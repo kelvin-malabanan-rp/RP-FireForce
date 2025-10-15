@@ -43,7 +43,7 @@ export class OnCallService {
 
 			return this.parseOnCallResults(results as any[]);
 		} catch (e) {
-			console.error('getCurrentOnCallByTeamId error:', e);
+			console.error('[oncall] getCurrentOnCallByTeamId error:', e);
 			return null;
 		}
 	}
@@ -56,7 +56,8 @@ export class OnCallService {
 			const sql = `
 				SELECT
 					oa.id, oa.schedule_id, oa.team_id,
-					oa.user_id, oa.role,
+					oa.user_id,
+					oa.role,
 					oa.start_time, oa.end_time,
 					u.email,
 					u.first_name || ' ' || u.last_name as fullname,
@@ -95,9 +96,10 @@ export class OnCallService {
 
 			results.forEach((row: any) => {
 				const member = {
-					userId: row.user_id,
+					userId: row.user_id,        // ✅ This should work - user_id from query
 					fullname: row.fullname,
 					email: row.email,
+					role: row.role,             // ✅ Add role to member object
 					teamId: row.team_id,
 					teamName: row.team_name,
 					timezone: row.timezone,
@@ -119,13 +121,29 @@ export class OnCallService {
 				}
 			});
 
+			// ✅ DEBUG: Log what we're returning
+			console.log('[oncall] getAllCurrentOnCall results:', {
+				primary: groupedByRole.primary.length,
+				backup: groupedByRole.backup.length,
+				escalation: groupedByRole.escalation.length
+			});
+
+			if (groupedByRole.primary.length > 0) {
+				console.log('[oncall] Sample PRIMARY user:', {
+					userId: groupedByRole.primary[0].userId,
+					email: groupedByRole.primary[0].email,
+					role: groupedByRole.primary[0].role
+				});
+			}
+
 			return groupedByRole;
 		} catch (e) {
-			console.error('getAllCurrentOnCall error:', e);
+			console.error('[oncall] getAllCurrentOnCall error:', e);
 			return null;
 		}
 	}
 
+	// ✅ FIXED: Emergency override now returns userId correctly
 	async usersForEmergencyOverride(emails: string[]): Promise<any[]> {
 		try {
 			if (!emails || emails.length === 0) {
@@ -157,8 +175,10 @@ export class OnCallService {
 
 			const { results } = await this.dbService.db.prepare(sql).bind(...emails).all();
 
-			return (results || []).map((row: any) => ({
+			// ✅ Map to include both id and userId for compatibility
+			const mappedResults = (results || []).map((row: any) => ({
 				id: row.id,
+				userId: row.id,              // ✅ CRITICAL: Add userId field
 				email: row.email,
 				firstName: row.first_name,
 				lastName: row.last_name,
@@ -169,15 +189,27 @@ export class OnCallService {
 				fcmToken: row.fcm_token || null,
 				deviceType: row.device_type || null,
 			}));
+
+			// ✅ DEBUG: Log what we're returning
+			console.log('[oncall] usersForEmergencyOverride results:', mappedResults.length);
+			if (mappedResults.length > 0) {
+				console.log('[oncall] Sample emergency user:', {
+					userId: mappedResults[0].userId,
+					email: mappedResults[0].email,
+					hasPushToken: !!mappedResults[0].pushToken
+				});
+			}
+
+			return mappedResults;
 		} catch (error) {
-			console.error('Error fetching users with push tokens:', error);
+			console.error('[oncall] Error fetching users with push tokens:', error);
 			throw error;
 		}
 	}
 
 	async getUserTeam(userId: string): Promise<OnCallTeamOfUser | null> {
 		try {
-			console.log('Fetching team for user:', userId);
+			console.log('[oncall] Fetching team for user:', userId);
 
 			const query = `
 				SELECT
@@ -196,7 +228,7 @@ export class OnCallService {
 			const result = await this.dbService.db.prepare(query).bind(userId).first();
 
 			if (!result) {
-				console.log('No team found for user:', userId);
+				console.log('[oncall] No team found for user:', userId);
 				return null;
 			}
 
@@ -208,10 +240,10 @@ export class OnCallService {
 				email: result.email as string,
 			};
 
-			console.log('Found team:', team.name, 'for user:', userId);
+			console.log('[oncall] Found team:', team.name, 'for user:', userId);
 			return team;
 		} catch (error) {
-			console.error('Error fetching user team:', error);
+			console.error('[oncall] Error fetching user team:', error);
 			throw error;
 		}
 	}
@@ -393,7 +425,7 @@ export class OnCallService {
 		role: 'primary' | 'backup',
 		scheduleId: string | null,
 		originalUserId: string | null,
-		overrideUserId: string,        // this will go into replacement_user_id
+		overrideUserId: string,
 		start: Date,
 		end: Date,
 		reason: string,
@@ -401,8 +433,6 @@ export class OnCallService {
 	): Promise<string> {
 		const id = crypto.randomUUID();
 
-		// status defaults to 'active' per your schema, but you can pass it explicitly
-		// services/oncall.service.ts (createOverride)
 		await this.dbService.db.prepare(`
 			INSERT INTO oncall_overrides
 			(id, team_id, schedule_id, original_user_id, replacement_user_id,
@@ -413,7 +443,7 @@ export class OnCallService {
 			teamId,
 			scheduleId,
 			originalUserId ?? null,
-			overrideUserId,               // ✅ replacement_user_id
+			overrideUserId,
 			start.toISOString(),
 			end.toISOString(),
 			role,
@@ -421,10 +451,8 @@ export class OnCallService {
 			createdBy ?? 'system'
 		).run();
 
-
 		return id;
 	}
-
 
 	async getEscalationPolicy(teamId: string): Promise<any> {
 		const row = await this.dbService.db
@@ -470,7 +498,7 @@ export class OnCallService {
 		incidentId: string;
 		reason: string;
 		priority: 'low' | 'medium' | 'high' | 'critical';
-		currentLevel?: number; // ✅ Make optional with default
+		currentLevel?: number;
 	}) {
 		try {
 			const now = new Date().toISOString();
@@ -480,25 +508,24 @@ export class OnCallService {
 
 			// 1) next escalation target
 			let target = await this.dbService.db.prepare(`
-            SELECT ec.level, ec.user_id, u.email, u.first_name, u.last_name, u.phone_number
-            FROM escalation_chains ec
-            JOIN users u ON ec.user_id = u.id
-            WHERE ec.team_id = ? AND ec.level > ? AND ec.is_active = 1
-            ORDER BY ec.level
-            LIMIT 1
-        `).bind(args.teamId, currentLevel).first();
+				SELECT ec.level, ec.user_id, u.email, u.first_name, u.last_name, u.phone_number
+				FROM escalation_chains ec
+				JOIN users u ON ec.user_id = u.id
+				WHERE ec.team_id = ? AND ec.level > ? AND ec.is_active = 1
+				ORDER BY ec.level
+				LIMIT 1
+			`).bind(args.teamId, currentLevel).first();
 
 			if (!target) {
 				console.log(`[oncall] No escalation chain found, trying team lead for team ${args.teamId}`);
 
-				// try team lead/manager
 				const lead = await this.dbService.db.prepare(`
-                SELECT u.id as user_id, u.email, u.first_name, u.last_name, u.phone_number
-                FROM team_members tm
-                JOIN users u ON tm.user_id = u.id
-                WHERE tm.team_id = ? AND tm.role IN ('lead','manager') AND tm.is_active = 1
-                LIMIT 1
-            `).bind(args.teamId).first();
+					SELECT u.id as user_id, u.email, u.first_name, u.last_name, u.phone_number
+					FROM team_members tm
+					JOIN users u ON tm.user_id = u.id
+					WHERE tm.team_id = ? AND tm.role IN ('lead','manager') AND tm.is_active = 1
+					LIMIT 1
+				`).bind(args.teamId).first();
 
 				if (!lead) {
 					console.log(`[oncall] No team lead found, falling back to current on-call for team ${args.teamId}`);
@@ -530,10 +557,10 @@ export class OnCallService {
 			// 2) write escalation record
 			const escId = crypto.randomUUID();
 			await this.dbService.db.prepare(`
-            INSERT INTO incident_escalations
-            (id, incident_id, team_id, escalated_to_user_id, escalation_level, reason, priority, created_at, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active')
-        `).bind(
+				INSERT INTO incident_escalations
+				(id, incident_id, team_id, escalated_to_user_id, escalation_level, reason, priority, created_at, status)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active')
+			`).bind(
 				escId, args.incidentId, args.teamId, (target as any).user_id,
 				(target as any).level, args.reason, args.priority, now
 			).run();
@@ -542,37 +569,54 @@ export class OnCallService {
 
 			// 3) update incident
 			await this.dbService.db.prepare(`
-            UPDATE incidents
-            SET escalation_level = ?,
-                updated_at = ?,
-                priority = CASE
-                    WHEN ? = 'critical' THEN 'critical'
-                    WHEN priority = 'critical' THEN 'critical'
-                    ELSE ?
-                END
-            WHERE id = ?
-        `).bind(
+				UPDATE incidents
+				SET escalation_level = ?,
+					updated_at = ?,
+					priority = CASE
+						WHEN ? = 'critical' THEN 'critical'
+						WHEN priority = 'critical' THEN 'critical'
+						ELSE ?
+					END
+				WHERE id = ?
+			`).bind(
 				(target as any).level, now, args.priority, args.priority, args.incidentId
 			).run();
 
 			console.log(`[oncall] Updated incident ${args.incidentId}`);
 
-			// ✅ REMOVED: Don't fetch escalation policy at all
+			// ✅ Get push token for escalated user
+			const userWithToken = await this.dbService.db.prepare(`
+				SELECT
+					u.id as userId,
+					u.email,
+					u.first_name || ' ' || u.last_name as fullname,
+					pt.token as pushToken,
+					pt.fcm_token as fcmToken
+				FROM users u
+				LEFT JOIN push_token_user_assoc pta ON u.id = pta.user_id
+				LEFT JOIN push_tokens pt ON pta.push_token_id = pt.id AND pt.is_active = 1
+				WHERE u.id = ?
+			`).bind((target as any).user_id).first();
+
 			const result = {
-				id: escId,
-				incidentId: args.incidentId,
-				teamId: args.teamId,
-				escalatedTo: {
-					userId: (target as any).user_id,
-					email: (target as any).email,
-					name: `${(target as any).first_name} ${(target as any).last_name}`,
-					level: (target as any).level
+				success: true,
+				object: {
+					id: escId,
+					incidentId: args.incidentId,
+					teamId: args.teamId,
+					escalatedToLevel: (target as any).level,
+					notifiedUsers: [{
+						userId: (target as any).user_id,
+						email: (target as any).email,
+						fullname: `${(target as any).first_name} ${(target as any).last_name}`,
+						pushToken: (userWithToken as any)?.pushToken || null,
+						fcmToken: (userWithToken as any)?.fcmToken || null,
+					}]
 				},
 				reason: args.reason,
 				priority: args.priority,
 				timestamp: now,
 				status: 'active',
-				// ✅ REMOVED: escalationPolicy field
 			};
 
 			console.log(`[oncall] ✅ Escalation completed successfully`);
@@ -586,9 +630,6 @@ export class OnCallService {
 
 	// ---------------- NEW: Manage Schedule ----------------
 
-	/**
-	 * Return rotation config + team members for Manage Schedule screen
-	 */
 	async getScheduleConfig(teamId: string): Promise<{
 		teamId: string;
 		schedule: {
@@ -599,7 +640,6 @@ export class OnCallService {
 		} | null;
 		members: Array<{ userId: string; firstName: string; lastName: string; role: string; orderIndex: number; isActive: boolean }>;
 	}> {
-		// 1) get active schedule
 		const scheduleRow = await this.dbService.db
 			.prepare(
 				`SELECT id, rotation_type, rotation_length_hours, rotation_start
@@ -611,7 +651,6 @@ export class OnCallService {
 			.bind(teamId)
 			.first();
 
-		// 2) get team members
 		const { results: memberRows } = await this.dbService.db
 			.prepare(
 				`SELECT
@@ -654,9 +693,6 @@ export class OnCallService {
 		};
 	}
 
-	/**
-	 * Update schedule rotation + member list
-	 */
 	async updateScheduleConfig(args: {
 		teamId: string;
 		rotationType: 'daily' | 'weekly' | 'biweekly' | 'monthly';
@@ -666,7 +702,6 @@ export class OnCallService {
 	}): Promise<void> {
 		const { teamId, rotationType, rotationLengthHours, rotationStartISO, members } = args;
 
-		// 1) upsert schedule (replace active schedule)
 		const scheduleId = crypto.randomUUID();
 		await this.dbService.db
 			.prepare(
@@ -684,13 +719,11 @@ export class OnCallService {
 			)
 			.run();
 
-		// Optionally deactivate older schedules
 		await this.dbService.db
 			.prepare(`UPDATE oncall_schedules SET is_active = 0 WHERE team_id = ? AND id != ?`)
 			.bind(teamId, scheduleId)
 			.run();
 
-		// 2) replace team members for this team
 		await this.dbService.db
 			.prepare(`DELETE FROM oncall_team_members WHERE team_id = ?`)
 			.bind(teamId)
@@ -753,14 +786,13 @@ export class OnCallService {
 					email: user.email
 				});
 
-				// Log the all-clear notification
 				await this.dbService.db.prepare(`
 					INSERT INTO incident_notifications
 						(id, incident_id, user_id, notification_type, sent_at)
 					VALUES (?, ?, ?, 'all_clear', CURRENT_TIMESTAMP)
 				`).bind(crypto.randomUUID(), incidentId, user.userId).run();
 			} catch (error) {
-				console.error(`Failed to send all-clear to ${user.email}:`, error);
+				console.error(`[oncall] Failed to send all-clear to ${user.email}:`, error);
 			}
 		}
 
@@ -770,16 +802,12 @@ export class OnCallService {
 		};
 	}
 
-	/**
-	 * After config updates, regenerate current assignment window
-	 */
 	async refreshCurrentAssignments(teamId: string): Promise<void> {
 		const current = await this.generateCurrentAssignment(teamId);
 		if (!current) {
-			console.warn('No current assignment generated for team', teamId);
+			console.warn('[oncall] No current assignment generated for team', teamId);
 		}
 	}
-
 
 	async sendNotification(alert: any, userId: string, type: string, env: Env) {
 		const user = await this.dbService.db
@@ -789,16 +817,14 @@ export class OnCallService {
 
 		if (!user) return;
 
-		// Send email notification
 		try {
 			const emailService = new EmailService(env);
 			await emailService.sendIncidentAlert(alert, (user as any).email);
-			console.log(`Notification sent to ${(user as any).email}`);
+			console.log(`[oncall] Notification sent to ${(user as any).email}`);
 		} catch (error) {
-			console.error(`Failed to send notification to ${(user as any).email}:`, error);
+			console.error(`[oncall] Failed to send notification to ${(user as any).email}:`, error);
 		}
 
-		// Track notification in database
 		const notificationId = crypto.randomUUID();
 		await this.dbService.db.prepare(`
 			INSERT INTO notifications (id, alert_id, user_id, type, status)
@@ -806,9 +832,6 @@ export class OnCallService {
 		`).bind(notificationId, alert.id, userId, type).run();
 	}
 
-	/**
-	 * Create a new on-call schedule
-	 */
 	async createSchedule(params: {
 		teamId: string;
 		name: string;
@@ -825,10 +848,8 @@ export class OnCallService {
 		try {
 			const { teamId, name, rotationType, rotationLengthHours, rotationStartISO, members } = params;
 
-			// Generate schedule ID
 			const scheduleId = crypto.randomUUID();
 
-			// Create schedule record
 			await this.dbService.db.prepare(`
 				INSERT INTO oncall_schedules
 				(id, team_id, name, rotation_type, rotation_start, rotation_length_hours, is_active, created_at, updated_at)
@@ -842,14 +863,12 @@ export class OnCallService {
 				rotationLengthHours
 			).run();
 
-			// Deactivate other schedules for this team (only one active at a time)
 			await this.dbService.db.prepare(`
 				UPDATE oncall_schedules
 				SET is_active = 0
 				WHERE team_id = ? AND id != ?
 			`).bind(teamId, scheduleId).run();
 
-			// Add team members
 			for (const member of members) {
 				const memberId = crypto.randomUUID();
 				await this.dbService.db.prepare(`
@@ -866,21 +885,18 @@ export class OnCallService {
 				).run();
 			}
 
-			console.log('[oncall-service] ✅ Schedule created:', scheduleId);
+			console.log('[oncall] ✅ Schedule created:', scheduleId);
 
 			return {
 				scheduleId,
 				memberCount: members.length
 			};
 		} catch (error) {
-			console.error('[oncall-service] Error creating schedule:', error);
+			console.error('[oncall] Error creating schedule:', error);
 			throw error;
 		}
 	}
 
-	/**
-	 * Deactivate a schedule
-	 */
 	async deleteSchedule(scheduleId: string): Promise<void> {
 		try {
 			await this.dbService.db.prepare(`
@@ -889,16 +905,13 @@ export class OnCallService {
 				WHERE id = ?
 			`).bind(scheduleId).run();
 
-			console.log('[oncall-service] ✅ Schedule deactivated:', scheduleId);
+			console.log('[oncall] ✅ Schedule deactivated:', scheduleId);
 		} catch (error) {
-			console.error('[oncall-service] Error deactivating schedule:', error);
+			console.error('[oncall] Error deactivating schedule:', error);
 			throw error;
 		}
 	}
 
-	/**
-	 * Get all schedules with optional filters
-	 */
 	async getAllSchedules(params?: {
 		teamId?: string;
 		includeInactive?: boolean;
@@ -933,24 +946,19 @@ export class OnCallService {
 
 			return results as any[];
 		} catch (error) {
-			console.error('[oncall-service] Error getting all schedules:', error);
+			console.error('[oncall] Error getting all schedules:', error);
 			throw error;
 		}
 	}
 
-	/**
-	 * Get calendar data for teams
-	 */
 	async getCalendarData(days: number = 30, teamId?: string): Promise<any[]> {
 		try {
-			// Get all teams or specific team
 			const teams = await this.getOnCallTeams();
 
 			const filteredTeams = teamId
 				? teams.filter(t => t.id === teamId)
 				: teams;
 
-			// Build calendar data for each team
 			const calendarData = await Promise.all(
 				filteredTeams.map(async (team) => {
 					const schedule = await this.getOnCallSchedule(team.id, days);
@@ -968,14 +976,11 @@ export class OnCallService {
 
 			return calendarData;
 		} catch (error) {
-			console.error('[oncall-service] Error building calendar data:', error);
+			console.error('[oncall] Error building calendar data:', error);
 			throw error;
 		}
 	}
 
-	/**
-	 * Update an existing on-call schedule
-	 */
 	async updateSchedule(params: {
 		scheduleId: string;
 		name?: string;
@@ -993,7 +998,6 @@ export class OnCallService {
 		try {
 			const { scheduleId, name, rotationType, rotationLengthHours, rotationStartISO, isActive, members } = params;
 
-			// Build dynamic update query
 			const updates: string[] = [];
 			const queryParams: any[] = [];
 
@@ -1022,11 +1026,9 @@ export class OnCallService {
 				queryParams.push(isActive ? 1 : 0);
 			}
 
-			// Always update the updated_at timestamp
 			updates.push('updated_at = CURRENT_TIMESTAMP');
 
-			// Update schedule if there are changes
-			if (updates.length > 1) { // More than just updated_at
+			if (updates.length > 1) {
 				queryParams.push(scheduleId);
 
 				const sql = `
@@ -1036,12 +1038,10 @@ export class OnCallService {
 				`;
 
 				await this.dbService.db.prepare(sql).bind(...queryParams).run();
-				console.log('[oncall-service] ✅ Schedule updated:', scheduleId);
+				console.log('[oncall] ✅ Schedule updated:', scheduleId);
 			}
 
-			// Update members if provided
 			if (members && Array.isArray(members)) {
-				// Get team_id from schedule
 				const schedule = await this.dbService.db.prepare(
 					'SELECT team_id FROM oncall_schedules WHERE id = ?'
 				).bind(scheduleId).first();
@@ -1052,12 +1052,10 @@ export class OnCallService {
 
 				const teamId = (schedule as any).team_id;
 
-				// Delete existing members for this team
 				await this.dbService.db.prepare(
 					'DELETE FROM oncall_team_members WHERE team_id = ?'
 				).bind(teamId).run();
 
-				// Insert new members
 				for (const member of members) {
 					const memberId = crypto.randomUUID();
 					await this.dbService.db.prepare(`
@@ -1074,14 +1072,12 @@ export class OnCallService {
 					).run();
 				}
 
-				console.log('[oncall-service] ✅ Team members updated:', members.length);
-
-				// Refresh current assignments after member changes
+				console.log('[oncall] ✅ Team members updated:', members.length);
 				await this.refreshCurrentAssignments(teamId);
 			}
 
 		} catch (error) {
-			console.error('[oncall-service] Error updating schedule:', error);
+			console.error('[oncall] Error updating schedule:', error);
 			throw error;
 		}
 	}

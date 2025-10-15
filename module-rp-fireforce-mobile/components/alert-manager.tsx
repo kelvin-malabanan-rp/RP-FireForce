@@ -27,6 +27,7 @@ import {
 } from "@/constants/local-storage";
 import { FONT_FAMILY } from '@/constants/fonts';
 import {Ionicons} from "@expo/vector-icons";
+import {Picker} from '@react-native-picker/picker'; // ✅ NEW IMPORT
 
 interface AlertManagerProps {
     style?: any;
@@ -38,6 +39,12 @@ const AlertManager: React.FC<AlertManagerProps> = ({ style }) => {
         criticalOnly: false,
         soundEnabled: true,
         vibrationEnabled: true,
+        // ✅ NEW: Default reminder settings
+        reminderConfig: {
+            enabled: true,
+            maxReminders: 3,
+            intervalSeconds: 10
+        }
     });
     const [showSettings, setShowSettings] = useState(false);
     const [pushToken, setPushToken] = useState<string | null>(null);
@@ -55,7 +62,15 @@ const AlertManager: React.FC<AlertManagerProps> = ({ style }) => {
             // Load saved settings
             const savedSettings = await retrieveAlertSettings();
             if (savedSettings) {
-                setSettings(savedSettings);
+                // ✅ Ensure reminderConfig exists with defaults
+                setSettings({
+                    ...savedSettings,
+                    reminderConfig: savedSettings.reminderConfig || {
+                        enabled: true,
+                        maxReminders: 3,
+                        intervalSeconds: 10
+                    }
+                });
             }
 
             // Load saved registration status
@@ -134,19 +149,19 @@ const AlertManager: React.FC<AlertManagerProps> = ({ style }) => {
                     console.error('No user session found. User must be logged in to register push token.');
                     setRegistrationStatus('failed');
                     await storeRegistrationStatus('failed');
-                    return;  // ← Changed from 'return null' since function returns Promise<void>
+                    return;
                 }
 
                 console.log('Registering push token for user:', retrieveUser.id);
 
-                // Register token with backend using alert-controller
+                // ✅ Register token with reminder config included
                 try {
                     const response = await registerPushToken({
                         userId: retrieveUser.id,
                         token: token.data,
                         deviceType: Platform.OS,
                         fcmToken: Platform.OS === 'android' && platformToken ? (platformToken as any).data : undefined,
-                        settings
+                        settings // ✅ Now includes reminderConfig
                     });
 
                     if (response.httpStatus === 'OK' || response.data.success) {
@@ -205,7 +220,17 @@ const AlertManager: React.FC<AlertManagerProps> = ({ style }) => {
             await storePushToken(token);
             console.log('Got new token:', token.substring(0, 30) + '...');
 
+            const retrieveUser = await retrieveUserSession();
+
+            if (!retrieveUser || !retrieveUser.id) {
+                console.error('No user session found');
+                setRegistrationStatus('failed');
+                await storeRegistrationStatus('failed');
+                return;
+            }
+
             const response = await registerPushToken({
+                userId: retrieveUser.id,
                 token,
                 deviceType: Platform.OS,
                 settings
@@ -243,9 +268,11 @@ const AlertManager: React.FC<AlertManagerProps> = ({ style }) => {
             }),
         });
 
-        // Update backend with new settings
-        if (pushToken) {
+        // ✅ Update backend with new settings (including reminder config)
+        const retrieveUser = await retrieveUserSession();
+        if (pushToken && retrieveUser?.id) {
             registerPushToken({
+                userId: retrieveUser.id,
                 token: pushToken,
                 deviceType: Platform.OS,
                 settings: updatedSettings
@@ -305,6 +332,13 @@ const AlertManager: React.FC<AlertManagerProps> = ({ style }) => {
             case 'undetermined': return 'Not requested';
             default: return 'Unknown';
         }
+    };
+
+    // ✅ Helper function to format interval text
+    const getIntervalText = (seconds: number): string => {
+        if (seconds < 60) return `${seconds} seconds`;
+        const minutes = seconds / 60;
+        return minutes === 1 ? '1 minute' : `${minutes} minutes`;
     };
 
     return (
@@ -386,7 +420,7 @@ const AlertManager: React.FC<AlertManagerProps> = ({ style }) => {
                     <Switch
                         value={settings.enableAlerts}
                         onValueChange={(value) => updateSettings({ enableAlerts: value })}
-                         trackColor={{ false: '#475569', true: '#F97316' }}
+                        trackColor={{ false: '#475569', true: '#F97316' }}
                         thumbColor="#FFFFFF"
                     />
                 </View>
@@ -398,7 +432,7 @@ const AlertManager: React.FC<AlertManagerProps> = ({ style }) => {
                             <Switch
                                 value={settings.criticalOnly}
                                 onValueChange={(value) => updateSettings({ criticalOnly: value })}
-                                 trackColor={{ false: '#475569', true: '#F97316' }}
+                                trackColor={{ false: '#475569', true: '#F97316' }}
                                 thumbColor="#FFFFFF"
                             />
                         </View>
@@ -408,7 +442,7 @@ const AlertManager: React.FC<AlertManagerProps> = ({ style }) => {
                             <Switch
                                 value={settings.soundEnabled}
                                 onValueChange={(value) => updateSettings({ soundEnabled: value })}
-                                 trackColor={{ false: '#475569', true: '#F97316' }}
+                                trackColor={{ false: '#475569', true: '#F97316' }}
                                 thumbColor="#FFFFFF"
                             />
                         </View>
@@ -418,10 +452,94 @@ const AlertManager: React.FC<AlertManagerProps> = ({ style }) => {
                             <Switch
                                 value={settings.vibrationEnabled}
                                 onValueChange={(value) => updateSettings({ vibrationEnabled: value })}
-                                 trackColor={{ false: '#475569', true: '#F97316' }}
+                                trackColor={{ false: '#475569', true: '#F97316' }}
                                 thumbColor="#FFFFFF"
                             />
                         </View>
+
+                        {/* ✅ NEW: Reminder Settings Section */}
+                        <View style={styles.sectionDivider} />
+
+                        <View style={styles.sectionHeader}>
+                            <Ionicons name="alarm-outline" size={16} color="#F97316" />
+                            <Text style={styles.sectionHeaderText}>Auto-Reminders</Text>
+                        </View>
+
+                        <View style={styles.switchRow}>
+                            <Text style={styles.switchLabel}>Enable Reminders</Text>
+                            <Switch
+                                value={settings.reminderConfig?.enabled ?? true}
+                                onValueChange={(value) => updateSettings({
+                                    reminderConfig: {
+                                        ...settings.reminderConfig!,
+                                        enabled: value
+                                    }
+                                })}
+                                trackColor={{ false: '#475569', true: '#F97316' }}
+                                thumbColor="#FFFFFF"
+                            />
+                        </View>
+
+                        {settings.reminderConfig?.enabled && (
+                            <>
+                                {/* Number of Reminders */}
+                                <View style={styles.pickerRow}>
+                                    <Text style={styles.pickerLabel}>Reminders</Text>
+                                    <View style={styles.pickerContainer}>
+                                        <Picker
+                                            selectedValue={settings.reminderConfig?.maxReminders ?? 3}
+                                            onValueChange={(value) => updateSettings({
+                                                reminderConfig: {
+                                                    ...settings.reminderConfig!,
+                                                    maxReminders: value
+                                                }
+                                            })}
+                                            style={styles.picker}
+                                            dropdownIconColor="#F97316"
+                                        >
+                                            <Picker.Item label="1 reminder" value={1} />
+                                            <Picker.Item label="2 reminders" value={2} />
+                                            <Picker.Item label="3 reminders" value={3} />
+                                            <Picker.Item label="4 reminders" value={4} />
+                                            <Picker.Item label="5 reminders" value={5} />
+                                        </Picker>
+                                    </View>
+                                </View>
+
+                                {/* Reminder Interval */}
+                                <View style={styles.pickerRow}>
+                                    <Text style={styles.pickerLabel}>Interval</Text>
+                                    <View style={styles.pickerContainer}>
+                                        <Picker
+                                            selectedValue={settings.reminderConfig?.intervalSeconds ?? 10}
+                                            onValueChange={(value) => updateSettings({
+                                                reminderConfig: {
+                                                    ...settings.reminderConfig!,
+                                                    intervalSeconds: value
+                                                }
+                                            })}
+                                            style={styles.picker}
+                                            dropdownIconColor="#F97316"
+                                        >
+                                            <Picker.Item label="10 seconds" value={10} />
+                                            <Picker.Item label="30 seconds" value={30} />
+                                            <Picker.Item label="1 minute" value={60} />
+                                            <Picker.Item label="5 minutes" value={300} />
+                                            <Picker.Item label="10 minutes" value={600} />
+                                        </Picker>
+                                    </View>
+                                </View>
+
+                                {/* Info Box */}
+                                <View style={styles.infoBox}>
+                                    <Ionicons name="information-circle-outline" size={16} color="#F97316" />
+                                    <Text style={styles.infoBoxText}>
+                                        You'll receive {settings.reminderConfig?.maxReminders} reminder(s)
+                                        every {getIntervalText(settings.reminderConfig?.intervalSeconds ?? 10)} if you don't acknowledge the incident.
+                                    </Text>
+                                </View>
+                            </>
+                        )}
                     </>
                 )}
             </View>
@@ -445,6 +563,9 @@ const AlertManager: React.FC<AlertManagerProps> = ({ style }) => {
                     >
                         <View style={styles.modalHeader}>
                             <Text style={styles.modalTitle}>Alert Settings</Text>
+                            <TouchableOpacity onPress={() => setShowSettings(false)}>
+                                <Ionicons name="close" size={24} color="#FFFFFF" />
+                            </TouchableOpacity>
                         </View>
 
                         <ScrollView>
@@ -469,6 +590,16 @@ const AlertManager: React.FC<AlertManagerProps> = ({ style }) => {
                                     <Text style={styles.infoLabel}>Platform:</Text>
                                     <Text style={styles.infoValue}>{Platform.OS}</Text>
                                 </View>
+
+                                {/* ✅ NEW: Show reminder config */}
+                                <View style={styles.infoRow}>
+                                    <Text style={styles.infoLabel}>Reminders:</Text>
+                                    <Text style={styles.infoValue}>
+                                        {settings.reminderConfig?.enabled
+                                            ? `${settings.reminderConfig.maxReminders}x every ${getIntervalText(settings.reminderConfig.intervalSeconds)}`
+                                            : 'Disabled'}
+                                    </Text>
+                                </View>
                             </View>
 
                             <View style={styles.settingSection}>
@@ -480,6 +611,14 @@ const AlertManager: React.FC<AlertManagerProps> = ({ style }) => {
                                 <Text style={styles.helpText}>
                                     Critical incidents will always use high priority notifications with sound and vibration (if enabled).
                                 </Text>
+
+                                {/* ✅ NEW: Reminder explanation */}
+                                {settings.reminderConfig?.enabled && (
+                                    <Text style={styles.helpText}>
+                                        If you don't acknowledge an incident, you'll receive {settings.reminderConfig.maxReminders} automatic
+                                        reminder(s) at {getIntervalText(settings.reminderConfig.intervalSeconds)} intervals.
+                                    </Text>
+                                )}
                             </View>
 
                             <View style={styles.settingSection}>
@@ -567,33 +706,15 @@ const styles = StyleSheet.create({
         flex: 1,
         fontFamily: FONT_FAMILY.POPPINS_MEDIUM,
     },
-    enableButtonWrapper: {
-        borderRadius: 6,
-        overflow: 'hidden',
-    },
-    enableButton: {
-        paddingHorizontal: 12,
-        paddingVertical: 4,
-        borderRadius: 6,
-    },
-    enableButtonText: {
-        color: '#FFFFFF',
-        fontSize: 12,
-        fontWeight: '600',
-        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
-    },
     refreshButton: {
         padding: 4,
         marginLeft: 8,
-    },
-    retryButtonWrapper: {
-        borderRadius: 4,
-        overflow: 'hidden',
     },
     retryButton: {
         paddingHorizontal: 8,
         paddingVertical: 4,
         borderRadius: 4,
+        backgroundColor: '#F97316',
     },
     retryButtonText: {
         color: '#FFFFFF',
@@ -618,25 +739,70 @@ const styles = StyleSheet.create({
         fontWeight: '500',
         fontFamily: FONT_FAMILY.POPPINS_MEDIUM,
     },
-    testButtonWrapper: {
-        borderRadius: 8,
-        overflow: 'hidden',
-        marginTop: 8,
+    // ✅ NEW STYLES for reminder configuration
+    sectionDivider: {
+        height: 1,
+        backgroundColor: '#F97316',
+        marginVertical: 16,
+        opacity: 0.3,
     },
-    testButton: {
+    sectionHeader: {
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 12,
-        paddingHorizontal: 16,
-        borderRadius: 8,
         gap: 8,
+        marginBottom: 12,
     },
-    testButtonText: {
-        color: '#FFFFFF',
+    sectionHeaderText: {
         fontSize: 14,
         fontWeight: '600',
+        color: '#F97316',
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
+    },
+    pickerRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: '#334155',
+    },
+    pickerLabel: {
+        fontSize: 16,
+        color: '#FFFFFF',
+        fontWeight: '500',
+        fontFamily: FONT_FAMILY.POPPINS_MEDIUM,
+    },
+    pickerContainer: {
+        backgroundColor: 'rgba(15, 23, 42, 0.8)',
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#475569',
+        minWidth: 150,
+        overflow: 'hidden',
+    },
+    picker: {
+        color: '#FFFFFF',
+        height: 50,
+    },
+    infoBox: {
+        flexDirection: 'row',
+        backgroundColor: 'rgba(249, 115, 22, 0.1)',
+        borderWidth: 1,
+        borderColor: 'rgba(249, 115, 22, 0.3)',
+        borderRadius: 8,
+        padding: 12,
+        marginTop: 12,
+        gap: 8,
+        alignItems: 'flex-start',
+    },
+    infoBoxText: {
+        flex: 1,
+        color: '#FCD34D',
+        fontSize: 12,
+        lineHeight: 18,
+        fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     modalOverlay: {
         flex: 1,
@@ -655,6 +821,9 @@ const styles = StyleSheet.create({
         borderColor: '#334155',
     },
     modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
         marginBottom: 24,
         borderBottomWidth: 1,
         borderBottomColor: '#334155',
