@@ -199,28 +199,56 @@ export function OnCallPage() {
 
       const dateKey = formatDateKey(selectedDate);
       
+      // CRITICAL: Send ALL roles to prevent deletion
+      // Build complete assignments array including all roles
       const assignments = [];
       
+      // Always send primary (even if empty, to clear it)
       if (editData.primaryUser) {
         assignments.push({
           userId: editData.primaryUser,
           role: 'primary' as const,
           dates: [dateKey]
         });
+      } else if (selectedAssignment?.primary) {
+        // Keep existing primary if not changed
+        assignments.push({
+          userId: selectedAssignment.primary.id,
+          role: 'primary' as const,
+          dates: [dateKey]
+        });
       }
       
+      // Always send backup (even if empty, to clear it)
       if (editData.backupUser) {
         assignments.push({
           userId: editData.backupUser,
           role: 'backup' as const,
           dates: [dateKey]
         });
+      } else if (selectedAssignment?.backup) {
+        // Keep existing backup if not changed
+        assignments.push({
+          userId: selectedAssignment.backup.id,
+          role: 'backup' as const,
+          dates: [dateKey]
+        });
       }
       
+      // Handle escalation users
       if (editData.escalationUsers.length > 0) {
         editData.escalationUsers.forEach(userId => {
           assignments.push({
             userId: userId,
+            role: 'escalation' as const,
+            dates: [dateKey]
+          });
+        });
+      } else if (selectedAssignment?.escalation && selectedAssignment.escalation.length > 0) {
+        // Keep existing escalation if not changed
+        selectedAssignment.escalation.forEach(person => {
+          assignments.push({
+            userId: person.id,
             role: 'escalation' as const,
             dates: [dateKey]
           });
@@ -235,14 +263,22 @@ export function OnCallPage() {
       };
 
       console.log('📝 Updating schedule with all roles:', payload);
+      console.log('📝 Assignments being sent:', assignments);
 
       const result = await onCallService.updateSchedule(payload);
+
+      console.log('✅ Update result:', result);
 
       if (result.success) {
         setModalMessage('Schedule updated successfully!');
         setIsSuccessModalOpen(true);
         closeModals();
+        
+        // Wait a bit before reloading to ensure backend has processed
+        await new Promise(resolve => setTimeout(resolve, 500));
         await loadData();
+        
+        console.log('🔄 Data reloaded after update');
       } else {
         throw new Error(result.message || 'Failed to update schedule');
       }
