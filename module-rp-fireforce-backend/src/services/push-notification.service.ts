@@ -634,27 +634,72 @@ export class PushNotificationService {
 				throw new Error("Database connection not available");
 			}
 
-			// ✅ Find and delete all existing tokens for this user
-			const existingTokens = await this.dbService.db.prepare(`
-				SELECT push_token_id FROM push_token_user_assoc WHERE user_id = ?
-			`).bind(userId).all();
+			console.log(`[push-token] 🔄 Starting registration for user: ${userId}`);
 
-			await this.dbService.db.prepare(`
-				DELETE FROM push_token_user_assoc WHERE user_id = ?
-			`).bind(userId).run();
+			// ✅ STEP 1: Find all existing tokens for this user
+			const existingAssociations = await this.dbService.db.prepare(`
+            SELECT push_token_id FROM push_token_user_assoc WHERE user_id = ?
+        `).bind(userId).all();
 
-			console.log(`[push-token] Removed ${existingTokens.results?.length || 0} existing associations for user: ${userId}`);
+			const tokenIdsToDelete = existingAssociations.results?.map((row: any) => row.push_token_id) || [];
 
-			if (existingTokens.results && existingTokens.results.length > 0) {
-				for (const row of existingTokens.results) {
-					await this.dbService.db.prepare(`
-						DELETE FROM push_tokens WHERE id = ?
-					`).bind(row.push_token_id).run();
+			// ✅ STEP 2: Delete all associations for this user
+			if (tokenIdsToDelete.length > 0) {
+				console.log(`[push-token] 🗑️ Removing ${tokenIdsToDelete.length} existing associations`);
+
+				await this.dbService.db.prepare(`
+                DELETE FROM push_token_user_assoc WHERE user_id = ?
+            `).bind(userId).run();
+
+				// ✅ STEP 3: Delete all old tokens
+				for (const tokenId of tokenIdsToDelete) {
+					try {
+						await this.dbService.db.prepare(`
+                        DELETE FROM push_tokens WHERE id = ?
+                    `).bind(tokenId).run();
+						console.log(`[push-token] 🗑️ Deleted token: ${tokenId}`);
+					} catch (error) {
+						console.warn(`[push-token] ⚠️ Failed to delete token ${tokenId}:`, error);
+					}
 				}
-				console.log(`[push-token] Removed ${existingTokens.results.length} old tokens for user: ${userId}`);
+
+				console.log(`[push-token] ✅ Cleaned up ${tokenIdsToDelete.length} old tokens`);
+			} else {
+				console.log(`[push-token] ℹ️ No existing tokens found for user`);
 			}
 
-			// ✅ Insert new push token with settings (includes reminderConfig)
+			// ✅ STEP 4: Also delete any token that matches this exact token value (safety cleanup)
+			// This handles edge cases where the same token might exist for other users
+			try {
+				const duplicateTokens = await this.dbService.db.prepare(`
+                SELECT id FROM push_tokens WHERE token = ?
+            `).bind(token).all();
+
+				if (duplicateTokens.results && duplicateTokens.results.length > 0) {
+					console.log(`[push-token] 🗑️ Found ${duplicateTokens.results.length} duplicate tokens with same value`);
+
+					for (const row of duplicateTokens.results) {
+						const tokenId = (row as any).id;
+
+						// Delete associations first
+						await this.dbService.db.prepare(`
+                        DELETE FROM push_token_user_assoc WHERE push_token_id = ?
+                    `).bind(tokenId).run();
+
+						// Then delete the token
+						await this.dbService.db.prepare(`
+                        DELETE FROM push_tokens WHERE id = ?
+                    `).bind(tokenId).run();
+
+						console.log(`[push-token] 🗑️ Removed duplicate token: ${tokenId}`);
+					}
+				}
+			} catch (error) {
+				console.warn(`[push-token] ⚠️ Error cleaning duplicate tokens:`, error);
+				// Continue anyway - this is just safety cleanup
+			}
+
+			// ✅ STEP 5: Prepare settings with reminder config
 			const settingsJson = JSON.stringify(settings || {
 				enableAlerts: true,
 				reminderConfig: {
@@ -664,11 +709,14 @@ export class PushNotificationService {
 				}
 			});
 
+			// ✅ STEP 6: Insert new push token
+			console.log(`[push-token] ➕ Creating new token: ${deviceId}`);
+
 			const tokenQuery = `
-				INSERT INTO push_tokens
-				(id, token, fcm_token, device_type, settings, is_active, created_at, updated_at)
-				VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-			`;
+            INSERT INTO push_tokens
+            (id, token, fcm_token, device_type, settings, is_active, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        `;
 
 			await this.dbService.db.prepare(tokenQuery).bind(
 				deviceId,
@@ -679,34 +727,53 @@ export class PushNotificationService {
 				1
 			).run();
 
-			// ✅ Create new association between user and token
+			console.log(`[push-token] ✅ Token created successfully`);
+
+			// ✅ STEP 7: Create new association between user and token
 			const assocQuery = `
-				INSERT INTO push_token_user_assoc
-				(push_token_id, user_id, created_at)
-				VALUES (?, ?, CURRENT_TIMESTAMP)
-			`;
+            INSERT INTO push_token_user_assoc
+            (push_token_id, user_id, created_at)
+            VALUES (?, ?, CURRENT_TIMESTAMP)
+        `;
 
 			await this.dbService.db.prepare(assocQuery).bind(
 				deviceId,
 				userId
 			).run();
 
-			console.log(`[push-token] ✅ Registered new token for user: ${userId}, Device: ${deviceId}, Type: ${deviceType}, FCM: ${!!fcmToken}`);
-			console.log(`[push-token] ⚠️ All other devices for this user have been logged out`);
+			console.log(`[push-token] ✅ Association created successfully`);
+
+			// ✅ STEP 8: Verify registration
+			const verifyQuery = await this.dbService.db.prepare(`
+            SELECT COUNT(*) as count
+            FROM push_token_user_assoc
+            WHERE user_id = ?
+        `).bind(userId).first();
+
+			const activeTokenCount = (verifyQuery as any)?.count || 0;
+
+			console.log(`[push-token] ✅ Registration complete for user: ${userId}`);
+			console.log(`[push-token] 📱 Device: ${deviceId}`);
+			console.log(`[push-token] 📲 Type: ${deviceType || 'unknown'}`);
+			console.log(`[push-token] 🔔 FCM: ${!!fcmToken ? 'Yes' : 'No'}`);
+			console.log(`[push-token] 🎯 Active tokens for this user: ${activeTokenCount}`);
 
 			// Log reminder config if present
 			if (settings?.reminderConfig) {
-				console.log(`[push-token] 📢 Reminder config: ${settings.reminderConfig.maxReminders}x every ${settings.reminderConfig.intervalSeconds}s (${settings.reminderConfig.enabled ? 'enabled' : 'disabled'})`);
+				console.log(`[push-token] ⏰ Reminders: ${settings.reminderConfig.maxReminders}x every ${settings.reminderConfig.intervalSeconds}s (${settings.reminderConfig.enabled ? 'enabled' : 'disabled'})`);
 			}
 
 			return {
 				success: true,
 				deviceId,
 				userId,
-				message: 'Device registered successfully. Other devices have been logged out.'
+				activeTokens: activeTokenCount,
+				message: 'Device registered successfully. All previous devices have been logged out.'
 			};
 		} catch (error) {
 			console.error("[push-token] ❌ Error registering push token:", error);
+			console.error("[push-token] ❌ User:", userId);
+			console.error("[push-token] ❌ Token (last 8):", token.slice(-8));
 			throw error;
 		}
 	}
