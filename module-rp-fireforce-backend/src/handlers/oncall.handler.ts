@@ -251,8 +251,13 @@ export async function handleCreateOverride(request: Request, env: Env, headers: 
 	}
 }
 
-export async function handleEscalateIncident(request: Request, env: Env, headers: HeadersInit): Promise<Response> {
+export async function handleEscalateIncident(
+	request: Request,
+	env: Env,
+	corsHeaders: Record<string, string>
+): Promise<Response> {
 	try {
+		// Parse body
 		const body = await request.json() as {
 			teamId: string;
 			incidentId: string;
@@ -261,12 +266,22 @@ export async function handleEscalateIncident(request: Request, env: Env, headers
 			userRole?: 'primary' | 'backup' | 'escalation';
 		};
 
+		// Validate required fields
 		if (!body.teamId || !body.incidentId || !body.reason) {
-			return json({ success: false, error: 'Missing required fields' }, { status: 400, headers });
+			return new Response(JSON.stringify({
+				httpStatus: "BAD_REQUEST",
+				message: "Missing required fields: teamId, incidentId, or reason",
+				data: null
+			}), {
+				status: 400,
+				headers: corsHeaders
+			});
 		}
 
-		const svc = new OnCallService(env);
-		const result = await svc.escalateIncident({
+		const oncallService = new OnCallService(env);
+
+		// Execute escalation
+		const result = await oncallService.escalateIncident({
 			teamId: body.teamId,
 			incidentId: body.incidentId,
 			reason: body.reason,
@@ -274,10 +289,31 @@ export async function handleEscalateIncident(request: Request, env: Env, headers
 			userRole: body.userRole ?? 'primary',
 		});
 
-		return json({ success: true, object: result }, { headers });
-	} catch (err) {
-		console.error('Error escalating incident:', err);
-		return json({ success: false, error: 'Failed to escalate incident', message: (err as Error).message }, { status: 500, headers });
+		// Structure response in ApiResponse format
+		const response: ApiResponse<typeof result> = {
+			httpStatus: "OK",
+			message: "Incident escalated successfully",
+			data: result
+		};
+
+		console.log(`✅ Incident ${body.incidentId} escalated successfully for team ${body.teamId}`);
+
+		return new Response(JSON.stringify(response), {
+			status: 200,
+			headers: corsHeaders
+		});
+
+	} catch (error) {
+		console.error('❌ Error escalating incident:', error);
+
+		return new Response(JSON.stringify({
+			httpStatus: "INTERNAL_SERVER_ERROR",
+			message: "An error occurred while escalating the incident",
+			data: null
+		}), {
+			status: 500,
+			headers: corsHeaders
+		});
 	}
 }
 

@@ -145,3 +145,28 @@ export interface UpdateIncidentStatusResponse {
         "updatedAt": string;
     }
 }
+
+// escalation types
+export interface EscalationResult {
+    success: boolean;
+    object: {
+        id: string;
+        incidentId: string;
+        teamId: string;
+        escalatedToRole: string;
+        notifiedUsers: NotifiedUser[];
+    };
+    reason: string;
+    priority: 'low' | 'medium' | 'high' | 'critical';
+    timestamp: string; // ISO date string
+    status: 'active' | 'resolved' | 'cancelled' | string;
+}
+
+export interface NotifiedUser {
+    userId: string;
+    email: string;
+    fullname: string;
+    role: string;
+    pushToken?: string | null;
+    fcmToken?: string | null;
+}
