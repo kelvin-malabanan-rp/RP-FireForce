@@ -79,10 +79,11 @@ export interface UpdateProfileData {
 // Incident Types
 export interface Incident {
   id: string;
+  incident_id?: string; // Add this line
   title: string;
   description?: string;
   severity: 'low' | 'medium' | 'high' | 'critical';
-  status: 'open' | 'acknowledged' | 'resolved' | 'closed';
+  status: 'open' | 'acknowledged' | 'resolved' | 'closed' | 'investigating';
   timestamp: string;
   created_at?: string;
   updated_at?: string;
