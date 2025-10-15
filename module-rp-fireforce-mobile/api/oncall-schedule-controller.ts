@@ -8,7 +8,7 @@ import {
     AllCurrentOnCallResponse, EmergencyOverrideUser, AllCurrentOnCallByTeamResponse
 } from '@/types/oncall-types';
 import { BASE_URL_DEV } from "@/utils/backend-url";
-import {API_RESPONSE} from "@/types/incident-types";
+import {API_RESPONSE, EscalationResult} from "@/types/incident-types";
 import apiManager from "@/api/api-manager";
 
 type RotationType = 'daily' | 'weekly' | 'biweekly' | 'monthly';
@@ -133,24 +133,6 @@ export class OnCallController {
         return this.json(res);
     }
 
-    /** Escalate an incident */
-    async escalateIncident(params: {
-        teamId: string;
-        incidentId: string;
-        reason: string;
-        priority?: 'low' | 'medium' | 'high' | 'critical';
-        userRole:string | null;
-    }): Promise<any> {
-        const url = `${BASE_URL_DEV}/api/oncall/escalate`;
-        const res = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            signal: this.withTimeout(),
-            body: JSON.stringify(params),
-        });
-        return this.json(res);
-    }
-
     // --- NEW: Manage Schedule endpoints ---------------------------------------
 
     /** Read schedule configuration for a team (rotation + ordered members) */
@@ -201,6 +183,30 @@ export const getAllCurrentOnCall = async (
         throw error;
     }
 };
+
+// ESCALATE INCIDENT
+export const escalateIncident = async (
+    params: {
+        teamId: string;
+        incidentId: string;
+        reason: string;
+        priority?: 'low' | 'medium' | 'high' | 'critical';
+        userRole: string | null;
+    }
+): Promise<API_RESPONSE<EscalationResult>> => {
+    try {
+        const response = await apiManager.post<API_RESPONSE<EscalationResult>>(
+            `${BASE_URL_DEV}/api/oncall/escalate`,
+            params
+        );
+
+        return response.data;
+    } catch (error) {
+        console.error("Error escalating incident:", error);
+        throw error;
+    }
+};
+
 
 //EMEGENCY OVERRIDE
 export const getUsersForEmergencyOverride = async (

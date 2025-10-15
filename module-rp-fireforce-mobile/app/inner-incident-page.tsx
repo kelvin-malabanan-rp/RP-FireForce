@@ -34,7 +34,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { createAuditLog } from "@/api/audit-trail";
 import { usePushNotificationContext } from '@/context/push-notification-context';
 import { LinearGradient } from "expo-linear-gradient";
-import { oncallController } from '@/api/oncall-schedule-controller';
+import {escalateIncident, oncallController} from '@/api/oncall-schedule-controller';
 
 export default function InnerIncidentPage() {
     const router = useRouter();
@@ -239,11 +239,17 @@ export default function InnerIncidentPage() {
 
         setEscalating(true);
         try {
-            await oncallController.escalateIncident({
-                teamId: 'team-1',
+            if (!userSession?.teamId) {
+                console.warn("⚠️ Missing teamId in user session, cannot escalate incident");
+                Alert.alert('Error', 'Your account is not associated with a team.');
+                return;
+            }
+
+            await escalateIncident({
+                teamId: userSession.teamId,
                 incidentId: incident!.id,
-                reason: escalationReason,
-                priority: escalationPriority,
+                reason: escalationReason.trim(),
+                priority: escalationPriority || 'high',
                 userRole: userSession?.teamRole ?? null,
             });
 
