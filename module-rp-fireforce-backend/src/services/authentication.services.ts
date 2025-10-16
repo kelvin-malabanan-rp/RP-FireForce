@@ -210,10 +210,19 @@ export class AuthenticationServices {
 	 */
 	private async findOrCreateOAuthUser(provider: 'google' | 'github', userInfo: OAuthUserInfo): Promise<any | null> {
 		try {
+			// ADD DEBUG LOGGING
+			console.log('📋 Full userInfo object:', JSON.stringify(userInfo, null, 2));
+
 			const oauthId = provider === 'google' ? userInfo.sub : userInfo.id?.toString();
+
+			console.log('🔑 OAuth ID:', oauthId);
+			console.log('🔑 Provider:', provider);
 
 			if (!oauthId) {
 				console.error('Missing OAuth ID');
+				console.error('userInfo.sub:', userInfo.sub);
+				console.error('userInfo.id:', userInfo.id);
+				console.error('All userInfo keys:', Object.keys(userInfo));
 				return null;
 			}
 
