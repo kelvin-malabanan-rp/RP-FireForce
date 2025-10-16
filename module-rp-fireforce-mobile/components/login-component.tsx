@@ -31,14 +31,11 @@ import {
 } from "@/constants/local-storage";
 
 interface LoginComponentProps extends LoginProps {
-    onGoogleLogin?: () => void;
-    onGithubLogin?: () => void;
+    // Removed onGoogleLogin and onGithubLogin props
 }
 
 export const LoginComponent = ({
                                    onLogin,
-                                   onGoogleLogin,
-                                   onGithubLogin
                                }: LoginComponentProps) => {
     const [formData, setFormData] = useState<LoginData>({
         email: "kelvin.malabanan@rocketpartners.io",
@@ -296,39 +293,8 @@ export const LoginComponent = ({
                                 </LinearGradient>
                             </TouchableOpacity>
 
-                            {/* OAuth Divider */}
-                            <View style={styles.dividerContainer}>
-                                <View style={styles.divider} />
-                                <Text style={styles.dividerText}>OR</Text>
-                                <View style={styles.divider} />
-                            </View>
+                            {/* Removed OAuth Divider and Buttons */}
 
-                            {/* OAuth Buttons */}
-                            <View style={styles.oauthContainer}>
-                                <TouchableOpacity
-                                    style={styles.oauthButton}
-                                    onPress={onGoogleLogin}
-                                    disabled={isLoading}
-                                    activeOpacity={0.8}
-                                >
-                                    <View style={styles.oauthButtonContent}>
-                                        <Ionicons name="logo-google" size={20} color="#FFFFFF" />
-                                        <Text style={styles.oauthButtonText}>Continue with Google</Text>
-                                    </View>
-                                </TouchableOpacity>
-
-                                <TouchableOpacity
-                                    style={styles.oauthButton}
-                                    onPress={onGithubLogin}
-                                    disabled={isLoading}
-                                    activeOpacity={0.8}
-                                >
-                                    <View style={styles.oauthButtonContent}>
-                                        <Ionicons name="logo-github" size={20} color="#FFFFFF" />
-                                        <Text style={styles.oauthButtonText}>Continue with GitHub</Text>
-                                    </View>
-                                </TouchableOpacity>
-                            </View>
                         </View>
 
                         <View style={styles.footer}>
@@ -482,45 +448,7 @@ const styles = StyleSheet.create({
         fontWeight: "600",
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
-    dividerContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginVertical: 8,
-    },
-    divider: {
-        flex: 1,
-        height: 1,
-        backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    },
-    dividerText: {
-        color: 'rgba(255, 255, 255, 0.5)',
-        paddingHorizontal: 16,
-        fontSize: 13,
-        fontFamily: FONT_FAMILY.POPPINS_REGULAR,
-    },
-    oauthContainer: {
-        gap: 12,
-    },
-    oauthButton: {
-        backgroundColor: 'rgba(255, 255, 255, 0.1)',
-        borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.2)',
-        borderRadius: 12,
-        paddingVertical: 14,
-        paddingHorizontal: 16,
-    },
-    oauthButtonContent: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 10,
-    },
-    oauthButtonText: {
-        color: '#FFFFFF',
-        fontSize: 15,
-        fontWeight: '500',
-        fontFamily: FONT_FAMILY.POPPINS_MEDIUM,
-    },
+    // Removed divider and oauth styling
     footer: {
         alignItems: "center",
         marginTop: 24,

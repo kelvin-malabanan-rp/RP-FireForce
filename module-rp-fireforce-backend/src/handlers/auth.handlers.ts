@@ -1,6 +1,11 @@
-// handlers/auth.handler.ts
 import { ApiResponse, Env, LoginRequest, LoginResponse } from '../types';
 import { AuthenticationServices } from "../services/authentication.services";
+
+// Define the expected structure for mobile OAuth request body
+interface MobileOAuthRequest {
+	code: string;
+	redirectUri: string;
+}
 
 export async function handleLogin(
 	request: Request,
@@ -119,6 +124,8 @@ export async function handleLogin(
 	}
 }
 
+// --- ORIGINAL WEB OAUTH HANDLERS (RETAINED) ---
+
 export async function handleGoogleCallback(
 	request: Request,
 	env: Env
@@ -144,6 +151,7 @@ export async function handleGoogleCallback(
 		}
 
 		const authService = new AuthenticationServices(env);
+		// Calls the original handleGoogleOAuth (without redirectUri)
 		const result = await authService.handleGoogleOAuth(code);
 
 		if (!result) {
@@ -195,6 +203,7 @@ export async function handleGithubCallback(
 		}
 
 		const authService = new AuthenticationServices(env);
+		// Calls the original handleGithubOAuth (without redirectUri)
 		const result = await authService.handleGithubOAuth(code);
 
 		if (!result) {
@@ -220,7 +229,6 @@ export async function handleGithubCallback(
 		);
 	}
 }
-
 
 export async function handleLogout(
 	request: Request,

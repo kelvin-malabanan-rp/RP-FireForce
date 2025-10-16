@@ -1,4 +1,3 @@
-// services/authentication.services.ts
 import { DatabaseService } from "./database.service";
 import { Env, User } from "../types";
 
@@ -69,14 +68,16 @@ export class AuthenticationServices {
 		}
 	}
 
+	// --- ORIGINAL WEB OAUTH HANDLERS (RETAINED FOR WEB COMPATIBILITY) ---
+
 	/**
-	 * Handle Google OAuth authentication
+	 * Handle Google OAuth authentication (Web Flow: uses fixed redirect URI)
 	 */
 	async handleGoogleOAuth(code: string): Promise<OAuthResult | null> {
 		try {
-			console.log('🔵 Starting Google OAuth flow...');
+			console.log('🔵 Starting Google Web OAuth flow...');
 
-			// Exchange code for tokens
+			// Exchange code for tokens (Uses fixed, backend redirect URI)
 			const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -122,19 +123,19 @@ export class AuthenticationServices {
 			return { user, token };
 
 		} catch (error) {
-			console.error('Google OAuth error:', error);
+			console.error('Google Web OAuth error:', error);
 			return null;
 		}
 	}
 
 	/**
-	 * Handle GitHub OAuth authentication
+	 * Handle GitHub OAuth authentication (Web Flow: uses fixed redirect URI)
 	 */
 	async handleGithubOAuth(code: string): Promise<OAuthResult | null> {
 		try {
-			console.log('🔵 Starting GitHub OAuth flow...');
+			console.log('🔵 Starting GitHub Web OAuth flow...');
 
-			// Exchange code for access token
+			// Exchange code for access token (Uses fixed, backend redirect URI)
 			const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
 				method: 'POST',
 				headers: {
@@ -200,14 +201,13 @@ export class AuthenticationServices {
 			return { user, token };
 
 		} catch (error) {
-			console.error('GitHub OAuth error:', error);
+			console.error('GitHub Web OAuth error:', error);
 			return null;
 		}
 	}
 
-	/**
-	 * Find or create OAuth user
-	 */
+	// --- UTILITY FUNCTIONS (RETAINED) ---
+
 	/**
 	 * Find or create OAuth user (safe against duplicate email constraint)
 	 */
@@ -245,10 +245,10 @@ export class AuthenticationServices {
 				console.log('🔁 Found existing user with same email. Linking OAuth account...');
 
 				await this.env.DB.prepare(`
-				UPDATE users
-				SET oauth_provider = ?, oauth_id = ?, updated_at = CURRENT_TIMESTAMP
-				WHERE email = ?
-			`).bind(provider, oauthId, userInfo.email).run();
+					UPDATE users
+					SET oauth_provider = ?, oauth_id = ?, updated_at = CURRENT_TIMESTAMP
+					WHERE email = ?
+				`).bind(provider, oauthId, userInfo.email).run();
 
 				await this.updateLastLogin(existingByEmail.id);
 				return existingByEmail;
@@ -268,13 +268,13 @@ export class AuthenticationServices {
 			const avatarUrl = provider === 'google' ? userInfo.picture : userInfo.avatar_url;
 
 			await this.env.DB.prepare(`
-			INSERT INTO users (
-				id, email, first_name, last_name, display_name,
-				avatar_url, oauth_provider, oauth_id, is_verified, is_active,
-				created_at, updated_at, last_login
-			)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-		`).bind(
+				INSERT INTO users (
+					id, email, first_name, last_name, display_name,
+					avatar_url, oauth_provider, oauth_id, is_verified, is_active,
+					created_at, updated_at, last_login
+				)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+			`).bind(
 				userId,
 				userInfo.email,
 				firstName,
@@ -358,8 +358,8 @@ export class AuthenticationServices {
 	 */
 	private async verifyPassword(password: string, hash: string): Promise<boolean> {
 		console.log('Verifying password...');
-		console.log('Hash from DB:', hash);
-		console.log('Password provided:', password);
+		// console.log('Hash from DB:', hash); // Commented out sensitive info
+		// console.log('Password provided:', password); // Commented out sensitive info
 
 		// For testing with sample data
 		if (hash === '$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe') {

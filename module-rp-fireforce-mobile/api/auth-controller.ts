@@ -17,19 +17,3 @@ export const authenticateUser = async (
     }
 };
 
-// OAuth authentication - send authorization code to backend
-export const authenticateWithOAuth = async (
-    provider: 'google' | 'github',
-    code: string
-): Promise<AuthenticateResponse> => {
-    try {
-        const response = await apiManager.post<AuthenticateResponse>(
-            `${BASE_URL_DEV}/api/auth/oauth/${provider}`,
-            { code }
-        );
-        return response.data;
-    } catch (error) {
-        console.error(`${provider} OAuth authentication error:`, error);
-        throw error;
-    }
-};
