@@ -128,15 +128,18 @@ export async function handleGoogleCallback(
 		const code = url.searchParams.get("code");
 		const error = url.searchParams.get("error");
 
+		// Determine frontend URL based on environment
+		const frontendUrl = env.FRONTEND_URL || 'http://localhost:5173';
+
 		if (error) {
 			return Response.redirect(
-				`rpfireforcepager://auth/callback?error=${encodeURIComponent(error)}`
+				`${frontendUrl}/auth/error?error=${encodeURIComponent(error)}`
 			);
 		}
 
 		if (!code) {
 			return Response.redirect(
-				"rpfireforcepager://auth/callback?error=no_code"
+				`${frontendUrl}/auth/error?error=no_code`
 			);
 		}
 
@@ -145,11 +148,11 @@ export async function handleGoogleCallback(
 
 		if (!result) {
 			return Response.redirect(
-				"rpfireforcepager://auth/callback?error=authentication_failed"
+				`${frontendUrl}/auth/error?error=authentication_failed`
 			);
 		}
 
-		// ✅ Immediately redirect to mobile app with user data
+		// Redirect to web success page with token in URL fragment (more secure)
 		const params = new URLSearchParams({
 			token: result.token,
 			userId: result.user.id,
@@ -158,11 +161,11 @@ export async function handleGoogleCallback(
 			avatarUrl: result.user.avatar_url || "",
 		}).toString();
 
-		return Response.redirect(`rpfireforcepager://auth/callback?${params}`);
+		return Response.redirect(`${frontendUrl}/auth/success#${params}`);
 	} catch (error) {
 		console.error("Google OAuth error:", error);
 		return Response.redirect(
-			`rpfireforcepager://auth/callback?error=${encodeURIComponent("server_error")}`
+			`${env.FRONTEND_URL || 'http://localhost:5173'}/auth/error?error=server_error`
 		);
 	}
 }
@@ -176,15 +179,18 @@ export async function handleGithubCallback(
 		const code = url.searchParams.get("code");
 		const error = url.searchParams.get("error");
 
+		// Determine frontend URL based on environment
+		const frontendUrl = env.FRONTEND_URL || 'http://localhost:5173';
+
 		if (error) {
 			return Response.redirect(
-				`rpfireforcepager://auth/callback?error=${encodeURIComponent(error)}`
+				`${frontendUrl}/auth/error?error=${encodeURIComponent(error)}`
 			);
 		}
 
 		if (!code) {
 			return Response.redirect(
-				"rpfireforcepager://auth/callback?error=no_code"
+				`${frontendUrl}/auth/error?error=no_code`
 			);
 		}
 
@@ -193,11 +199,11 @@ export async function handleGithubCallback(
 
 		if (!result) {
 			return Response.redirect(
-				"rpfireforcepager://auth/callback?error=authentication_failed"
+				`${frontendUrl}/auth/error?error=authentication_failed`
 			);
 		}
 
-		// ✅ Immediately redirect to mobile app with user data
+		// Redirect to web success page with token in URL fragment
 		const params = new URLSearchParams({
 			token: result.token,
 			userId: result.user.id,
@@ -206,11 +212,11 @@ export async function handleGithubCallback(
 			avatarUrl: result.user.avatar_url || "",
 		}).toString();
 
-		return Response.redirect(`rpfireforcepager://auth/callback?${params}`);
+		return Response.redirect(`${frontendUrl}/auth/success#${params}`);
 	} catch (error) {
 		console.error("GitHub OAuth error:", error);
 		return Response.redirect(
-			`rpfireforcepager://auth/callback?error=${encodeURIComponent("server_error")}`
+			`${frontendUrl}/auth/error?error=server_error`
 		);
 	}
 }
