@@ -340,23 +340,8 @@ INSERT OR IGNORE INTO users (
 VALUES
     -- Traditional auth users
     ('user-1', 'admin@rocketpartners.io', 'admin', '$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe', 'Admin', 'User', 'Admin User', NULL, NULL, NULL, 1, 1),
-    ('user-2', 'sarah.chen@rocketpartners.io', 'schen', '$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe', 'Sarah', 'Chen', 'Sarah Chen', NULL, NULL, NULL, 1, 1),
-    ('user-3', 'marcus.williams@rocketpartners.io', 'mwilliams', '$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe', 'Marcus', 'Williams', 'Marcus Williams', NULL, NULL, NULL, 1, 1),
     ('user-4', 'kelvin.malabanan@rocketpartners.io', 'kmalabanan', '$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe', 'Kelvin', 'Malabanan', 'Kelvin Malabanan', NULL, NULL, NULL, 1, 1),
-    ('user-5', 'priya.patel@rocketpartners.io', 'ppatel', '$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe', 'Priya', 'Patel', 'Priya Patel', NULL, NULL, NULL, 1, 1),
 
-    -- Google OAuth user example
-    ('user-6', 'james.rodriguez@rocketpartners.io', NULL, NULL, 'James', 'Rodriguez', 'James Rodriguez', 'https://lh3.googleusercontent.com/a/default-user', 'google', '108234567890123456789', 1, 1),
-
-    -- Traditional auth users
-    ('user-7', 'emily.nakamura@rocketpartners.io', 'enakamura', '$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe', 'Emily', 'Nakamura', 'Emily Nakamura', NULL, NULL, NULL, 1, 1),
-    ('user-8', 'david.oconnor@rocketpartners.io', 'doconnor', '$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe', 'David', 'OConnor', 'David OConnor', NULL, NULL, NULL, 1, 1),
-
-    -- GitHub OAuth user example
-    ('user-9', 'lisa.anderson@rocketpartners.io', NULL, NULL, 'Lisa', 'Anderson', 'Lisa Anderson', 'https://avatars.githubusercontent.com/u/12345678', 'github', '12345678', 1, 1),
-
-    -- Traditional auth users
-    ('user-10', 'alex.kim@rocketpartners.io', 'akim', '$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe', 'Alex', 'Kim', 'Alex Kim', NULL, NULL, NULL, 1, 1),
     ('user-11', 'keannu.brillante@rocketpartners.io', 'kbrillante', '$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe', 'Keannu', 'Brillante', 'Keannu Brillante', NULL, NULL, NULL, 1, 1),
     ('user-12', 'sean.ticzon@rocketpartners.io', 'sticzon', '$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe', 'Sean', 'Ticzon', 'Sean Ticzon', NULL, NULL, NULL, 1, 1);
 
@@ -381,34 +366,12 @@ VALUES
     ('member-2', 'team-1', 'user-4', 'backup', 1, 1),      -- Kelvin Malabanan
     ('member-3', 'team-1', 'user-12', 'escalation', 2, 1), -- Sean Ticzon
 
--- TEAM-2
-    ('member-6', 'team-2', 'user-6', 'primary', 0, 1),
-    ('member-7', 'team-2', 'user-7', 'primary', 1, 1),
-    ('member-8', 'team-2', 'user-8', 'backup', 2, 1),
-    ('member-9', 'team-2', 'user-9', 'backup', 3, 1),
-    ('member-10', 'team-2', 'user-10', 'escalation', 4, 1),
-
--- TEAM-3
-    ('member-11', 'team-3', 'user-2', 'primary', 0, 1),
-    ('member-12', 'team-3', 'user-5', 'backup', 1, 1),
-    ('member-13', 'team-3', 'user-1', 'escalation', 2, 1);
-
 INSERT OR IGNORE INTO escalation_chains (id, team_id, user_id, level, is_active)
 VALUES
 -- ✅ TEAM-1: Level 0 → Keannu, Level 1 → Kelvin, Level 2 → Sean
     ('ec-1', 'team-1', 'user-11', 0, 1),  -- Keannu
     ('ec-2', 'team-1', 'user-4', 1, 1),   -- Kelvin
     ('ec-3', 'team-1', 'user-12', 2, 1),  -- Sean
-
--- TEAM-2
-    ('ec-4', 'team-2', 'user-6', 0, 1),
-    ('ec-5', 'team-2', 'user-7', 1, 1),
-    ('ec-6', 'team-2', 'user-10', 2, 1),
-
--- TEAM-3
-    ('ec-7', 'team-3', 'user-2', 0, 1),
-    ('ec-8', 'team-3', 'user-5', 1, 1),
-    ('ec-9', 'team-3', 'user-1', 2, 1);
 
 INSERT OR IGNORE INTO oncall_schedules (id, team_id, name, rotation_type, rotation_start, rotation_length_hours, is_active)
 VALUES
@@ -434,50 +397,6 @@ VALUES ('assign-3', 'schedule-1', 'user-12', 'team-1',
         '["2025-10-01","2025-10-02","2025-10-03","2025-10-04","2025-10-05","2025-10-06","2025-10-07","2025-10-08","2025-10-09","2025-10-10","2025-10-11","2025-10-12","2025-10-13","2025-10-14","2025-10-15","2025-10-16","2025-10-17","2025-10-18","2025-10-19","2025-10-20","2025-10-21","2025-10-22","2025-10-23","2025-10-24","2025-10-25","2025-10-26","2025-10-27","2025-10-28","2025-10-29","2025-10-30","2025-10-31"]',
         'escalation', 1);
 
--- ✅ TEAM-2: James works first half of Oct, Nov, Dec
-INSERT OR IGNORE INTO oncall_assignments (id, schedule_id, user_id, team_id, dates, role, is_active)
-VALUES ('assign-5', 'schedule-2', 'user-6', 'team-2',
-        '["2025-10-01","2025-10-02","2025-10-03","2025-10-04","2025-10-05","2025-10-06","2025-10-07","2025-10-08","2025-10-09","2025-10-10","2025-10-11","2025-10-12","2025-10-13","2025-10-14","2025-10-15","2025-11-01","2025-11-02","2025-11-03","2025-11-04","2025-11-05","2025-11-06","2025-11-07","2025-11-08","2025-11-09","2025-11-10","2025-11-11","2025-11-12","2025-11-13","2025-11-14","2025-11-15"]',
-        'primary', 1);
-
--- ✅ TEAM-2: Emily works second half of Oct (16-31)
-INSERT OR IGNORE INTO oncall_assignments (id, schedule_id, user_id, team_id, dates, role, is_active)
-VALUES ('assign-6', 'schedule-2', 'user-7', 'team-2',
-        '["2025-10-16","2025-10-17","2025-10-18","2025-10-19","2025-10-20","2025-10-21","2025-10-22","2025-10-23","2025-10-24","2025-10-25","2025-10-26","2025-10-27","2025-10-28","2025-10-29","2025-10-30","2025-10-31"]',
-        'primary', 1);
-
--- ✅ TEAM-2: David (backup) works THE SAME DAYS as James (Oct 1-15) + Emily (Oct 16-31)
-INSERT OR IGNORE INTO oncall_assignments (id, schedule_id, user_id, team_id, dates, role, is_active)
-VALUES ('assign-7', 'schedule-2', 'user-8', 'team-2',
-        '["2025-10-01","2025-10-02","2025-10-03","2025-10-04","2025-10-05","2025-10-06","2025-10-07","2025-10-08","2025-10-09","2025-10-10","2025-10-11","2025-10-12","2025-10-13","2025-10-14","2025-10-15","2025-10-16","2025-10-17","2025-10-18","2025-10-19","2025-10-20","2025-10-21","2025-10-22","2025-10-23","2025-10-24","2025-10-25","2025-10-26","2025-10-27","2025-10-28","2025-10-29","2025-10-30","2025-10-31"]',
-        'backup', 1);
-
--- ✅ TEAM-2: Alex always available
-INSERT OR IGNORE INTO oncall_assignments (id, schedule_id, user_id, team_id, dates, role, is_active)
-VALUES ('assign-8', 'schedule-2', 'user-10', 'team-2',
-        '["2025-10-01","2025-10-02","2025-10-03","2025-10-04","2025-10-05","2025-10-06","2025-10-07","2025-10-08","2025-10-09","2025-10-10","2025-10-11","2025-10-12","2025-10-13","2025-10-14","2025-10-15","2025-10-16","2025-10-17","2025-10-18","2025-10-19","2025-10-20","2025-10-21","2025-10-22","2025-10-23","2025-10-24","2025-10-25","2025-10-26","2025-10-27","2025-10-28","2025-10-29","2025-10-30","2025-10-31"]',
-        'escalation', 1);
-
--- ✅ TEAM-3: Sarah (primary) works weekdays Mon-Fri
-INSERT OR IGNORE INTO oncall_assignments (id, schedule_id, user_id, team_id, dates, role, is_active)
-VALUES ('assign-10', 'schedule-3', 'user-2', 'team-3',
-        '["2025-10-13","2025-10-14","2025-10-15","2025-10-16","2025-10-17","2025-10-20","2025-10-21","2025-10-22","2025-10-23","2025-10-24","2025-10-27","2025-10-28","2025-10-29","2025-10-30","2025-10-31"]',
-        'primary', 1);
-
--- ✅ TEAM-3: Priya (backup) works THE SAME DAYS as Sarah (weekdays)
-INSERT OR IGNORE INTO oncall_assignments (id, schedule_id, user_id, team_id, dates, role, is_active)
-VALUES ('assign-11', 'schedule-3', 'user-5', 'team-3',
-        '["2025-10-13","2025-10-14","2025-10-15","2025-10-16","2025-10-17","2025-10-20","2025-10-21","2025-10-22","2025-10-23","2025-10-24","2025-10-27","2025-10-28","2025-10-29","2025-10-30","2025-10-31"]',
-        'backup', 1);
-
--- ✅ TEAM-3: Admin always available
-INSERT OR IGNORE INTO oncall_assignments (id, schedule_id, user_id, team_id, dates, role, is_active)
-VALUES ('assign-12', 'schedule-3', 'user-1', 'team-3',
-        '["2025-10-01","2025-10-02","2025-10-03","2025-10-04","2025-10-05","2025-10-06","2025-10-07","2025-10-08","2025-10-09","2025-10-10","2025-10-11","2025-10-12","2025-10-13","2025-10-14","2025-10-15","2025-10-16","2025-10-17","2025-10-18","2025-10-19","2025-10-20","2025-10-21","2025-10-22","2025-10-23","2025-10-24","2025-10-25","2025-10-26","2025-10-27","2025-10-28","2025-10-29","2025-10-30","2025-10-31"]',
-        'escalation', 1);
-
 INSERT OR IGNORE INTO escalation_policies (id, team_id, name, steps, timeout_minutes, is_active)
 VALUES
-    ('escalation-1', 'team-1', 'Platform Escalation', '[{"step":1,"notify":["primary"],"wait_minutes":5},{"step":2,"notify":["backup"],"wait_minutes":10},{"step":3,"notify":["primary","backup"],"wait_minutes":15}]', 15, 1),
-    ('escalation-2', 'team-2', 'App Support Escalation', '[{"step":1,"notify":["primary"],"wait_minutes":3},{"step":2,"notify":["backup"],"wait_minutes":7},{"step":3,"notify":["escalation"],"wait_minutes":10}]', 10, 1),
-    ('escalation-3', 'team-3', 'Database Ops Escalation', '[{"step":1,"notify":["primary"],"wait_minutes":1},{"step":2,"notify":["backup"],"wait_minutes":1},{"step":3,"notify":["escalation"],"wait_minutes":1}]', 15, 1);
+    ('escalation-1', 'team-1', 'Platform Escalation', '[{"step":1,"notify":["primary"],"wait_minutes":5},{"step":2,"notify":["backup"],"wait_minutes":10},{"step":3,"notify":["primary","backup"],"wait_minutes":15}]', 15, 1)
