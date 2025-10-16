@@ -6,17 +6,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { Eye, EyeOff, Loader2, ArrowRight, Lock, User } from "lucide-react";
 import { AnimatedContainer, fadeInUp } from "../components/animations/variants";
 import { ParticleNetwork } from "../components/animations/ParticleNetwork";
-import { authService } from "../services";
-import { OAuthButtons } from "../components/auth/OAuthButtons";
-
+import { authService } from "../services/auth-service";
 
 interface LoginPageProps {
     onLogin: () => void;
 }
-
-const BACKEND_URL = "https://incident-webhook-api.rapidresponse.workers.dev";
-const GOOGLE_CLIENT_ID = "283926364231-8si8eo6op627qgd4gh3ud1vqtot0d17m.apps.googleusercontent.com";
-const GITHUB_CLIENT_ID = "0v23liEd7rA6wT0SEIVZ";
 
 export function LoginPage({ onLogin }: LoginPageProps) {
     const [email, setEmail] = useState("");
@@ -31,10 +25,11 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         setError("");
 
         try {
+            console.log('🔐 Submitting login form...');
             const response = await authService.login({ email, password });
 
             if (response.success) {
-                console.log("✅ Login successful!", response.data);
+                console.log("✅ Login successful!");
                 onLogin();
             } else {
                 setError("Login failed. Please try again.");
@@ -48,66 +43,13 @@ export function LoginPage({ onLogin }: LoginPageProps) {
     };
 
     const handleGoogleLogin = () => {
-        const redirectUri = `${BACKEND_URL}/auth/google/callback`;
-        const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
-        authUrl.searchParams.set('client_id', GOOGLE_CLIENT_ID);
-        authUrl.searchParams.set('redirect_uri', redirectUri);
-        authUrl.searchParams.set('response_type', 'code');
-        authUrl.searchParams.set('scope', 'openid profile email');
-        authUrl.searchParams.set('access_type', 'offline');
-
-        // Open OAuth in a popup window
-        const popup = window.open(
-            authUrl.toString(),
-            'oauth_popup',
-            'width=500,height=600,scrollbars=yes,resizable=yes'
-        );
-
-        // Listen for messages from the popup
-        const handleMessage = (event: MessageEvent) => {
-            // Make sure the message is from our backend domain
-            if (!event.origin.includes('rapidresponse.workers.dev')) {
-                return;
-            }
-
-            console.log('📨 Received OAuth message:', event.data);
-
-            if (event.data.type === 'OAUTH_SUCCESS') {
-                // Store the token and user data
-                localStorage.setItem('authToken', event.data.token);
-                localStorage.setItem('user', JSON.stringify(event.data.user));
-
-                console.log('✅ OAuth success! Logging in...');
-                onLogin();
-
-                // Close popup
-                popup?.close();
-            } else if (event.data.type === 'OAUTH_ERROR') {
-                console.error('❌ OAuth error:', event.data.error);
-                setError(event.data.error || 'Authentication failed');
-                popup?.close();
-            }
-        };
-
-        window.addEventListener('message', handleMessage);
-
-        // Clean up event listener when popup closes
-        const checkClosed = setInterval(() => {
-            if (popup?.closed) {
-                window.removeEventListener('message', handleMessage);
-                clearInterval(checkClosed);
-            }
-        }, 1000);
+        console.log('🔵 Starting Google OAuth...');
+        authService.initiateGoogleLogin();
     };
 
     const handleGithubLogin = () => {
-        const redirectUri = `${BACKEND_URL}/auth/github/callback`;
-        const authUrl = new URL('https://github.com/login/oauth/authorize');
-        authUrl.searchParams.set('client_id', GITHUB_CLIENT_ID);
-        authUrl.searchParams.set('redirect_uri', redirectUri);
-        authUrl.searchParams.set('scope', 'read:user user:email');
-
-        window.location.href = authUrl.toString();
+        console.log('⚫ Starting GitHub OAuth...');
+        authService.initiateGithubLogin();
     };
 
     return (
@@ -137,10 +79,10 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                                 transition={{ duration: 0.3 }}
                             />
                             <div className="flex flex-col">
-                <span className="text-2xl font-bold bg-gradient-to-r from-orange-400 to-red-500 bg-clip-text text-transparent">
-                  FireForce
-                </span>
-                                <span className="text-xs text-white/50 -mt-1">Neural Platform</span>
+                                <span className="text-2xl font-bold bg-gradient-to-r from-orange-400 to-red-500 bg-clip-text text-transparent">
+                                    FireForce
+                                </span>
+                                <span className="text-xs text-white/50 -mt-1">Incident Management</span>
                             </div>
                         </motion.div>
 
@@ -228,9 +170,8 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                                     animate={{ y: 0, opacity: 1 }}
                                     transition={{ delay: 0.8 }}
                                 >
-                                    Experience the power of innovation. Login to access your dashboard and unleash the full potential of our platform.
+                                    Experience the power of real-time incident management. Login to access your dashboard and manage incidents with ease.
                                 </motion.p>
-
                             </motion.div>
                         </AnimatedContainer>
 
@@ -270,7 +211,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                                                 <Input
                                                     id="email"
                                                     type="email"
-                                                    placeholder="your@email.com"
+                                                    placeholder="your@rocketpartners.io"
                                                     value={email}
                                                     onChange={(e) => setEmail(e.target.value)}
                                                     required
@@ -344,7 +285,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
                                         <Button
                                             type="submit"
-                                            className="w-full bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-600 hover:to-red-700 text-white font-medium"
+                                            className="w-full bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-600 hover:to-red-700 text-white font-medium shadow-lg hover:shadow-xl transition-all duration-200"
                                             disabled={loading}
                                             size="lg"
                                         >
@@ -367,9 +308,9 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                                                 <div className="w-full border-t border-white/20"></div>
                                             </div>
                                             <div className="relative flex justify-center text-sm">
-                        <span className="px-4 bg-transparent text-white/50">
-                          Or continue with
-                        </span>
+                                                <span className="px-4 bg-transparent text-white/50">
+                                                    Or continue with
+                                                </span>
                                             </div>
                                         </div>
 
@@ -419,17 +360,17 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                                             </motion.div>
                                         </div>
 
-                                        <div className="text-center">
-                      <span className="text-white/60 text-sm">
-                        Don't have an account?{" "}
-                          <motion.a
-                              whileHover={{ scale: 1.05 }}
-                              href="#"
-                              className="text-orange-400 hover:text-orange-300 transition-colors font-medium"
-                          >
-                          Sign up
-                        </motion.a>
-                      </span>
+                                        <div className="text-center mt-4">
+                                            <span className="text-white/60 text-sm">
+                                                Don't have an account?{" "}
+                                                <motion.a
+                                                    whileHover={{ scale: 1.05 }}
+                                                    href="#"
+                                                    className="text-orange-400 hover:text-orange-300 transition-colors font-medium"
+                                                >
+                                                    Sign up
+                                                </motion.a>
+                                            </span>
                                         </div>
                                     </form>
                                 </CardContent>
@@ -453,8 +394,8 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                                     className="w-6 h-6 rounded"
                                 />
                                 <span className="text-white/60 text-sm">
-                  © 2025 FireForce. All rights reserved.
-                </span>
+                                    © 2025 FireForce. All rights reserved.
+                                </span>
                             </div>
                             <div className="flex items-center space-x-6">
                                 <motion.a

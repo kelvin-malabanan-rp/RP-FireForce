@@ -2,7 +2,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { Loader2 } from "lucide-react";
 import { Button } from "../ui/button";
-import { oauthService, type OAuthProvider } from "../../services/oauthService";
+import { oauthService, type OAuthProvider } from "../../services/auth-service";
 
 // TypeScript fix for OAuthProvider type export
 export type { OAuthProvider };

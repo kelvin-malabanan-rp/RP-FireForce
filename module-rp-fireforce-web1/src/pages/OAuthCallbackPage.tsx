@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Loader2, CheckCircle, XCircle } from "lucide-react";
-import { oauthService } from "../services/oauthService";
+import { oauthService } from "../services/auth-service";
 import { Card, CardContent } from "../components/ui/card";
 import { Button } from "@/components/ui/button";
 
