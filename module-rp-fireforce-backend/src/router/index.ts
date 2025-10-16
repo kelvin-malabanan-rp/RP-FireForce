@@ -11,7 +11,7 @@ import {
 	handleTestIncident, handleUpdateIncidentStatus
 } from "../handlers/incident.handlers";
 import { handleWebhook } from "../handlers/webook.handlers";
-import {handleLogin, handleLogout} from "../handlers/auth.handlers";
+import {handleGithubCallback, handleGoogleCallback, handleLogin, handleLogout} from "../handlers/auth.handlers";
 import {handleRegisterPushToken, handleSendTestAlert} from "../handlers/push-notification.handlers";
 import {handleFetchIncidentComment} from "../handlers/incident-comment.handlers";
 import {

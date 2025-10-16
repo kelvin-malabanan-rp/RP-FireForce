@@ -22,25 +22,31 @@ DROP TABLE IF EXISTS incidents;
 DROP TABLE IF EXISTS users;
 
 /* ======= CORE ======= */
-
 CREATE TABLE users (
 					   id            TEXT PRIMARY KEY,
 					   email         TEXT UNIQUE,
 					   username      TEXT UNIQUE,
-					   password_hash TEXT,
+					   password_hash TEXT,                    -- Nullable for OAuth users
 					   first_name    TEXT,
 					   last_name     TEXT,
+					   display_name  TEXT,                    -- For OAuth provider names
 					   phone_number  TEXT,
-					   role          TEXT,
-					   is_active     INTEGER,
-					   is_verified   INTEGER,
+					   avatar_url    TEXT,                    -- Profile picture from OAuth
+					   oauth_provider TEXT,                   -- 'google', 'github', or NULL
+					   oauth_id      TEXT,                    -- Provider's user ID
+					   is_active     INTEGER DEFAULT 1,
+					   is_verified   INTEGER DEFAULT 0,
 					   last_login    DATETIME,
 					   created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
-					   updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+					   updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+					   UNIQUE(oauth_provider, oauth_id)
 );
+
+-- Indexes
+CREATE INDEX idx_users_oauth    ON users(oauth_provider, oauth_id);
 CREATE INDEX idx_users_email    ON users(email);
 CREATE INDEX idx_users_username ON users(username);
-CREATE INDEX idx_users_role     ON users(role);
 CREATE INDEX idx_users_active   ON users(is_active);
 
 CREATE TABLE incidents (
@@ -326,20 +332,33 @@ CREATE INDEX idx_notif_responses_notification ON notification_responses(notifica
 
 /* ======= SEED DATA ======= */
 
-INSERT OR IGNORE INTO users (id, email, username, password_hash, first_name, last_name, role, is_active, is_verified)
+INSERT OR IGNORE INTO users (
+    id, email, username, password_hash, first_name, last_name,
+    display_name, avatar_url, oauth_provider, oauth_id,
+    is_active, is_verified
+)
 VALUES
-    ('user-1', 'admin@rocketpartners.io', 'admin', '$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe', 'Admin', 'User', 'admin', 1, 1),
-    ('user-2', 'sarah.chen@rocketpartners.io', 'schen', '$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe', 'Sarah', 'Chen', 'operator', 1, 1),
-    ('user-3', 'marcus.williams@rocketpartners.io', 'mwilliams', '$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe', 'Marcus', 'Williams', 'operator', 1, 1),
-    ('user-4', 'kelvin.malabanan@rocketpartners.io', 'kmalabanan', '$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe', 'Kelvin', 'Malabanan', 'admin', 1, 1),
-    ('user-5', 'priya.patel@rocketpartners.io', 'ppatel', '$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe', 'Priya', 'Patel', 'operator', 1, 1),
-    ('user-6', 'james.rodriguez@rocketpartners.io', 'jrodriguez', '$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe', 'James', 'Rodriguez', 'operator', 1, 1),
-    ('user-7', 'emily.nakamura@rocketpartners.io', 'enakamura', '$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe', 'Emily', 'Nakamura', 'operator', 1, 1),
-    ('user-8', 'david.oconnor@rocketpartners.io', 'doconnor', '$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe', 'David', 'OConnor', 'operator', 1, 1),
-    ('user-9', 'lisa.anderson@rocketpartners.io', 'landerson', '$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe', 'Lisa', 'Anderson', 'operator', 1, 1),
-    ('user-10', 'alex.kim@rocketpartners.io', 'akim', '$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe', 'Alex', 'Kim', 'operator', 1, 1),
-    ('user-11', 'keannu.brillante@rocketpartners.io', 'kbrillante', '$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe', 'Keannu', 'Brillante', 'admin', 1, 1),
-    ('user-12', 'sean.ticzon@rocketpartners.io', 'sticzon', '$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe', 'Sean', 'Ticzon', 'admin', 1, 1);
+    -- Traditional auth users
+    ('user-1', 'admin@rocketpartners.io', 'admin', '$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe', 'Admin', 'User', 'Admin User', NULL, NULL, NULL, 1, 1),
+    ('user-2', 'sarah.chen@rocketpartners.io', 'schen', '$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe', 'Sarah', 'Chen', 'Sarah Chen', NULL, NULL, NULL, 1, 1),
+    ('user-3', 'marcus.williams@rocketpartners.io', 'mwilliams', '$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe', 'Marcus', 'Williams', 'Marcus Williams', NULL, NULL, NULL, 1, 1),
+    ('user-4', 'kelvin.malabanan@rocketpartners.io', 'kmalabanan', '$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe', 'Kelvin', 'Malabanan', 'Kelvin Malabanan', NULL, NULL, NULL, 1, 1),
+    ('user-5', 'priya.patel@rocketpartners.io', 'ppatel', '$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe', 'Priya', 'Patel', 'Priya Patel', NULL, NULL, NULL, 1, 1),
+
+    -- Google OAuth user example
+    ('user-6', 'james.rodriguez@rocketpartners.io', NULL, NULL, 'James', 'Rodriguez', 'James Rodriguez', 'https://lh3.googleusercontent.com/a/default-user', 'google', '108234567890123456789', 1, 1),
+
+    -- Traditional auth users
+    ('user-7', 'emily.nakamura@rocketpartners.io', 'enakamura', '$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe', 'Emily', 'Nakamura', 'Emily Nakamura', NULL, NULL, NULL, 1, 1),
+    ('user-8', 'david.oconnor@rocketpartners.io', 'doconnor', '$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe', 'David', 'OConnor', 'David OConnor', NULL, NULL, NULL, 1, 1),
+
+    -- GitHub OAuth user example
+    ('user-9', 'lisa.anderson@rocketpartners.io', NULL, NULL, 'Lisa', 'Anderson', 'Lisa Anderson', 'https://avatars.githubusercontent.com/u/12345678', 'github', '12345678', 1, 1),
+
+    -- Traditional auth users
+    ('user-10', 'alex.kim@rocketpartners.io', 'akim', '$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe', 'Alex', 'Kim', 'Alex Kim', NULL, NULL, NULL, 1, 1),
+    ('user-11', 'keannu.brillante@rocketpartners.io', 'kbrillante', '$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe', 'Keannu', 'Brillante', 'Keannu Brillante', NULL, NULL, NULL, 1, 1),
+    ('user-12', 'sean.ticzon@rocketpartners.io', 'sticzon', '$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe', 'Sean', 'Ticzon', 'Sean Ticzon', NULL, NULL, NULL, 1, 1);
 
 INSERT OR IGNORE INTO incidents (id, title, description, severity, status, priority, escalation_level, timestamp, location, aws_alarm_name, assigned_to)
 VALUES
