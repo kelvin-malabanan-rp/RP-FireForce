@@ -38,6 +38,13 @@ export const usePushNotifications = () => {
     useEffect(() => {
         const sub = Notifications.addNotificationReceivedListener((notification) => {
             const data = notification.request.content.data as any;
+            // ✅ Log EVERY notification received
+            console.log('[push] 📱 NOTIFICATION RECEIVED:', {
+                type: data?.type,
+                title: notification.request.content.title,
+                body: notification.request.content.body,
+                data: data
+            });
             const incidentId = data?.incidentId || data?.data?.incidentId;
             const notificationId = notification.request.identifier;
 

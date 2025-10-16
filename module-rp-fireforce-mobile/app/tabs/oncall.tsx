@@ -111,7 +111,6 @@ export default function OnCallTab() {
 
             // Get team details
             const response = await getTeamDetails(userTeam.id);
-            console.log('getTeamDetails response:', response.data.currentOnCall);
 
             if (response.httpStatus !== 'OK' || !response.data) {
                 setHasActiveOnCall(false);
@@ -132,6 +131,7 @@ export default function OnCallTab() {
             // Set current on-call
             if (onCall) {
                 setCurrentOnCall(onCall);
+                console.log('onCall response:', onCall);
                 setHasActiveOnCall(true);
 
                 // ✅ Normalize to arrays (handle both single object and array formats)
@@ -307,9 +307,6 @@ export default function OnCallTab() {
                                 </View>
                             </View>
                             <Text style={styles.statusTitle}>You&apos;re On-Call Today!</Text>
-                            <Text style={styles.statusSubtitle}>
-                                {currentOnCall ? `Until ${formatTime(currentOnCall.endTime)}` : 'Active'}
-                            </Text>
                         </LinearGradient>
                     </View>
                 ) : (

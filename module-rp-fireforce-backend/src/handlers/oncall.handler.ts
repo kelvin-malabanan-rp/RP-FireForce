@@ -1,6 +1,7 @@
 // handlers/oncall.handlers.ts
 import {ApiResponse, CurrentOnCall, Env} from '../types';
 import { OnCallService } from '../services/oncall.service';
+import {DatabaseService} from "../services/database.service";
 
 const json = (obj: any, init?: ResponseInit) =>
 	new Response(JSON.stringify(obj), { headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) }, ...init });
@@ -336,25 +337,54 @@ export async function handleEscalateIncident(
 			});
 		}
 
+		// ✅ Get current escalation level from incident
+		const dbService = new DatabaseService(env);
+		const incident = await dbService.getIncidentById(body.incidentId);
+
+		if (!incident) {
+			return new Response(JSON.stringify({
+				httpStatus: "NOT_FOUND",
+				message: "Incident not found",
+				data: null
+			}), {
+				status: 404,
+				headers: corsHeaders
+			});
+		}
+
+		// ✅ Map userRole to numeric level if provided, otherwise use incident's level
+		let currentLevel = incident.escalation_level || 0;
+
+		if (body.userRole) {
+			const roleToLevel: Record<string, number> = {
+				'primary': 0,
+				'backup': 1,
+				'escalation': 2
+			};
+			currentLevel = roleToLevel[body.userRole] ?? currentLevel;
+		}
+
+		console.log(`[api] Escalating incident ${body.incidentId} from level ${currentLevel}`);
+
 		const oncallService = new OnCallService(env);
 
-		// Execute escalation
+		// ✅ Execute escalation with numeric currentLevel
 		const result = await oncallService.escalateIncident({
 			teamId: body.teamId,
 			incidentId: body.incidentId,
 			reason: body.reason,
 			priority: body.priority ?? 'high',
-			userRole: body.userRole ?? 'primary',
+			currentLevel: currentLevel,  // ✅ Pass number instead of userRole
 		});
 
-		// Structure response in ApiResponse format
+		// Structure response
 		const response: ApiResponse<typeof result> = {
 			httpStatus: "OK",
 			message: "Incident escalated successfully",
 			data: result
 		};
 
-		console.log(`✅ Incident ${body.incidentId} escalated successfully for team ${body.teamId}`);
+		console.log(`✅ Incident ${body.incidentId} escalated to level ${result.object.escalatedToLevel}`);
 
 		return new Response(JSON.stringify(response), {
 			status: 200,
@@ -366,7 +396,7 @@ export async function handleEscalateIncident(
 
 		return new Response(JSON.stringify({
 			httpStatus: "INTERNAL_SERVER_ERROR",
-			message: "An error occurred while escalating the incident",
+			message: error instanceof Error ? error.message : "An error occurred while escalating the incident",
 			data: null
 		}), {
 			status: 500,
