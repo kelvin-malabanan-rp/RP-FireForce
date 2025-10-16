@@ -109,8 +109,9 @@ export default function OnCallTab() {
                 return;
             }
 
-            // ✅ Use getTeamDetails - it has everything we need!
+            // Get team details
             const response = await getTeamDetails(userTeam.id);
+            console.log('getTeamDetails response:', response.data.currentOnCall);
 
             if (response.httpStatus !== 'OK' || !response.data) {
                 setHasActiveOnCall(false);
@@ -124,7 +125,7 @@ export default function OnCallTab() {
             setMyTeam(team);
             setTeamMembers(members);
 
-            // ✅ Build 7-day schedule from members' assigned dates
+            // Build 7-day schedule
             const scheduleData = build7DaySchedule(members);
             setSchedule(scheduleData);
 
@@ -133,19 +134,44 @@ export default function OnCallTab() {
                 setCurrentOnCall(onCall);
                 setHasActiveOnCall(true);
 
-                // Check if user is on call today
-                const isPrimary = onCall.primary?.email === userEmailParam;
-                const isBackup = onCall.backup?.email === userEmailParam;
+                // ✅ Normalize to arrays (handle both single object and array formats)
+                const primaryArray = Array.isArray(onCall.primary)
+                    ? onCall.primary
+                    : onCall.primary ? [onCall.primary] : [];
+
+                const backupArray = Array.isArray(onCall.backup)
+                    ? onCall.backup
+                    : onCall.backup ? [onCall.backup] : [];
+
+                const escalationArray = Array.isArray(onCall.escalation)
+                    ? onCall.escalation
+                    : onCall.escalation ? [onCall.escalation] : [];
+
+                // Now check with .some()
+                const isPrimary = primaryArray.some(p => p.email === userEmailParam);
+                const isBackup = backupArray.some(b => b.email === userEmailParam);
+                const isEscalation = escalationArray.some(e => e.email === userEmailParam);
+
+                console.log('isPrimary:', isPrimary);
+                console.log('isBackup:', isBackup);
+                console.log('isEscalation:', isEscalation);
 
                 if (isPrimary) {
                     setIsUserOnCallToday(true);
                     setUserOnCallRole('primary');
+                    console.log('User is on call today! : PRIMARY');
                 } else if (isBackup) {
                     setIsUserOnCallToday(true);
                     setUserOnCallRole('backup');
+                    console.log('User is on call today! : BACKUP');
+                } else if (isEscalation) {
+                    setIsUserOnCallToday(true);
+                    setUserOnCallRole('escalation');
+                    console.log('User is on call today! : ESCALATION');
                 } else {
                     setIsUserOnCallToday(false);
                     setUserOnCallRole(null);
+                    console.log('User is not on call today!');
                 }
             } else {
                 setHasActiveOnCall(false);

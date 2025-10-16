@@ -34,10 +34,10 @@ export class ReminderService {
 			}
 
 			await this.dbService.db?.prepare(`
-                INSERT OR REPLACE INTO incident_reminder_config
-                    (incident_id, max_reminders, interval_seconds, created_at)
-                VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-            `).bind(incidentId, config.maxReminders, config.intervalSeconds).run();
+				INSERT OR REPLACE INTO incident_reminder_config
+					(incident_id, max_reminders, interval_seconds, created_at)
+				VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+			`).bind(incidentId, config.maxReminders, config.intervalSeconds).run();
 
 			console.log(`[reminder] ✅ Reminder schedule saved for incident:`, incidentId);
 		} catch (error) {
@@ -52,19 +52,19 @@ export class ReminderService {
 
 			// Get all open incidents with reminder config
 			const incidents = await this.dbService.db?.prepare(`
-                SELECT
-                    i.id, i.title, i.description, i.severity, i.team_id,
-                    i.created_at, i.status, i.escalation_level,
-                    rc.max_reminders, rc.interval_seconds,
-                    COUNT(r.id) as reminders_sent
-                FROM incidents i
-                JOIN incident_reminder_config rc ON i.id = rc.incident_id
-                LEFT JOIN incident_reminders r ON i.id = r.incident_id
-                WHERE i.status = 'open'
-                GROUP BY i.id, i.title, i.description, i.severity, i.team_id,
-                         i.created_at, i.status, i.escalation_level,
-                         rc.max_reminders, rc.interval_seconds
-            `).all();
+				SELECT
+					i.id, i.title, i.description, i.severity, i.team_id,
+					i.created_at, i.status, i.escalation_level,
+					rc.max_reminders, rc.interval_seconds,
+					COUNT(r.id) as reminders_sent
+				FROM incidents i
+						 JOIN incident_reminder_config rc ON i.id = rc.incident_id
+						 LEFT JOIN incident_reminders r ON i.id = r.incident_id
+				WHERE i.status = 'open'
+				GROUP BY i.id, i.title, i.description, i.severity, i.team_id,
+						 i.created_at, i.status, i.escalation_level,
+						 rc.max_reminders, rc.interval_seconds
+			`).all();
 
 			if (!incidents || !incidents.results || incidents.results.length === 0) {
 				console.log('[reminder] No open incidents with reminder config');
@@ -99,10 +99,10 @@ export class ReminderService {
 
 						// Mark as processed
 						await this.dbService.db?.prepare(`
-                            INSERT OR IGNORE INTO incident_reminders
-                            (id, incident_id, reminder_number, sent_at, recipients_count)
-                            VALUES (?, ?, 0, CURRENT_TIMESTAMP, 0)
-                        `).bind(crypto.randomUUID(), incident.id).run();
+							INSERT OR IGNORE INTO incident_reminders
+								(id, incident_id, reminder_number, sent_at, recipients_count)
+							VALUES (?, ?, 0, CURRENT_TIMESTAMP, 0)
+						`).bind(crypto.randomUUID(), incident.id).run();
 					}
 					continue;
 				}
@@ -118,8 +118,8 @@ export class ReminderService {
 
 						// Reset reminder counter after escalation
 						await this.dbService.db?.prepare(`
-                            DELETE FROM incident_reminders WHERE incident_id = ?
-                        `).bind(incident.id).run();
+							DELETE FROM incident_reminders WHERE incident_id = ?
+						`).bind(incident.id).run();
 
 						console.log(`[reminder] ✅ Escalated and reset reminder counter`);
 					}
@@ -145,7 +145,7 @@ export class ReminderService {
 		}
 	}
 
-	// ✅ SINGLE escalation method - handles level-based escalation
+	// ✅ Use OnCallService.escalateIncident instead of custom logic
 	private async triggerEscalation(incident: any) {
 		try {
 			console.log('[reminder] 🚨 Triggering escalation for incident:', incident.id);
@@ -155,53 +155,33 @@ export class ReminderService {
 				return;
 			}
 
-			// Get current escalation level
 			const currentLevel = incident.escalation_level || 0;
-			const nextLevel = currentLevel + 1;
 
-			console.log(`[reminder] Current escalation level: ${currentLevel}, escalating to level: ${nextLevel}`);
+			console.log(`[reminder] Current level: ${currentLevel}, escalating to level ${currentLevel + 1}`);
 
-			// Determine who to notify based on next level
-			let usersToNotify: any[] = [];
-			let roleName = '';
+			// ✅ Use OnCallService to handle escalation
+			const escalationResult = await this.oncallService.escalateIncident({
+				teamId: incident.team_id,
+				incidentId: incident.id,
+				reason: `Auto-escalation: No response after ${incident.max_reminders || 3} reminders`,
+				priority: incident.severity || 'high',
+				currentLevel: currentLevel  // Pass current level, it will increment
+			});
 
-			if (nextLevel === 1) {
-				// Escalate to BACKUP
-				roleName = 'BACKUP';
-				const response = await this.oncallService.getCurrentOnCallByTeamId(incident.team_id);
-				usersToNotify = response?.backup || [];
-			} else if (nextLevel === 2) {
-				// Escalate to ESCALATION (final level)
-				roleName = 'ESCALATION';
-				const response = await this.oncallService.getCurrentOnCallByTeamId(incident.team_id);
-				usersToNotify = response?.escalation || [];
-			} else {
-				console.log('[reminder] ⚠️ Max escalation level reached (level 2)');
+			if (!escalationResult || !escalationResult.success) {
+				console.error('[reminder] ❌ Escalation failed:', escalationResult);
 				return;
 			}
 
-			if (usersToNotify.length === 0) {
-				console.error(`[reminder] ❌ No ${roleName} members found for team:`, incident.team_id);
-				return;
-			}
+			const { escalatedToLevel, escalatedToRole, notifiedUsers } = escalationResult.object;
 
-			console.log(`[reminder] 📢 Escalating to ${roleName}: ${usersToNotify.length} members`);
+			console.log(`[reminder] ✅ Escalated to level ${escalatedToLevel} (${escalatedToRole})`);
+			console.log(`[reminder] ✅ Notifying ${notifiedUsers.length} ${escalatedToRole} members`);
 
-			// Record escalation in database
-			await this.recordEscalation(incident.id, incident.team_id, nextLevel, usersToNotify);
+			// Send notifications to escalated users
+			await this.sendEscalationNotifications(incident, notifiedUsers, escalatedToRole.toUpperCase());
 
-			// Update incident escalation_level
-			await this.dbService.db?.prepare(`
-                UPDATE incidents
-                SET escalation_level = ?,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-            `).bind(nextLevel, incident.id).run();
-
-			// Send notifications
-			await this.sendEscalationNotifications(incident, usersToNotify, roleName);
-
-			console.log(`[reminder] ✅ Escalation complete - Level ${nextLevel} (${roleName}) notified`);
+			console.log(`[reminder] ✅ Escalation complete - Level ${escalatedToLevel} notified`);
 
 		} catch (error) {
 			console.error('[reminder] Error triggering escalation:', error);
@@ -215,15 +195,26 @@ export class ReminderService {
 
 			const escalationLevel = incident.escalation_level || 0;
 
+			// ✅ Add debugging before the call
+			console.log(`[reminder] About to call getCurrentOnCallByTeamId with team_id:`, incident.team_id);
+			console.log(`[reminder] team_id type:`, typeof incident.team_id);
+			console.log(`[reminder] team_id value:`, JSON.stringify(incident.team_id));
+
 			// Get on-call members for this team
 			const onCallResponse = await this.oncallService.getCurrentOnCallByTeamId(incident.team_id);
 
+			// ✅ Add debugging after the call
+			console.log(`[reminder] getCurrentOnCallByTeamId returned:`, onCallResponse);
+
 			if (!onCallResponse) {
-				console.log('[reminder] No on-call members found');
+				console.log('[reminder] ❌ getCurrentOnCallByTeamId returned null!');
 				return;
 			}
 
 			const { primary = [], backup = [], escalation = [] } = onCallResponse;
+
+			// ✅ Log what we got
+			console.log(`[reminder] Destructured: primary=${primary?.length}, backup=${backup?.length}, escalation=${escalation?.length}`);
 
 			// ✅ Send reminders ONLY to the current escalation level
 			let membersToRemind: any[] = [];
@@ -291,10 +282,10 @@ export class ReminderService {
 
 			// Record reminder sent
 			await this.dbService.db?.prepare(`
-                INSERT INTO incident_reminders
-                (id, incident_id, reminder_number, sent_at, recipients_count)
-                VALUES (?, ?, ?, CURRENT_TIMESTAMP, ?)
-            `).bind(
+				INSERT INTO incident_reminders
+					(id, incident_id, reminder_number, sent_at, recipients_count)
+				VALUES (?, ?, ?, CURRENT_TIMESTAMP, ?)
+			`).bind(
 				crypto.randomUUID(),
 				incident.id,
 				reminderNumber,
@@ -309,38 +300,6 @@ export class ReminderService {
 
 		} catch (error) {
 			console.error('[reminder] Error sending reminder:', error);
-		}
-	}
-
-	// ✅ Record escalation in database
-	private async recordEscalation(
-		incidentId: string,
-		teamId: string,
-		escalationLevel: number,
-		users: any[]
-	) {
-		try {
-			for (const user of users) {
-				await this.dbService.db?.prepare(`
-                    INSERT INTO incident_escalations
-                    (id, incident_id, team_id, escalated_to_user_id, escalation_level,
-                     reason, priority, status, triggered_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                `).bind(
-					crypto.randomUUID(),
-					incidentId,
-					teamId,
-					user.userId,
-					escalationLevel,
-					`Auto-escalation: No response after reminders (Level ${escalationLevel})`,
-					'high',
-					'pending'
-				).run();
-			}
-
-			console.log(`[reminder] ✅ Recorded ${users.length} escalation(s) at level ${escalationLevel}`);
-		} catch (error) {
-			console.error('[reminder] Error recording escalation:', error);
 		}
 	}
 

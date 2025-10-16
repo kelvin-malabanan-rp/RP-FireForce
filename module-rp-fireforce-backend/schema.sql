@@ -56,7 +56,7 @@ CREATE TABLE incidents (
 						   severity         TEXT,
 						   status           TEXT,
 						   priority         TEXT,
-						   escalation_level TEXT,
+						   escalation_level INTEGER,
 						   timestamp        DATETIME,
 						   reported_by      TEXT,
 						   location         TEXT,
@@ -142,7 +142,7 @@ CREATE TABLE incident_notifications (
 										read_at          DATETIME,
 										responded_at     DATETIME,
 										delivery_error   TEXT,
-										escalation_level TEXT DEFAULT 'primary',
+										escalation_level INTEGER DEFAULT 0,
 										FOREIGN KEY (incident_id) REFERENCES incidents(id) ON DELETE CASCADE,
 										FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
@@ -280,7 +280,7 @@ CREATE TABLE incident_escalations (
 									  team_id                TEXT,
 									  escalated_to_user_id   TEXT,
 									  escalated_from_user_id TEXT,
-									  escalation_level       TEXT,
+									  escalation_level       INTEGER,
 									  reason                 TEXT,
 									  priority               TEXT,
 									  status                 TEXT,
@@ -362,9 +362,9 @@ VALUES
 
 INSERT OR IGNORE INTO incidents (id, title, description, severity, status, priority, escalation_level, timestamp, location, aws_alarm_name, assigned_to)
 VALUES
-    ('test-1', 'Database Connection Pool Exhausted', 'Primary database connection pool has reached maximum capacity.', 'critical', 'investigating', 'critical', 'backup', datetime('now', '-2 hours'), 'Data Center A', 'TEST-HighCPU-WebServer', 'user-11'),
-    ('test-2', 'API Response Time Elevated', 'Authentication API experiencing 5x normal response times.', 'high', 'open', 'high', 'primary', datetime('now', '-4 hours'), 'API Gateway', 'TEST-HighErrorRate-API', 'user-4'),
-    ('test-3', 'Memory Usage Resolved', 'High memory usage on database server has been resolved.', 'medium', 'resolved', 'medium', 'primary', datetime('now', '-12 hours'), 'Database Server', 'TEST-HighMemory-Database', NULL);
+    ('test-1', 'Database Connection Pool Exhausted', 'Primary database connection pool has reached maximum capacity.', 'critical', 'investigating', 'critical', 1, datetime('now', '-2 hours'), 'Data Center A', 'TEST-HighCPU-WebServer', 'user-11'),
+    ('test-2', 'API Response Time Elevated', 'Authentication API experiencing 5x normal response times.', 'high', 'open', 'high', 0, datetime('now', '-4 hours'), 'API Gateway', 'TEST-HighErrorRate-API', 'user-4'),
+    ('test-3', 'Memory Usage Resolved', 'High memory usage on database server has been resolved.', 'medium', 'resolved', 'medium', 0, datetime('now', '-12 hours'), 'Database Server', 'TEST-HighMemory-Database', NULL);
 
 INSERT OR IGNORE INTO oncall_teams (id, name, description, timezone, is_active)
 VALUES
@@ -395,20 +395,20 @@ VALUES
 
 INSERT OR IGNORE INTO escalation_chains (id, team_id, user_id, level, is_active)
 VALUES
--- ✅ TEAM-1: Level 1 → Keannu, Level 2 → Kelvin, Level 3 → Sean
-    ('ec-1', 'team-1', 'user-11', 1, 1),  -- Keannu
-    ('ec-2', 'team-1', 'user-4', 2, 1),   -- Kelvin
-    ('ec-3', 'team-1', 'user-12', 3, 1),  -- Sean
+-- ✅ TEAM-1: Level 0 → Keannu, Level 1 → Kelvin, Level 2 → Sean
+    ('ec-1', 'team-1', 'user-11', 0, 1),  -- Keannu
+    ('ec-2', 'team-1', 'user-4', 1, 1),   -- Kelvin
+    ('ec-3', 'team-1', 'user-12', 2, 1),  -- Sean
 
 -- TEAM-2
-    ('ec-4', 'team-2', 'user-6', 1, 1),
-    ('ec-5', 'team-2', 'user-7', 2, 1),
-    ('ec-6', 'team-2', 'user-10', 3, 1),
+    ('ec-4', 'team-2', 'user-6', 0, 1),
+    ('ec-5', 'team-2', 'user-7', 1, 1),
+    ('ec-6', 'team-2', 'user-10', 2, 1),
 
 -- TEAM-3
-    ('ec-7', 'team-3', 'user-2', 1, 1),
-    ('ec-8', 'team-3', 'user-5', 2, 1),
-    ('ec-9', 'team-3', 'user-1', 3, 1);
+    ('ec-7', 'team-3', 'user-2', 0, 1),
+    ('ec-8', 'team-3', 'user-5', 1, 1),
+    ('ec-9', 'team-3', 'user-1', 2, 1);
 
 INSERT OR IGNORE INTO oncall_schedules (id, team_id, name, rotation_type, rotation_start, rotation_length_hours, is_active)
 VALUES
