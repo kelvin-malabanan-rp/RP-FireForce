@@ -54,7 +54,48 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         authUrl.searchParams.set('scope', 'openid profile email');
         authUrl.searchParams.set('access_type', 'offline');
 
-        window.location.href = authUrl.toString();
+        // Open OAuth in a popup window
+        const popup = window.open(
+            authUrl.toString(),
+            'oauth_popup',
+            'width=500,height=600,scrollbars=yes,resizable=yes'
+        );
+
+        // Listen for messages from the popup
+        const handleMessage = (event: MessageEvent) => {
+            // Make sure the message is from our backend domain
+            if (!event.origin.includes('rapidresponse.workers.dev')) {
+                return;
+            }
+
+            console.log('📨 Received OAuth message:', event.data);
+
+            if (event.data.type === 'OAUTH_SUCCESS') {
+                // Store the token and user data
+                localStorage.setItem('authToken', event.data.token);
+                localStorage.setItem('user', JSON.stringify(event.data.user));
+
+                console.log('✅ OAuth success! Logging in...');
+                onLogin();
+
+                // Close popup
+                popup?.close();
+            } else if (event.data.type === 'OAUTH_ERROR') {
+                console.error('❌ OAuth error:', event.data.error);
+                setError(event.data.error || 'Authentication failed');
+                popup?.close();
+            }
+        };
+
+        window.addEventListener('message', handleMessage);
+
+        // Clean up event listener when popup closes
+        const checkClosed = setInterval(() => {
+            if (popup?.closed) {
+                window.removeEventListener('message', handleMessage);
+                clearInterval(checkClosed);
+            }
+        }, 1000);
     };
 
     const handleGithubLogin = () => {

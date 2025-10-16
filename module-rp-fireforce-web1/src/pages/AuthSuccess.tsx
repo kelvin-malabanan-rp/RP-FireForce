@@ -1,17 +1,19 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Loader2, CheckCircle } from 'lucide-react';
 
-export function AuthSuccess() {
-    const navigate = useNavigate();
+export function AuthSuccess({ onSuccess, onError }) {
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState(null);
 
     useEffect(() => {
         const handleOAuthSuccess = async () => {
             try {
+                console.log('🔍 AuthSuccess: Processing OAuth...');
+
                 // Get data from URL fragment
                 const fragment = window.location.hash.substring(1);
+                console.log('🔍 AuthSuccess: Fragment:', fragment);
+
                 const params = new URLSearchParams(fragment);
 
                 const token = params.get('token');
@@ -19,6 +21,14 @@ export function AuthSuccess() {
                 const email = params.get('email');
                 const displayName = params.get('displayName');
                 const avatarUrl = params.get('avatarUrl');
+
+                console.log('🔍 AuthSuccess: Extracted data:', {
+                    hasToken: !!token,
+                    tokenStart: token?.substring(0, 20) + '...',
+                    userId,
+                    email,
+                    displayName
+                });
 
                 if (token && userId && email) {
                     // Store token and user data
@@ -30,23 +40,24 @@ export function AuthSuccess() {
                         avatarUrl
                     }));
 
-                    console.log('✅ OAuth success! Redirecting to dashboard...');
+                    console.log('✅ AuthSuccess: Data stored successfully!');
 
                     // Small delay to show success message
                     setTimeout(() => {
-                        navigate('/dashboard');
+                        onSuccess();
                     }, 1500);
                 } else {
+                    console.error('❌ AuthSuccess: Missing authentication data');
                     setError('Missing authentication data');
                     setTimeout(() => {
-                        navigate('/login?error=no_token');
+                        onError();
                     }, 3000);
                 }
             } catch (error) {
-                console.error('OAuth success handling error:', error);
+                console.error('❌ AuthSuccess: Processing error:', error);
                 setError('Failed to process authentication');
                 setTimeout(() => {
-                    navigate('/login?error=oauth_error');
+                    onError();
                 }, 3000);
             } finally {
                 setLoading(false);
@@ -54,7 +65,7 @@ export function AuthSuccess() {
         };
 
         handleOAuthSuccess();
-    }, [navigate]);
+    }, [onSuccess, onError]);
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center">
