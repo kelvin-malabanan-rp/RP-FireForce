@@ -14,6 +14,10 @@ export interface Env {
 	DB: D1Database;
 	incident_management: D1Database;
 	AWS_REGION: string;
+	GOOGLE_CLIENT_ID: string;
+	GOOGLE_CLIENT_SECRET: string;
+	GITHUB_CLIENT_ID: string;
+	GITHUB_CLIENT_SECRET: string;
 }
 
 // ========================================
