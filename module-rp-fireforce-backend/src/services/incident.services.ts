@@ -70,7 +70,33 @@ export class IncidentService {
 		};
 	}
 
-	// ──────────────────────────────────────────────
+	private determineTeamFromAlarm(alarm: any): string {
+		const name = (alarm.AlarmName || '').toLowerCase();
+
+		// Database-related alarms → Database Operations (team-3)
+		if (name.includes('database') || name.includes('rds') || name.includes('sql') || name.includes('dynamodb')) {
+			console.log('[incident] 🎯 Routing to Database Operations (team-3)');
+			return 'team-3';
+		}
+
+		// Application-level alarms → Application Support (team-2)
+		if (name.includes('api') || name.includes('app') || name.includes('lambda') || name.includes('application')) {
+			console.log('[incident] 🎯 Routing to Application Support (team-2)');
+			return 'team-2';
+		}
+
+		// Network/Security alarms → Network Operations (team-4)
+		if (name.includes('network') || name.includes('vpc') || name.includes('security') || name.includes('firewall')) {
+			console.log('[incident] 🎯 Routing to Network Operations (team-4)');
+			return 'team-4';
+		}
+
+		// Default to Platform Engineering for infrastructure (team-1)
+		console.log('[incident] 🎯 Routing to Platform Engineering (team-1) - default');
+		return 'team-1';
+	}
+
+// ✅ Update your processCloudWatchAlarm method
 	async processCloudWatchAlarm(alarm: any) {
 		const isAlarmState = alarm.NewStateValue === 'ALARM';
 		const isResolved = alarm.NewStateValue === 'OK';
@@ -93,7 +119,10 @@ export class IncidentService {
 			return { action: 'ignored', reason: 'Not an ALARM state' };
 		}
 
-		// Create new incident
+		// ✅ Determine team BEFORE creating incident
+		const teamId = this.determineTeamFromAlarm(alarm);
+
+		// Create new incident with team_id
 		const incident: Partial<Incident> = {
 			id: `aws-${alarm.AlarmName}-${Date.now()}`,
 			title: alarm.AlarmName || 'Unknown Alarm',
@@ -103,12 +132,15 @@ export class IncidentService {
 			timestamp: new Date(alarm.StateChangeTime).toISOString(),
 			reported_by: 'AWS CloudWatch',
 			location: alarm.Region || null,
+			team_id: teamId,  // ✅ ADDED: Assign team_id based on alarm routing
 			aws_alarm_name: alarm.AlarmName || null,
 			aws_account_id: alarm.AWSAccountId || null,
 			state_reason: alarm.StateReason || null,
 			metric_name: null,
 			aws_console_url: alarm.AlarmName ? this.generateAwsConsoleUrl(alarm) : null
 		};
+
+		console.log(`[incident] 📋 Creating incident with team_id: ${teamId}`);
 
 		const result = await this.dbService.insertIncident(incident);
 		console.log('[incident] New incident created:', result.id);
@@ -117,23 +149,25 @@ export class IncidentService {
 		const reminderConfig = await this.getUserReminderSettings(result.id);
 
 		try {
-			// ✅ Send initial push notifications to all on-call members
+			// ✅ Send initial push notifications to PRIMARY ONLY
 			await this.pushService.sendIncidentAlert({
 				...incident,
 				id: result.id
 			} as Incident);
 			console.log('[incident] Push notifications sent for incident:', incident.title);
 
-			// ✅ Send initial email notifications (backend handles this, not client)
-			const onCallResponse = await this.oncallService.getAllCurrentOnCall();
+			// ✅ Send initial email notifications to PRIMARY ONLY
+			const onCallResponse = await this.oncallService.getAllCurrentOnCall(teamId);  // ✅ Pass teamId
 			if (onCallResponse) {
-				const { primary = [], backup = [], escalation = [] } = onCallResponse;
-				const allMembers = [...primary, ...backup, ...escalation];
+				const { primary = [] } = onCallResponse;
+
+				console.log(`[incident] Sending initial emails to ${primary.length} PRIMARY members of ${teamId}`);
 
 				// Deduplicate emails
 				const uniqueEmails = new Set<string>();
 
-				for (const member of allMembers) {
+				// ✅ Send ONLY to PRIMARY members
+				for (const member of primary) {
 					if (!uniqueEmails.has(member.email)) {
 						uniqueEmails.add(member.email);
 
@@ -146,9 +180,13 @@ export class IncidentService {
 								severity: incident.severity!,
 								reportedBy: incident.reported_by!,
 								timestamp: incident.timestamp!,
-								role: member.role
+								role: 'primary'
 							});
-							console.log('[incident] [email] ✅ Sent to:', member.email, `(${member.role})`);
+							console.log('[incident] [email] ✅ Sent to:', member.email, '(primary)');
+
+							// ✅ Wait 600ms between emails
+							await this.delay(600);
+
 						} catch (emailError) {
 							console.error('[incident] [email] ❌ Failed to send to:', member.email, emailError);
 						}
@@ -175,6 +213,10 @@ export class IncidentService {
 		return { action: 'created', incident: incident as Incident };
 	}
 
+	private async delay(ms: number): Promise<void> {
+		return new Promise(resolve => setTimeout(resolve, ms));
+	}
+
 	// ✅ Get reminder settings from primary on-call user's push token
 	private async getUserReminderSettings(incidentId: string): Promise<{
 		enabled: boolean;
@@ -186,7 +228,7 @@ export class IncidentService {
 			const incident = await this.dbService.getIncidentById(incidentId);
 
 			// Get on-call users for the team
-			const onCallResponse = await this.oncallService.getAllCurrentOnCall(incident.team_id);
+			const onCallResponse = await this.oncallService.getCurrentOnCallByTeamId(incident.team_id);
 
 			if (!onCallResponse || !onCallResponse.primary || onCallResponse.primary.length === 0) {
 				// Default settings if no on-call user found
@@ -390,8 +432,10 @@ export class IncidentService {
 			for (const team of teams) {
 				const current = await this.oncallService.getAllCurrentOnCall(team.id);
 
-				// Notify primary
+				// ✅ Notify PRIMARY ONLY for initial alert
 				if (current?.primary && Array.isArray(current.primary)) {
+					console.log(`[incident] Sending initial notifications to ${current.primary.length} PRIMARY members`);
+
 					for (const primaryUser of current.primary) {
 						try {
 							await this.emailService.sendIncidentAlert({
@@ -411,33 +455,13 @@ export class IncidentService {
 						}
 					}
 				}
-
-				// Notify backup
-				if (current?.backup && Array.isArray(current.backup)) {
-					for (const backupUser of current.backup) {
-						try {
-							await this.emailService.sendIncidentAlert({
-								to: backupUser.email,
-								incidentId: incident.id,
-								title: incident.title,
-								description: incident.description,
-								severity: incident.severity,
-								reportedBy: incident.reported_by,
-								timestamp: incident.timestamp,
-								role: 'backup'
-							});
-							await this.trackNotification(incidentId, backupUser.userId, 'email');
-							console.log('[incident] [email] ✅ Sent to backup:', backupUser.email);
-						} catch (err) {
-							console.error(`[incident] [email] ❌ Failed to notify backup:`, err);
-						}
-					}
-				}
 			}
 
-			// Send push notifications
+			// Send push notifications (already fixed to send to PRIMARY only)
 			await this.pushService.sendIncidentAlert(incident);
 			console.log('[incident] Push notifications sent for incident:', incidentId);
+			console.log('[incident] 📝 Backup and escalation will be notified via reminder escalation chain');
+
 		} catch (error) {
 			console.error('[incident] Failed to send on-call notifications:', error);
 		}
