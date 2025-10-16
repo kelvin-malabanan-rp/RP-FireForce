@@ -6,7 +6,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { AlertCircle } from "lucide-react";
 import { useNotifications } from "@/hooks/useNotifications";
-import { incidentService } from "@/services";
+// ✅ UPDATED: Added escalationService and onCallService
+import { incidentService, escalationService, onCallService } from "@/services";
 
 export function GlobalAlertModal() {
   console.log('🎬 GlobalAlertModal MOUNTED');
@@ -109,6 +110,9 @@ export function GlobalAlertModal() {
     }
   };
 
+  // ============================================================================
+  // 🆕 UPDATED: handleConfirmEscalate - Now uses proper escalationService
+  // ============================================================================
   const handleConfirmEscalate = async () => {
     console.log('🚨 Escalating incident with reason:', escalateReason === 'Other' ? customReason : escalateReason);
     stopSound();
@@ -117,30 +121,112 @@ export function GlobalAlertModal() {
     const incidentId = activeNotification?.incidentId || activeNotification?.data?.incidentId;
     const reason = escalateReason === 'Other' ? customReason : escalateReason;
     
-    try {
-      if (incidentId && userId) {
-        // Send escalation with reason
-        await incidentService.respondToIncident({ 
-          incidentId, 
-          action: 'escalate', 
-          userId,
-          reason  // Backend should accept this
-        } as any);
-        console.log('✅ Incident escalated successfully with reason:', reason);
+    if (!incidentId) {
+      console.error('❌ No incident ID found');
+      // Still close modal
+      if (activeNotification) {
+        markAsRead(activeNotification.id);
+        setActiveId(null);
+        setIsOpen(false);
+        setShowEscalateReason(false);
+        setEscalateReason("");
+        setCustomReason("");
+        refresh();
       }
-    } catch (err) {
-      console.error('❌ Escalate failed:', err);
+      return;
     }
     
-    // Mark as read and close modal
-    if (activeNotification) {
-      markAsRead(activeNotification.id);
-      setActiveId(null);
-      setIsOpen(false);
-      setShowEscalateReason(false);
-      setEscalateReason("");
-      setCustomReason("");
-      refresh();
+    try {
+      // Get team ID from notification data or fetch user's team
+      let teamId = activeNotification?.data?.teamId || activeNotification?.data?.team_id;
+      
+      if (!teamId && userId) {
+        // Try to fetch user's team
+        try {
+          const userTeamResponse = await onCallService.getUserTeam(userId);
+          if (userTeamResponse.success && userTeamResponse.data) {
+            teamId = userTeamResponse.data.id;
+            console.log('✅ Got team ID from user:', teamId);
+          }
+        } catch (teamError) {
+          console.warn('⚠️ Could not fetch user team:', teamError);
+        }
+      }
+      
+      // Fallback to default team if still no teamId
+      if (!teamId) {
+        teamId = 'default-team';
+        console.warn('⚠️ Using fallback team ID:', teamId);
+      }
+      
+      // Get user role
+      let userRole = 'primary';
+      try {
+        const userStr = localStorage.getItem('user');
+        if (userStr) {
+          const user = JSON.parse(userStr);
+          userRole = user.role || 'primary';
+        }
+      } catch (e) {
+        console.warn('Could not parse user role');
+      }
+      
+      // Map severity to priority
+      const severity = activeNotification?.data?.severity || 
+                       activeNotification?.severity || 
+                       'medium';
+      
+      const priorityMap: Record<string, 'low' | 'medium' | 'high' | 'critical'> = {
+        'low': 'low',
+        'medium': 'medium',
+        'high': 'high',
+        'critical': 'critical'
+      };
+      const priority = priorityMap[severity] || 'medium';
+      
+      console.log('🚨 Escalating with params:', {
+        teamId,
+        incidentId,
+        reason,
+        priority,
+        userRole
+      });
+      
+      // Call the proper escalation endpoint
+      const response = await escalationService.escalateIncident({
+        teamId: teamId,
+        incidentId: incidentId,
+        reason: reason,
+        priority: priority,
+        userRole: userRole
+      });
+      
+      console.log('✅ Incident escalated successfully:', response);
+      
+      // Mark as read and close modal
+      if (activeNotification) {
+        markAsRead(activeNotification.id);
+        setActiveId(null);
+        setIsOpen(false);
+        setShowEscalateReason(false);
+        setEscalateReason("");
+        setCustomReason("");
+        refresh();
+      }
+    } catch (err: any) {
+      console.error('❌ Escalate failed:', err);
+      alert(`Failed to escalate: ${err.message || 'Unknown error'}`);
+      
+      // Still close the modal even if escalation failed
+      if (activeNotification) {
+        markAsRead(activeNotification.id);
+        setActiveId(null);
+        setIsOpen(false);
+        setShowEscalateReason(false);
+        setEscalateReason("");
+        setCustomReason("");
+        refresh();
+      }
     }
   };
 

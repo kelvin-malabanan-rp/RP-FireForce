@@ -24,7 +24,8 @@ import { Button } from "../ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Badge } from "../ui/badge";
 import { Input } from "../ui/input";
-import { incidentService, auditService } from "../../services";
+// ✅ UPDATED: Added escalationService import
+import { incidentService, auditService, escalationService, onCallService } from "../../services";
 import type { Incident, IncidentComment } from "../../types";
 import { SaveResolutionModal } from "../modals/SaveResolutionModal";
 import { ResolveIncidentModal } from "../modals/ResolveIncidentModal";
@@ -301,43 +302,117 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
     }
   };
 
+  // ============================================================================
+  // 🆕 UPDATED: handleEscalate - Now uses proper escalationService
+  // ============================================================================
   const handleEscalate = async () => {
+    if (!incident) return;
+    
     setIsUpdatingStatus(true);
     try {
       const userId = localStorage.getItem('userId') || 'user-unknown';
       
-      const response = await incidentService.respondToIncident({
-        incidentId: incidentId,
-        action: 'escalate',
-        userId: userId
+      // Get user's team - try multiple approaches
+      let teamId = incident.team_id; // Try to get from incident first
+      
+      if (!teamId) {
+        // Try to fetch user's team
+        try {
+          const userTeamResponse = await onCallService.getUserTeam(userId);
+          if (userTeamResponse.success && userTeamResponse.data) {
+            teamId = userTeamResponse.data.id;
+            console.log('✅ Got team ID from user:', teamId);
+          }
+        } catch (teamError) {
+          console.warn('⚠️ Could not fetch user team:', teamError);
+        }
+      }
+      
+      // Fallback to default team if still no teamId
+      if (!teamId) {
+        teamId = 'default-team';
+        console.warn('⚠️ Using fallback team ID:', teamId);
+      }
+      
+      // Get user role
+      let userRole = 'primary';
+      try {
+        const userStr = localStorage.getItem('user');
+        if (userStr) {
+          const user = JSON.parse(userStr);
+          userRole = user.role || 'primary';
+        }
+      } catch (e) {
+        console.warn('Could not parse user role');
+      }
+      
+      // Map severity to priority
+      const priorityMap: Record<string, 'low' | 'medium' | 'high' | 'critical'> = {
+        'low': 'low',
+        'medium': 'medium',
+        'high': 'high',
+        'critical': 'critical'
+      };
+      const priority = priorityMap[incident.severity] || 'medium';
+      
+      console.log('🚨 Escalating with params:', {
+        teamId,
+        incidentId: incident.id,
+        priority,
+        userRole
+      });
+      
+      // Call the proper escalation endpoint
+      const response = await escalationService.escalateIncident({
+        teamId: teamId,
+        incidentId: incident.id,
+        reason: 'Escalated from web dashboard - requires higher level support',
+        priority: priority,
+        userRole: userRole
       });
       
       if (response.success) {
-        setNotification({
-          show: true,
-          type: 'success',
-          title: 'Incident Escalated',
-          message: 'This incident has been escalated to the next level.',
-        });
-        await loadIncident();
-
+        // Create audit log
         try {
           const userName = localStorage.getItem('user')
             ? JSON.parse(localStorage.getItem('user')!).first_name + ' ' + JSON.parse(localStorage.getItem('user')!).last_name
             : 'Unknown User';
           
-          await auditService.logIncidentEscalation(incident!, 1, 2, userId, userName);
+          const currentLevel = (incident as any).escalation_level || 1;
+          const newLevel = currentLevel + 1;
+          
+          await auditService.logIncidentEscalation(
+            incident, 
+            currentLevel, 
+            newLevel, 
+            userId, 
+            userName
+          );
           console.log('✅ Audit log created for incident escalation');
         } catch (auditError) {
           console.warn('⚠️ Failed to create audit log for escalation:', auditError);
         }
+        
+        setNotification({
+          show: true,
+          type: 'success',
+          title: 'Incident Escalated',
+          message: 'This incident has been escalated to the next level.',
+          details: response.data?.escalatedTo 
+            ? `Escalated to: ${response.data.escalatedTo.name || response.data.escalatedTo.email}`
+            : 'The escalation team has been notified.'
+        });
+        
+        await loadIncident();
       }
     } catch (err: any) {
+      console.error('❌ Escalation error:', err);
       setNotification({
         show: true,
         type: 'error',
         title: 'Failed to Escalate',
         message: err.message || 'Unable to escalate the incident. Please try again.',
+        details: err.data ? JSON.stringify(err.data) : undefined
       });
     } finally {
       setIsUpdatingStatus(false);
@@ -646,14 +721,13 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
       </motion.div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column - Incident Details (keeping your existing code) */}
+        {/* Left Column - Incident Details */}
         <motion.div 
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: 0.2 }}
           className="lg:col-span-2 space-y-6"
         >
-          {/* Your existing incident details cards remain the same */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -874,7 +948,7 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
             </Card>
           </motion.div>
 
-          {/* Comments Section - keeping your existing code */}
+          {/* Comments Section */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -973,7 +1047,7 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
           </motion.div>
         </motion.div>
 
-        {/* Right Column - FIXED AI Assistant */}
+        {/* Right Column - AI Assistant */}
         <motion.div
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}

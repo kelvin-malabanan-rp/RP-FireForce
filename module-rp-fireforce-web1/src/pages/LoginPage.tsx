@@ -7,6 +7,8 @@ import { Eye, EyeOff, Loader2, Zap, ArrowRight, Lock, User } from "lucide-react"
 import { AnimatedContainer, fadeInUp } from "../components/animations/variants";
 import { ParticleNetwork } from "../components/animations/ParticleNetwork";
 import { authService } from "../services";
+import { OAuthButtons } from "../components/auth/OAuthButtons";
+
 
 interface LoginPageProps {
   onLogin: () => void;
@@ -255,6 +257,20 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                       </Button>
                     </div>
                   </div>
+
+                  <div className="relative my-6">
+                    <div className="absolute inset-0 flex items-center">
+                      <div className="w-full border-t border-white/20"></div>
+                    </div>
+                    <div className="relative flex justify-center text-xs uppercase">
+                      <span className="bg-black/30 px-2 text-white/60">Or continue with</span>
+                    </div>
+                  </div>
+
+                  <OAuthButtons
+                    onError={(error) => setError(error)}
+                    disabled={loading}
+                  />
 
                   <div className="flex items-center justify-between">
                     <label className="flex items-center space-x-2">

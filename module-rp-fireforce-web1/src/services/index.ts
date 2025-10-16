@@ -1,3 +1,7 @@
+// ============================================================================
+// STEP 1: ADD ESCALATION SERVICE TO src/services/index.ts
+// ============================================================================
+
 import { apiService, ApiResponse } from './apiService';
 import { auditService } from './auditService';
 import type { 
@@ -14,12 +18,8 @@ import type {
 export type { User, LoginCredentials, LoginResponse, Incident, IncidentComment };
 export { auditService };
 
-// Auth service methods
+// Auth service methods (KEEP AS IS - NO CHANGES)
 export const authService = {
-  /**
-   * Login user with email and password
-   * API: POST /api/auth/login
-   */
   login: async (credentials: LoginCredentials): Promise<ApiResponse<LoginResponse>> => {
     try {
       const response = await apiService.post<any>('/api/auth/login', credentials);
@@ -29,14 +29,12 @@ export const authService = {
       const apiData = response.data;
       
       if (apiData && apiData.httpStatus === 'OK' && apiData.data) {
-        const userData = apiData.data; // This is the user object directly
+        const userData = apiData.data;
         
-        // Store auth token (or use a fallback if empty)
         const token = userData.token || 'temp-auth-token';
         apiService.setAuthToken(token);
         localStorage.setItem('authToken', token);
         
-        // Store user data
         localStorage.setItem('user', JSON.stringify(userData));
         localStorage.setItem('userId', userData.id);
         localStorage.setItem('userEmail', userData.email);
@@ -104,12 +102,8 @@ export const authService = {
   },
 };
 
-// Incident service methods
+// Incident service methods (KEEP AS IS - NO CHANGES)
 export const incidentService = {
-  /**
-   * Get all incidents
-   * API: GET /api/incidents
-   */
   getAllIncidents: async (): Promise<ApiResponse<Incident[]>> => {
     try {
       const response = await apiService.get<any>('/api/incidents');
@@ -138,10 +132,6 @@ export const incidentService = {
     }
   },
 
-  /**
-   * Get incident by ID
-   * API: GET /api/incidents/select?incidentId={id}
-   */
   getIncidentById: async (incidentId: string): Promise<ApiResponse<Incident>> => {
     try {
       const response = await apiService.get<any>(`/api/incidents/select?incidentId=${incidentId}`);
@@ -166,10 +156,6 @@ export const incidentService = {
     }
   },
 
-  /**
-   * Create new incident
-   * API: POST /api/incidents
-   */
   createIncident: async (data: CreateIncidentData): Promise<ApiResponse<Incident>> => {
     try {
       const response = await apiService.post<any>('/api/incidents', data);
@@ -194,10 +180,6 @@ export const incidentService = {
     }
   },
 
-  /**
-   * Update incident status
-   * API: PUT /api/incidents/{id}/status
-   */
   updateIncidentStatus: async (incidentId: string, newStatus: string, resolvedBy?: string): Promise<ApiResponse<Incident>> => {
     try {
       const response = await apiService.put<any>(
@@ -224,10 +206,6 @@ export const incidentService = {
     }
   },
 
-  /**
-   * Respond to incident (acknowledge, escalate, assign)
-   * API: POST /api/incidents/respond
-   */
   respondToIncident: async (data: { incidentId: string; action: string; userId: string }): Promise<ApiResponse<any>> => {
     try {
       const response = await apiService.post<any>('/api/incidents/respond', data);
@@ -253,10 +231,6 @@ export const incidentService = {
     }
   },
 
-  /**
-   * Resolve incident
-   * API: POST /api/incidents/{id}/resolve
-   */
   resolveIncident: async (incidentId: string, data: { resolvedBy: string; resolution: string }): Promise<ApiResponse<Incident>> => {
     try {
       const response = await apiService.post<any>(`/api/incidents/${incidentId}/resolve`, {
@@ -285,10 +259,6 @@ export const incidentService = {
     }
   },
 
-  /**
-   * Get comments for an incident
-   * API: GET /api/incidents-comment?incidentId={id}
-   */
   getIncidentComments: async (incidentId: string): Promise<ApiResponse<IncidentComment[]>> => {
     try {
       const response = await apiService.get<any>(`/api/incidents-comment?incidentId=${incidentId}`);
@@ -317,10 +287,6 @@ export const incidentService = {
     }
   },
 
-  /**
-   * Post a comment to an incident
-   * API: POST /api/incidents-comment
-   */
   postIncidentComment: async (data: CreateCommentData): Promise<ApiResponse<IncidentComment>> => {
     try {
       const response = await apiService.post<any>('/api/incidents-comment', data);
@@ -345,11 +311,6 @@ export const incidentService = {
     }
   },
 
-  /**
-   * Get incident statistics
-   * API: GET /api/incidents/stats?timeframe={timeframe}
-   * @param timeframe - Options: '24h', '7d', '30d', '90d', '1y', 'all'
-   */
   getIncidentStats: async (timeframe: string = '24h'): Promise<ApiResponse<any>> => {
     try {
       const response = await apiService.get<any>(`/api/incidents/stats?timeframe=${timeframe}`);
@@ -394,12 +355,8 @@ export const incidentService = {
   },
 };
 
-// Comment service methods
+// Comment service methods (KEEP AS IS - NO CHANGES)
 export const commentService = {
-  /**
-   * Get comments for an incident
-   * API: GET /api/incidents-comment?incidentId={id}
-   */
   getIncidentComments: async (incidentId: string): Promise<ApiResponse<IncidentComment[]>> => {
     try {
       const response = await apiService.get<any>(`/api/incidents-comment?incidentId=${incidentId}`);
@@ -428,10 +385,6 @@ export const commentService = {
     }
   },
 
-  /**
-   * Post a comment to an incident
-   * API: POST /api/incidents-comment
-   */
   postIncidentComment: async (data: CreateCommentData): Promise<ApiResponse<IncidentComment>> => {
     try {
       const response = await apiService.post<any>('/api/incidents-comment', data);
@@ -457,12 +410,8 @@ export const commentService = {
   },
 };
 
-// Stats service methods
+// Stats service methods (KEEP AS IS - NO CHANGES)
 export const statsService = {
-  /**
-   * Get incident statistics
-   * API: GET /api/incidents/stats?timeframe={timeframe}
-   */
   getIncidentStats: async (timeframe: string = '24h'): Promise<ApiResponse<any>> => {
     try {
       const response = await apiService.get<any>(`/api/incidents/stats?timeframe=${timeframe}`);
@@ -495,12 +444,8 @@ export const statsService = {
   },
 };
 
-// On-Call service methods
+// On-Call service methods (KEEP AS IS - NO CHANGES)
 export const onCallService = {
-  /**
-   * Get all teams
-   * API: GET /api/oncall/teams
-   */
   getTeams: async (): Promise<ApiResponse<any[]>> => {
     try {
       const response = await apiService.get<any>('/api/oncall/teams');
@@ -532,10 +477,6 @@ export const onCallService = {
     }
   },
 
-  /**
-   * Get current on-call personnel for a team
-   * API: GET /api/oncall/current?teamId={teamId}
-   */
   getCurrentOnCall: async (teamId: string): Promise<ApiResponse<any>> => {
     try {
       const response = await apiService.get<any>(`/api/oncall/current?teamId=${teamId}`);
@@ -567,10 +508,6 @@ export const onCallService = {
     }
   },
 
-  /**
-   * Get on-call schedule for a team
-   * API: GET /api/oncall/schedule?teamId={teamId}&days={days}
-   */
   getSchedule: async (teamId: string, days: number = 7): Promise<ApiResponse<any[]>> => {
     try {
       const response = await apiService.get<any>(`/api/oncall/schedule?teamId=${teamId}&days=${days}`);
@@ -602,10 +539,6 @@ export const onCallService = {
     }
   },
 
-  /**
-   * Get user's team
-   * API: GET /api/oncall/user/team?userId={userId}
-   */
   getUserTeam: async (userId: string): Promise<ApiResponse<any>> => {
     try {
       const response = await apiService.get<any>(`/api/oncall/user/team?userId=${userId}`);
@@ -637,10 +570,6 @@ export const onCallService = {
     }
   },
 
-  /**
-   * Create on-call override
-   * API: POST /api/oncall/override
-   */
   createOverride: async (params: any): Promise<ApiResponse<any>> => {
     try {
       const response = await apiService.post<any>('/api/oncall/override', params);
@@ -663,10 +592,6 @@ export const onCallService = {
     }
   },
 
-  /**
-   * Delete on-call override
-   * API: DELETE /api/oncall/override/{overrideId}
-   */
   deleteOverride: async (overrideId: string): Promise<ApiResponse<any>> => {
     try {
       const response = await apiService.delete<any>(`/api/oncall/override/${overrideId}`);
@@ -689,10 +614,6 @@ export const onCallService = {
     }
   },
 
-  /**
-   * Create escalation
-   * API: POST /api/oncall/escalate
-   */
   createEscalation: async (params: any): Promise<ApiResponse<any>> => {
     try {
       const response = await apiService.post<any>('/api/oncall/escalate', params);
@@ -716,12 +637,8 @@ export const onCallService = {
   },
 };
 
-// Audit Trail service methods
+// Audit Trail service methods (KEEP AS IS - NO CHANGES)
 export const auditTrailService = {
-  /**
-   * Get audit trail for a specific incident
-   * API: GET /api/audit/incidents/{incidentId}/trail
-   */
   getIncidentAuditTrail: async (incidentId: string): Promise<ApiResponse<any>> => {
     try {
       const response = await apiService.get<any>(`/api/audit/incidents/${incidentId}/trail`);
@@ -750,10 +667,6 @@ export const auditTrailService = {
     }
   },
 
-  /**
-   * Get notification history for an incident
-   * API: GET /api/audit/incidents/{incidentId}/notifications
-   */
   getIncidentNotifications: async (incidentId: string): Promise<ApiResponse<any>> => {
     try {
       const response = await apiService.get<any>(`/api/audit/incidents/${incidentId}/notifications`);
@@ -782,10 +695,6 @@ export const auditTrailService = {
     }
   },
 
-  /**
-   * Get full incident audit (comprehensive data)
-   * API: GET /api/audit/incidents/{incidentId}/full
-   */
   getFullIncidentAudit: async (incidentId: string): Promise<ApiResponse<any>> => {
     try {
       const response = await apiService.get<any>(`/api/audit/incidents/${incidentId}/full`);
@@ -815,12 +724,8 @@ export const auditTrailService = {
   },
 };
 
-// AI Analytics service methods
+// AI Analytics service methods (KEEP AS IS - NO CHANGES)
 export const aiAnalyticsService = {
-  /**
-   * Get main AI dashboard overview
-   * API: GET http://localhost:8000/analytics/dashboard
-   */
   getDashboard: async (): Promise<ApiResponse<any>> => {
     try {
       const response = await fetch('http://localhost:8000/analytics/dashboard');
@@ -841,10 +746,6 @@ export const aiAnalyticsService = {
     }
   },
 
-  /**
-   * Get AI confidence metrics
-   * API: GET http://localhost:8000/analytics/confidence
-   */
   getConfidence: async (): Promise<ApiResponse<any>> => {
     try {
       const response = await fetch('http://localhost:8000/analytics/confidence');
@@ -865,10 +766,6 @@ export const aiAnalyticsService = {
     }
   },
 
-  /**
-   * Get AI predictions and risk assessment
-   * API: GET http://localhost:8000/analytics/predictions
-   */
   getPredictions: async (): Promise<ApiResponse<any>> => {
     try {
       const response = await fetch('http://localhost:8000/analytics/predictions');
@@ -889,10 +786,6 @@ export const aiAnalyticsService = {
     }
   },
 
-  /**
-   * Get service health scores
-   * API: GET http://localhost:8000/analytics/services
-   */
   getServices: async (): Promise<ApiResponse<any>> => {
     try {
       const response = await fetch('http://localhost:8000/analytics/services');
@@ -913,10 +806,6 @@ export const aiAnalyticsService = {
     }
   },
 
-  /**
-   * Get time-based incident patterns
-   * API: GET http://localhost:8000/analytics/time-patterns
-   */
   getTimePatterns: async (): Promise<ApiResponse<any>> => {
     try {
       const response = await fetch('http://localhost:8000/analytics/time-patterns');
@@ -933,6 +822,62 @@ export const aiAnalyticsService = {
         data: null,
         success: false,
         status: 500,
+      };
+    }
+  },
+};
+
+// ============================================================================
+// 🆕 NEW: ESCALATION SERVICE
+// ============================================================================
+
+/**
+ * Escalation service for proper incident escalation
+ * Uses the correct /api/oncall/escalate endpoint
+ */
+export const escalationService = {
+  /**
+   * Escalate incident to next level
+   * API: POST /api/oncall/escalate
+   * 
+   * @param data.teamId - Team ID to escalate within
+   * @param data.incidentId - Incident to escalate
+   * @param data.reason - Reason for escalation
+   * @param data.priority - Priority level (critical, high, medium, low)
+   * @param data.userRole - Current user's role (primary, backup, escalation)
+   */
+  escalateIncident: async (data: {
+    teamId: string;
+    incidentId: string;
+    reason: string;
+    priority: 'low' | 'medium' | 'high' | 'critical';
+    userRole?: string;
+  }): Promise<ApiResponse<any>> => {
+    try {
+      console.log('🚨 Escalating incident:', data);
+      
+      const response = await apiService.post<any>('/api/oncall/escalate', data);
+      const apiData = response.data;
+      
+      console.log('✅ Escalation response:', apiData);
+      
+      // Handle different response formats
+      if (apiData && (apiData.success || apiData.httpStatus === 'OK')) {
+        return {
+          data: apiData.data || apiData.object || apiData,
+          success: true,
+          status: 200,
+          message: apiData.message || 'Incident escalated successfully'
+        };
+      }
+      
+      throw new Error(apiData?.message || 'Failed to escalate incident');
+    } catch (error: any) {
+      console.error('❌ Escalate incident error:', error);
+      throw {
+        message: error.response?.data?.message || error.message || 'Failed to escalate incident',
+        status: error.response?.status || 500,
+        data: error.response?.data,
       };
     }
   },
