@@ -208,37 +208,53 @@ export class AuthenticationServices {
 	/**
 	 * Find or create OAuth user
 	 */
+	/**
+	 * Find or create OAuth user (safe against duplicate email constraint)
+	 */
 	private async findOrCreateOAuthUser(provider: 'google' | 'github', userInfo: OAuthUserInfo): Promise<any | null> {
 		try {
-			// Google returns 'id', not 'sub' in this endpoint
 			const oauthId = provider === 'google'
-				? (userInfo.id?.toString() || userInfo.sub) // Try id first, then sub
+				? (userInfo.id?.toString() || userInfo.sub)
 				: userInfo.id?.toString();
 
 			console.log('🔑 OAuth ID:', oauthId);
 			console.log('🔑 Provider:', provider);
 
-			if (!oauthId) {
-				console.error('Missing OAuth ID');
-				console.error('userInfo.sub:', userInfo.sub);
-				console.error('userInfo.id:', userInfo.id);
-				console.error('All userInfo keys:', Object.keys(userInfo));
+			if (!oauthId || !userInfo.email) {
+				console.error('❌ Missing required OAuth info');
 				return null;
 			}
 
-			// Check if user exists
+			// Step 1: Try to find user by provider + oauth_id first
 			let user = await this.env.DB.prepare(
-				'SELECT * FROM users WHERE oauth_provider = ? AND oauth_id = ?'
+				`SELECT * FROM users WHERE oauth_provider = ? AND oauth_id = ?`
 			).bind(provider, oauthId).first();
 
 			if (user) {
-				console.log('✅ Existing user found');
-				// Update last login
+				console.log('✅ Existing OAuth user found');
 				await this.updateLastLogin(user.id);
 				return user;
 			}
 
-			// Create new user
+			// Step 2: If not found, check by email
+			const existingByEmail = await this.env.DB.prepare(
+				`SELECT * FROM users WHERE email = ?`
+			).bind(userInfo.email).first();
+
+			if (existingByEmail) {
+				console.log('🔁 Found existing user with same email. Linking OAuth account...');
+
+				await this.env.DB.prepare(`
+				UPDATE users
+				SET oauth_provider = ?, oauth_id = ?, updated_at = CURRENT_TIMESTAMP
+				WHERE email = ?
+			`).bind(provider, oauthId, userInfo.email).run();
+
+				await this.updateLastLogin(existingByEmail.id);
+				return existingByEmail;
+			}
+
+			// Step 3: Create new user
 			console.log('📝 Creating new user...');
 			const userId = crypto.randomUUID();
 			const nameParts = userInfo.name?.split(' ') || [];
@@ -252,12 +268,13 @@ export class AuthenticationServices {
 			const avatarUrl = provider === 'google' ? userInfo.picture : userInfo.avatar_url;
 
 			await this.env.DB.prepare(`
-				INSERT INTO users (
-					id, email, first_name, last_name, display_name,
-					avatar_url, oauth_provider, oauth_id, is_verified, is_active,
-					created_at, updated_at, last_login
-				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-			`).bind(
+			INSERT INTO users (
+				id, email, first_name, last_name, display_name,
+				avatar_url, oauth_provider, oauth_id, is_verified, is_active,
+				created_at, updated_at, last_login
+			)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+		`).bind(
 				userId,
 				userInfo.email,
 				firstName,
@@ -268,13 +285,11 @@ export class AuthenticationServices {
 				oauthId
 			).run();
 
-			// Fetch the newly created user
 			user = await this.env.DB.prepare(
-				'SELECT * FROM users WHERE id = ?'
+				`SELECT * FROM users WHERE id = ?`
 			).bind(userId).first();
 
 			console.log(`✅ Created new ${provider} user:`, userInfo.email);
-
 			return user;
 
 		} catch (error) {
