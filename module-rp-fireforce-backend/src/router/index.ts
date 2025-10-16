@@ -85,6 +85,14 @@ export class Router {
 				return handleLogin(request, this.env, CORS_HEADERS);
 			}
 
+			if (path === '/auth/google/callback' && method === 'GET') {
+				return handleGoogleCallback(request, this.env);
+			}
+
+			if (path === '/auth/github/callback' && method === 'GET') {
+				return handleGithubCallback(request, this.env);
+			}
+
 			if (path === '/api/auth/logout' && method === 'POST') {
 				return handleLogout(request, this.env, CORS_HEADERS);
 			}

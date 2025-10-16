@@ -7,7 +7,7 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>$(DEVELOPMENT_LANGUAGE)</string>
     <key>CFBundleDisplayName</key>
-    <string>RP-Fireforce-Pager</string>
+    <string>RP FireForce</string>
     <key>CFBundleExecutable</key>
     <string>$(EXECUTABLE_NAME)</string>
     <key>CFBundleIdentifier</key>
@@ -28,7 +28,6 @@
         <key>CFBundleURLSchemes</key>
         <array>
           <string>rpfireforcepager</string>
-          <string>com.rocketpartners.rpfireforcepager</string>
         </array>
       </dict>
     </array>

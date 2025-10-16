@@ -1,6 +1,6 @@
 // handlers/auth.handler.ts
-import {ApiResponse, Env, LoginRequest, LoginResponse} from '../types';
-import {AuthenticationServices} from "../services/authentication.services";
+import { ApiResponse, Env, LoginRequest, LoginResponse } from '../types';
+import { AuthenticationServices } from "../services/authentication.services";
 
 export async function handleLogin(
 	request: Request,
@@ -78,17 +78,19 @@ export async function handleLogin(
 			});
 		}
 
+		// Generate JWT token
+		const token = await authService.generateJWT(user);
+
 		// Prepare login response with team info
 		const loginResponse: LoginResponse = {
 			id: user.id,
 			email: user.email,
-			password: "", // Never return the actual password
+			password: "",
 			firstName: user.firstName || "",
 			lastName: user.lastName || "",
-			role: user.role || "",
 			teamId: user.teamId || null,
 			teamRole: user.teamRole || null,
-			token: "" // JWT removed, placeholder for future
+			token: token
 		};
 
 		const response: ApiResponse<LoginResponse> = {
@@ -97,7 +99,7 @@ export async function handleLogin(
 			data: loginResponse
 		};
 
-		console.log(`Successful login: ${user.email} (${user.role}) — Team: ${user.teamId}, Team Role: ${user.teamRole}`);
+		console.log(`Successful login: ${user.email} — Team: ${user.teamId}, Team Role: ${user.teamRole}`);
 
 		return new Response(JSON.stringify(response), {
 			status: 200,
@@ -114,6 +116,212 @@ export async function handleLogin(
 			status: 500,
 			headers: corsHeaders
 		});
+	}
+}
+
+export async function handleGoogleCallback(
+	request: Request,
+	env: Env
+): Promise<Response> {
+	try {
+		const url = new URL(request.url);
+		const code = url.searchParams.get('code');
+		const error = url.searchParams.get('error');
+
+		if (error) {
+			return Response.redirect(
+				`rpfireforcepager://auth/callback?error=${encodeURIComponent(error)}`
+			);
+		}
+
+		if (!code) {
+			return Response.redirect(
+				'rpfireforcepager://auth/callback?error=no_code'
+			);
+		}
+
+		// Initialize auth service
+		const authService = new AuthenticationServices(env);
+
+		// Exchange code for user info and create/find user
+		const result = await authService.handleGoogleOAuth(code);
+
+		if (!result) {
+			return Response.redirect(
+				'rpfireforcepager://auth/callback?error=authentication_failed'
+			);
+		}
+
+		// Return HTML page that redirects to app
+		return new Response(`
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>Authentication Successful</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<style>
+		body {
+			font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			min-height: 100vh;
+			margin: 0;
+			background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+			color: white;
+			text-align: center;
+			padding: 20px;
+		}
+		.container {
+			max-width: 400px;
+		}
+		h1 { font-size: 24px; margin-bottom: 16px; }
+		p { font-size: 16px; opacity: 0.9; }
+	</style>
+</head>
+<body>
+	<div class="container">
+		<h1>✓ Authentication Successful</h1>
+		<p>Redirecting back to RP FireForce...</p>
+	</div>
+	<script>
+		const params = {
+			token: '${result.token}',
+			userId: '${result.user.id}',
+			email: '${result.user.email}',
+			displayName: '${result.user.display_name || result.user.email || ''}',
+			avatarUrl: '${result.user.avatar_url || ''}'
+		};
+		const paramString = new URLSearchParams(params).toString();
+		window.location.href = 'rpfireforcepager://auth/callback?' + paramString;
+
+		setTimeout(() => {
+			document.body.innerHTML = \`
+				<div class="container">
+					<h1>Authentication Complete!</h1>
+					<p>Please return to the RP FireForce app.</p>
+					<p style="margin-top: 20px; font-size: 14px;">If the app didn't open automatically, please close this window and reopen RP FireForce.</p>
+				</div>
+			\`;
+		}, 2000);
+	</script>
+</body>
+</html>
+		`, {
+			headers: {
+				'Content-Type': 'text/html'
+			}
+		});
+
+	} catch (error) {
+		console.error('Google OAuth error:', error);
+		return Response.redirect(
+			`rpfireforcepager://auth/callback?error=${encodeURIComponent('server_error')}`
+		);
+	}
+}
+
+export async function handleGithubCallback(
+	request: Request,
+	env: Env
+): Promise<Response> {
+	try {
+		const url = new URL(request.url);
+		const code = url.searchParams.get('code');
+		const error = url.searchParams.get('error');
+
+		if (error) {
+			return Response.redirect(
+				`rpfireforcepager://auth/callback?error=${encodeURIComponent(error)}`
+			);
+		}
+
+		if (!code) {
+			return Response.redirect(
+				'rpfireforcepager://auth/callback?error=no_code'
+			);
+		}
+
+		// Initialize auth service
+		const authService = new AuthenticationServices(env);
+
+		// Exchange code for user info and create/find user
+		const result = await authService.handleGithubOAuth(code);
+
+		if (!result) {
+			return Response.redirect(
+				'rpfireforcepager://auth/callback?error=authentication_failed'
+			);
+		}
+
+		// Return HTML page that redirects to app
+		return new Response(`
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>Authentication Successful</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<style>
+		body {
+			font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			min-height: 100vh;
+			margin: 0;
+			background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+			color: white;
+			text-align: center;
+			padding: 20px;
+		}
+		.container {
+			max-width: 400px;
+		}
+		h1 { font-size: 24px; margin-bottom: 16px; }
+		p { font-size: 16px; opacity: 0.9; }
+	</style>
+</head>
+<body>
+	<div class="container">
+		<h1>✓ Authentication Successful</h1>
+		<p>Redirecting back to RP FireForce...</p>
+	</div>
+	<script>
+		const params = {
+			token: '${result.token}',
+			userId: '${result.user.id}',
+			email: '${result.user.email}',
+			displayName: '${result.user.display_name || result.user.email || ''}',
+			avatarUrl: '${result.user.avatar_url || ''}'
+		};
+		const paramString = new URLSearchParams(params).toString();
+		window.location.href = 'rpfireforcepager://auth/callback?' + paramString;
+
+		setTimeout(() => {
+			document.body.innerHTML = \`
+				<div class="container">
+					<h1>Authentication Complete!</h1>
+					<p>Please return to the RP FireForce app.</p>
+					<p style="margin-top: 20px; font-size: 14px;">If the app didn't open automatically, please close this window and reopen RP FireForce.</p>
+				</div>
+			\`;
+		}, 2000);
+	</script>
+</body>
+</html>
+		`, {
+			headers: {
+				'Content-Type': 'text/html'
+			}
+		});
+
+	} catch (error) {
+		console.error('GitHub OAuth error:', error);
+		return Response.redirect(
+			`rpfireforcepager://auth/callback?error=${encodeURIComponent('server_error')}`
+		);
 	}
 }
 

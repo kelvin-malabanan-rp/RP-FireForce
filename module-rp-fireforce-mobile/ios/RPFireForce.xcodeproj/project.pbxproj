@@ -7,33 +7,41 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		050DCF545DA149ADB77E790E /* alarm_sound.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 8A76006CF0A04B55B40B6DB4 /* alarm_sound.mp3 */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
-		1CC32A36D4F6B7996C02E3D8 /* libPods-RPFireforcePager.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 9EB4BB6063D5EBDA16D907A7 /* libPods-RPFireforcePager.a */; };
 		3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */; };
-		B0338A7AA548B9C2E9F96780 /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C8BCA62411A2D71FD61815E /* ExpoModulesProvider.swift */; };
+		5C23FD3CB83845DC8D33B68B /* alarm_medium.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 153F42CFFA444930A98DAD99 /* alarm_medium.mp3 */; };
+		79E534702764FA83AC0B0269 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A579A2810297EBA6AD523D86 /* PrivacyInfo.xcprivacy */; };
+		7DB0F13D511F4831ABE81080 /* alarm_critical.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = EAC5BBDDEA584DB5A380E689 /* alarm_critical.mp3 */; };
+		8D401047EA5E49AC82728422 /* alarm_sound_ios.wav in Resources */ = {isa = PBXBuildFile; fileRef = 8D4A173A1042476C8D2E7C80 /* alarm_sound_ios.wav */; };
+		94FF0022F00F45839B3E7459 /* alarm_low.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 4F2195DE84BC4286AC1ED87E /* alarm_low.mp3 */; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
-		BF704B44521B4EC2B56CE71A /* alarm_sound.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 5567F3ACD0E243079C869F0F /* alarm_sound.mp3 */; };
-		CE141784CA3B7E0860150577 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 124A925DBB7B4FA53C131286 /* PrivacyInfo.xcprivacy */; };
-		EAEEEB1E7C2D4B6489093CD7 /* alarm_sound_ios.wav in Resources */ = {isa = PBXBuildFile; fileRef = BB5E7E069243480CAAFAA8A2 /* alarm_sound_ios.wav */; };
+		C406A498DF84409780CDF3D6 /* alarm_high.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 43B32AF50A224AD684BA1FC0 /* alarm_high.mp3 */; };
+		D68E7FE739BF69F22FF64B3D /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D9A65AF8AFF1AD0B55C4890 /* ExpoModulesProvider.swift */; };
+		DA9ECF7700432EFB35B951AA /* libPods-RPFireForce.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 5F2BCF1A1BE58E8AA10CFCF2 /* libPods-RPFireForce.a */; };
 		F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11748412D0307B40044C1D9 /* AppDelegate.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		124A925DBB7B4FA53C131286 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = RPFireforcePager/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
-		13B07F961A680F5B00A75B9A /* RPFireforcePager.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RPFireforcePager.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = RPFireforcePager/Images.xcassets; sourceTree = "<group>"; };
-		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = RPFireforcePager/Info.plist; sourceTree = "<group>"; };
-		1C651D276D7E0FC6371C7B09 /* Pods-RPFireforcePager.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RPFireforcePager.debug.xcconfig"; path = "Target Support Files/Pods-RPFireforcePager/Pods-RPFireforcePager.debug.xcconfig"; sourceTree = "<group>"; };
-		4C8BCA62411A2D71FD61815E /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-RPFireforcePager/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
-		5567F3ACD0E243079C869F0F /* alarm_sound.mp3 */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = alarm_sound.mp3; path = RPFireforcePager/alarm_sound.mp3; sourceTree = "<group>"; };
-		9EB4BB6063D5EBDA16D907A7 /* libPods-RPFireforcePager.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-RPFireforcePager.a"; sourceTree = BUILT_PRODUCTS_DIR; };
-		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = RPFireforcePager/SplashScreen.storyboard; sourceTree = "<group>"; };
+		13B07F961A680F5B00A75B9A /* RPFireForce.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RPFireForce.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = RPFireForce/Images.xcassets; sourceTree = "<group>"; };
+		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = RPFireForce/Info.plist; sourceTree = "<group>"; };
+		153F42CFFA444930A98DAD99 /* alarm_medium.mp3 */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = alarm_medium.mp3; path = RPFireForce/alarm_medium.mp3; sourceTree = "<group>"; };
+		1E3EB91C0246502C7373B388 /* Pods-RPFireForce.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RPFireForce.debug.xcconfig"; path = "Target Support Files/Pods-RPFireForce/Pods-RPFireForce.debug.xcconfig"; sourceTree = "<group>"; };
+		3D9A65AF8AFF1AD0B55C4890 /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-RPFireForce/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
+		43B32AF50A224AD684BA1FC0 /* alarm_high.mp3 */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = alarm_high.mp3; path = RPFireForce/alarm_high.mp3; sourceTree = "<group>"; };
+		4F2195DE84BC4286AC1ED87E /* alarm_low.mp3 */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = alarm_low.mp3; path = RPFireForce/alarm_low.mp3; sourceTree = "<group>"; };
+		5F2BCF1A1BE58E8AA10CFCF2 /* libPods-RPFireForce.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-RPFireForce.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		8A76006CF0A04B55B40B6DB4 /* alarm_sound.mp3 */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = alarm_sound.mp3; path = RPFireForce/alarm_sound.mp3; sourceTree = "<group>"; };
+		8D4A173A1042476C8D2E7C80 /* alarm_sound_ios.wav */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = alarm_sound_ios.wav; path = RPFireForce/alarm_sound_ios.wav; sourceTree = "<group>"; };
+		A0877224795311B408C5E584 /* Pods-RPFireForce.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RPFireForce.release.xcconfig"; path = "Target Support Files/Pods-RPFireForce/Pods-RPFireForce.release.xcconfig"; sourceTree = "<group>"; };
+		A579A2810297EBA6AD523D86 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = RPFireForce/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = RPFireForce/SplashScreen.storyboard; sourceTree = "<group>"; };
 		BB2F792C24A3F905000567C9 /* Expo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Expo.plist; sourceTree = "<group>"; };
-		BB5E7E069243480CAAFAA8A2 /* alarm_sound_ios.wav */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = alarm_sound_ios.wav; path = RPFireforcePager/alarm_sound_ios.wav; sourceTree = "<group>"; };
-		DE0754063DAED6980A1EE40C /* Pods-RPFireforcePager.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RPFireforcePager.release.xcconfig"; path = "Target Support Files/Pods-RPFireforcePager/Pods-RPFireforcePager.release.xcconfig"; sourceTree = "<group>"; };
+		EAC5BBDDEA584DB5A380E689 /* alarm_critical.mp3 */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = alarm_critical.mp3; path = RPFireForce/alarm_critical.mp3; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
-		F11748412D0307B40044C1D9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = RPFireforcePager/AppDelegate.swift; sourceTree = "<group>"; };
-		F11748442D0722820044C1D9 /* RPFireforcePager-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "RPFireforcePager-Bridging-Header.h"; path = "RPFireforcePager/RPFireforcePager-Bridging-Header.h"; sourceTree = "<group>"; };
+		F11748412D0307B40044C1D9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = RPFireForce/AppDelegate.swift; sourceTree = "<group>"; };
+		F11748442D0722820044C1D9 /* RPFireForce-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "RPFireForce-Bridging-Header.h"; path = "RPFireForce/RPFireForce-Bridging-Header.h"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -41,44 +49,58 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				1CC32A36D4F6B7996C02E3D8 /* libPods-RPFireforcePager.a in Frameworks */,
+				DA9ECF7700432EFB35B951AA /* libPods-RPFireForce.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		0F5644F7EFF69DD7E49EC6F4 /* RPFireforcePager */ = {
-			isa = PBXGroup;
-			children = (
-				4C8BCA62411A2D71FD61815E /* ExpoModulesProvider.swift */,
-			);
-			name = RPFireforcePager;
-			sourceTree = "<group>";
-		};
-		13B07FAE1A68108700A75B9A /* RPFireforcePager */ = {
+		13B07FAE1A68108700A75B9A /* RPFireForce */ = {
 			isa = PBXGroup;
 			children = (
 				F11748412D0307B40044C1D9 /* AppDelegate.swift */,
-				F11748442D0722820044C1D9 /* RPFireforcePager-Bridging-Header.h */,
+				F11748442D0722820044C1D9 /* RPFireForce-Bridging-Header.h */,
 				BB2F792B24A3F905000567C9 /* Supporting */,
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */,
-				5567F3ACD0E243079C869F0F /* alarm_sound.mp3 */,
-				BB5E7E069243480CAAFAA8A2 /* alarm_sound_ios.wav */,
-				124A925DBB7B4FA53C131286 /* PrivacyInfo.xcprivacy */,
+				8A76006CF0A04B55B40B6DB4 /* alarm_sound.mp3 */,
+				EAC5BBDDEA584DB5A380E689 /* alarm_critical.mp3 */,
+				43B32AF50A224AD684BA1FC0 /* alarm_high.mp3 */,
+				153F42CFFA444930A98DAD99 /* alarm_medium.mp3 */,
+				4F2195DE84BC4286AC1ED87E /* alarm_low.mp3 */,
+				8D4A173A1042476C8D2E7C80 /* alarm_sound_ios.wav */,
+				A579A2810297EBA6AD523D86 /* PrivacyInfo.xcprivacy */,
 			);
-			name = RPFireforcePager;
+			name = RPFireForce;
+			sourceTree = "<group>";
+		};
+		152B88F75BB959DBFD2CF9FD /* Pods */ = {
+			isa = PBXGroup;
+			children = (
+				1E3EB91C0246502C7373B388 /* Pods-RPFireForce.debug.xcconfig */,
+				A0877224795311B408C5E584 /* Pods-RPFireForce.release.xcconfig */,
+			);
+			name = Pods;
+			path = Pods;
 			sourceTree = "<group>";
 		};
 		2D16E6871FA4F8E400B85C8A /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
 				ED297162215061F000B7C4FE /* JavaScriptCore.framework */,
-				9EB4BB6063D5EBDA16D907A7 /* libPods-RPFireforcePager.a */,
+				5F2BCF1A1BE58E8AA10CFCF2 /* libPods-RPFireForce.a */,
 			);
 			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		61423AEE568C85D375CDD9CB /* ExpoModulesProviders */ = {
+			isa = PBXGroup;
+			children = (
+				A555AE1538FFEFA2B145B634 /* RPFireForce */,
+			);
+			name = ExpoModulesProviders;
 			sourceTree = "<group>";
 		};
 		832341AE1AAA6A7D00B99B32 /* Libraries */ = {
@@ -91,12 +113,12 @@
 		83CBB9F61A601CBA00E9B192 = {
 			isa = PBXGroup;
 			children = (
-				13B07FAE1A68108700A75B9A /* RPFireforcePager */,
+				13B07FAE1A68108700A75B9A /* RPFireForce */,
 				832341AE1AAA6A7D00B99B32 /* Libraries */,
 				83CBBA001A601CBA00E9B192 /* Products */,
 				2D16E6871FA4F8E400B85C8A /* Frameworks */,
-				C6A6020F4C4F294936AC0180 /* Pods */,
-				AE02D03DB21D920FF5CDC57C /* ExpoModulesProviders */,
+				152B88F75BB959DBFD2CF9FD /* Pods */,
+				61423AEE568C85D375CDD9CB /* ExpoModulesProviders */,
 			);
 			indentWidth = 2;
 			sourceTree = "<group>";
@@ -106,17 +128,17 @@
 		83CBBA001A601CBA00E9B192 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				13B07F961A680F5B00A75B9A /* RPFireforcePager.app */,
+				13B07F961A680F5B00A75B9A /* RPFireForce.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
 		};
-		AE02D03DB21D920FF5CDC57C /* ExpoModulesProviders */ = {
+		A555AE1538FFEFA2B145B634 /* RPFireForce */ = {
 			isa = PBXGroup;
 			children = (
-				0F5644F7EFF69DD7E49EC6F4 /* RPFireforcePager */,
+				3D9A65AF8AFF1AD0B55C4890 /* ExpoModulesProvider.swift */,
 			);
-			name = ExpoModulesProviders;
+			name = RPFireForce;
 			sourceTree = "<group>";
 		};
 		BB2F792B24A3F905000567C9 /* Supporting */ = {
@@ -125,42 +147,32 @@
 				BB2F792C24A3F905000567C9 /* Expo.plist */,
 			);
 			name = Supporting;
-			path = RPFireforcePager/Supporting;
-			sourceTree = "<group>";
-		};
-		C6A6020F4C4F294936AC0180 /* Pods */ = {
-			isa = PBXGroup;
-			children = (
-				1C651D276D7E0FC6371C7B09 /* Pods-RPFireforcePager.debug.xcconfig */,
-				DE0754063DAED6980A1EE40C /* Pods-RPFireforcePager.release.xcconfig */,
-			);
-			name = Pods;
-			path = Pods;
+			path = RPFireForce/Supporting;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		13B07F861A680F5B00A75B9A /* RPFireforcePager */ = {
+		13B07F861A680F5B00A75B9A /* RPFireForce */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 13B07F931A680F5B00A75B9A /* Build configuration list for PBXNativeTarget "RPFireforcePager" */;
+			buildConfigurationList = 13B07F931A680F5B00A75B9A /* Build configuration list for PBXNativeTarget "RPFireForce" */;
 			buildPhases = (
 				08A4A3CD28434E44B6B9DE2E /* [CP] Check Pods Manifest.lock */,
-				6823CC780B394A41447BDF88 /* [Expo] Configure project */,
+				715C776C2D8435AEBD8F43FF /* [Expo] Configure project */,
 				13B07F871A680F5B00A75B9A /* Sources */,
 				13B07F8C1A680F5B00A75B9A /* Frameworks */,
 				13B07F8E1A680F5B00A75B9A /* Resources */,
 				00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */,
 				800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */,
-				CC0C4C395B2037DC040EA261 /* [CP] Embed Pods Frameworks */,
+				15C81986BEF373B7BB6A063F /* [CP] Embed Pods Frameworks */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 			);
-			name = RPFireforcePager;
-			productName = RPFireforcePager;
-			productReference = 13B07F961A680F5B00A75B9A /* RPFireforcePager.app */;
+			name = RPFireForce;
+			productName = RPFireForce;
+			productReference = 13B07F961A680F5B00A75B9A /* RPFireForce.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -176,7 +188,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 83CBB9FA1A601CBA00E9B192 /* Build configuration list for PBXProject "RPFireforcePager" */;
+			buildConfigurationList = 83CBB9FA1A601CBA00E9B192 /* Build configuration list for PBXProject "RPFireForce" */;
 			compatibilityVersion = "Xcode 3.2";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -189,7 +201,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				13B07F861A680F5B00A75B9A /* RPFireforcePager */,
+				13B07F861A680F5B00A75B9A /* RPFireForce */,
 			);
 		};
 /* End PBXProject section */
@@ -202,9 +214,13 @@
 				BB2F792D24A3F905000567C9 /* Expo.plist in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */,
-				BF704B44521B4EC2B56CE71A /* alarm_sound.mp3 in Resources */,
-				EAEEEB1E7C2D4B6489093CD7 /* alarm_sound_ios.wav in Resources */,
-				CE141784CA3B7E0860150577 /* PrivacyInfo.xcprivacy in Resources */,
+				050DCF545DA149ADB77E790E /* alarm_sound.mp3 in Resources */,
+				7DB0F13D511F4831ABE81080 /* alarm_critical.mp3 in Resources */,
+				C406A498DF84409780CDF3D6 /* alarm_high.mp3 in Resources */,
+				5C23FD3CB83845DC8D33B68B /* alarm_medium.mp3 in Resources */,
+				94FF0022F00F45839B3E7459 /* alarm_low.mp3 in Resources */,
+				8D401047EA5E49AC82728422 /* alarm_sound_ios.wav in Resources */,
+				79E534702764FA83AC0B0269 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -243,14 +259,36 @@
 			outputFileListPaths = (
 			);
 			outputPaths = (
-				"$(DERIVED_FILE_DIR)/Pods-RPFireforcePager-checkManifestLockResult.txt",
+				"$(DERIVED_FILE_DIR)/Pods-RPFireForce-checkManifestLockResult.txt",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
 			showEnvVarsInLog = 0;
 		};
-		6823CC780B394A41447BDF88 /* [Expo] Configure project */ = {
+		15C81986BEF373B7BB6A063F /* [CP] Embed Pods Frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-RPFireForce/Pods-RPFireForce-frameworks.sh",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/React-Core-prebuilt/React.framework/React",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ReactNativeDependencies/ReactNativeDependencies.framework/ReactNativeDependencies",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/hermes-engine/Pre-built/hermes.framework/hermes",
+			);
+			name = "[CP] Embed Pods Frameworks";
+			outputPaths = (
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/React.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/ReactNativeDependencies.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/hermes.framework",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-RPFireForce/Pods-RPFireForce-frameworks.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+		715C776C2D8435AEBD8F43FF /* [Expo] Configure project */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
@@ -261,18 +299,18 @@
 			inputPaths = (
 				"$(SRCROOT)/.xcode.env",
 				"$(SRCROOT)/.xcode.env.local",
-				"$(SRCROOT)/RPFireforcePager/RPFireforcePager.entitlements",
-				"$(SRCROOT)/Pods/Target Support Files/Pods-RPFireforcePager/expo-configure-project.sh",
+				"$(SRCROOT)/RPFireForce/RPFireForce.entitlements",
+				"$(SRCROOT)/Pods/Target Support Files/Pods-RPFireForce/expo-configure-project.sh",
 			);
 			name = "[Expo] Configure project";
 			outputFileListPaths = (
 			);
 			outputPaths = (
-				"$(SRCROOT)/Pods/Target Support Files/Pods-RPFireforcePager/ExpoModulesProvider.swift",
+				"$(SRCROOT)/Pods/Target Support Files/Pods-RPFireForce/ExpoModulesProvider.swift",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "# This script configures Expo modules and generates the modules provider file.\nbash -l -c \"./Pods/Target\\ Support\\ Files/Pods-RPFireforcePager/expo-configure-project.sh\"\n";
+			shellScript = "# This script configures Expo modules and generates the modules provider file.\nbash -l -c \"./Pods/Target\\ Support\\ Files/Pods-RPFireForce/expo-configure-project.sh\"\n";
 		};
 		800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -280,7 +318,7 @@
 			files = (
 			);
 			inputPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-RPFireforcePager/Pods-RPFireforcePager-resources.sh",
+				"${PODS_ROOT}/Target Support Files/Pods-RPFireForce/Pods-RPFireForce-resources.sh",
 				"${PODS_CONFIGURATION_BUILD_DIR}/EXApplication/ExpoApplication_privacy.bundle",
 				"${PODS_CONFIGURATION_BUILD_DIR}/EXConstants/EXConstants.bundle",
 				"${PODS_CONFIGURATION_BUILD_DIR}/EXConstants/ExpoConstants_privacy.bundle",
@@ -309,29 +347,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-RPFireforcePager/Pods-RPFireforcePager-resources.sh\"\n";
-			showEnvVarsInLog = 0;
-		};
-		CC0C4C395B2037DC040EA261 /* [CP] Embed Pods Frameworks */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-RPFireforcePager/Pods-RPFireforcePager-frameworks.sh",
-				"${PODS_XCFRAMEWORKS_BUILD_DIR}/React-Core-prebuilt/React.framework/React",
-				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ReactNativeDependencies/ReactNativeDependencies.framework/ReactNativeDependencies",
-				"${PODS_XCFRAMEWORKS_BUILD_DIR}/hermes-engine/Pre-built/hermes.framework/hermes",
-			);
-			name = "[CP] Embed Pods Frameworks";
-			outputPaths = (
-				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/React.framework",
-				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/ReactNativeDependencies.framework",
-				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/hermes.framework",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-RPFireforcePager/Pods-RPFireforcePager-frameworks.sh\"\n";
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-RPFireForce/Pods-RPFireForce-resources.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
 /* End PBXShellScriptBuildPhase section */
@@ -342,7 +358,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */,
-				B0338A7AA548B9C2E9F96780 /* ExpoModulesProvider.swift in Sources */,
+				D68E7FE739BF69F22FF64B3D /* ExpoModulesProvider.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -351,18 +367,18 @@
 /* Begin XCBuildConfiguration section */
 		13B07F941A680F5B00A75B9A /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 1C651D276D7E0FC6371C7B09 /* Pods-RPFireforcePager.debug.xcconfig */;
+			baseConfigurationReference = 1E3EB91C0246502C7373B388 /* Pods-RPFireForce.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
-				CODE_SIGN_ENTITLEMENTS = RPFireforcePager/RPFireforcePager.entitlements;
+				CODE_SIGN_ENTITLEMENTS = RPFireForce/RPFireForce.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_BITCODE = NO;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"$(inherited)",
 					"FB_SONARKIT_ENABLED=1",
 				);
-				INFOPLIST_FILE = RPFireforcePager/Info.plist;
+				INFOPLIST_FILE = RPFireForce/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -376,8 +392,8 @@
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
 				PRODUCT_BUNDLE_IDENTIFIER = com.rocketpartners.rpfireforcepager;
-				PRODUCT_NAME = RPFireforcePager;
-				SWIFT_OBJC_BRIDGING_HEADER = "RPFireforcePager/RPFireforcePager-Bridging-Header.h";
+				PRODUCT_NAME = RPFireForce;
+				SWIFT_OBJC_BRIDGING_HEADER = "RPFireForce/RPFireForce-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -387,13 +403,13 @@
 		};
 		13B07F951A680F5B00A75B9A /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = DE0754063DAED6980A1EE40C /* Pods-RPFireforcePager.release.xcconfig */;
+			baseConfigurationReference = A0877224795311B408C5E584 /* Pods-RPFireForce.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
-				CODE_SIGN_ENTITLEMENTS = RPFireforcePager/RPFireforcePager.entitlements;
+				CODE_SIGN_ENTITLEMENTS = RPFireForce/RPFireForce.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
-				INFOPLIST_FILE = RPFireforcePager/Info.plist;
+				INFOPLIST_FILE = RPFireForce/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -407,8 +423,8 @@
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
 				PRODUCT_BUNDLE_IDENTIFIER = com.rocketpartners.rpfireforcepager;
-				PRODUCT_NAME = RPFireforcePager;
-				SWIFT_OBJC_BRIDGING_HEADER = "RPFireforcePager/RPFireforcePager-Bridging-Header.h";
+				PRODUCT_NAME = RPFireForce;
+				SWIFT_OBJC_BRIDGING_HEADER = "RPFireForce/RPFireForce-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VERSIONING_SYSTEM = "apple-generic";
@@ -536,7 +552,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		13B07F931A680F5B00A75B9A /* Build configuration list for PBXNativeTarget "RPFireforcePager" */ = {
+		13B07F931A680F5B00A75B9A /* Build configuration list for PBXNativeTarget "RPFireForce" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				13B07F941A680F5B00A75B9A /* Debug */,
@@ -545,7 +561,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		83CBB9FA1A601CBA00E9B192 /* Build configuration list for PBXProject "RPFireforcePager" */ = {
+		83CBB9FA1A601CBA00E9B192 /* Build configuration list for PBXProject "RPFireForce" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				83CBBA201A601CBA00E9B192 /* Debug */,

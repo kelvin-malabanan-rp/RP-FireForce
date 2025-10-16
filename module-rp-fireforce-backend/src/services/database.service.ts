@@ -187,7 +187,6 @@ export class DatabaseService {
 				u.id,
 				u.email,
 				u.password_hash AS passwordHash,
-				u.role,
 				u.first_name AS firstName,
 				u.last_name AS lastName,
 				u.is_active AS isActive,
