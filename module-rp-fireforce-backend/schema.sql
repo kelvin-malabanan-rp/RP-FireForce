@@ -56,7 +56,7 @@ CREATE TABLE incidents (
 						   severity         TEXT,
 						   status           TEXT,
 						   priority         TEXT,
-						   escalation_level INTEGER,
+						   escalation_level TEXT,
 						   timestamp        DATETIME,
 						   reported_by      TEXT,
 						   location         TEXT,
@@ -142,7 +142,7 @@ CREATE TABLE incident_notifications (
 										read_at          DATETIME,
 										responded_at     DATETIME,
 										delivery_error   TEXT,
-										escalation_level INTEGER DEFAULT 0,
+										escalation_level TEXT DEFAULT 'primary',
 										FOREIGN KEY (incident_id) REFERENCES incidents(id) ON DELETE CASCADE,
 										FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
@@ -280,7 +280,7 @@ CREATE TABLE incident_escalations (
 									  team_id                TEXT,
 									  escalated_to_user_id   TEXT,
 									  escalated_from_user_id TEXT,
-									  escalation_level       INTEGER,
+									  escalation_level       TEXT,
 									  reason                 TEXT,
 									  priority               TEXT,
 									  status                 TEXT,
@@ -362,9 +362,9 @@ VALUES
 
 INSERT OR IGNORE INTO incidents (id, title, description, severity, status, priority, escalation_level, timestamp, location, aws_alarm_name, assigned_to)
 VALUES
-    ('test-1', 'Database Connection Pool Exhausted', 'Primary database connection pool has reached maximum capacity.', 'critical', 'investigating', 'critical', 1, datetime('now', '-2 hours'), 'Data Center A', 'TEST-HighCPU-WebServer', 'user-11'),
-    ('test-2', 'API Response Time Elevated', 'Authentication API experiencing 5x normal response times.', 'high', 'open', 'high', 0, datetime('now', '-4 hours'), 'API Gateway', 'TEST-HighErrorRate-API', 'user-4'),
-    ('test-3', 'Memory Usage Resolved', 'High memory usage on database server has been resolved.', 'medium', 'resolved', 'medium', 0, datetime('now', '-12 hours'), 'Database Server', 'TEST-HighMemory-Database', NULL);
+    ('test-1', 'Database Connection Pool Exhausted', 'Primary database connection pool has reached maximum capacity.', 'critical', 'investigating', 'critical', 'backup', datetime('now', '-2 hours'), 'Data Center A', 'TEST-HighCPU-WebServer', 'user-11'),
+    ('test-2', 'API Response Time Elevated', 'Authentication API experiencing 5x normal response times.', 'high', 'open', 'high', 'primary', datetime('now', '-4 hours'), 'API Gateway', 'TEST-HighErrorRate-API', 'user-4'),
+    ('test-3', 'Memory Usage Resolved', 'High memory usage on database server has been resolved.', 'medium', 'resolved', 'medium', 'primary', datetime('now', '-12 hours'), 'Database Server', 'TEST-HighMemory-Database', NULL);
 
 INSERT OR IGNORE INTO oncall_teams (id, name, description, timezone, is_active)
 VALUES

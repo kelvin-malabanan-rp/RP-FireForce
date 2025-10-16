@@ -42,7 +42,6 @@ export class PushNotificationService {
 		).run();
 	}
 
-	// ✅ Send initial incident alert to all on-call members
 	async sendIncidentAlert(incident: Incident): Promise<void> {
 		try {
 			// Get current on-call assignments with push tokens for today
@@ -53,23 +52,22 @@ export class PushNotificationService {
 				return;
 			}
 
-			// ✅ Handle the new response format: {primary: [], backup: [], escalation: []}
-			const { primary = [], backup = [], escalation = [] } = currentOnCallResponse;
+			// ✅ Get ONLY PRIMARY members for initial alert
+			const { primary = [] } = currentOnCallResponse;
 
-			// Combine all members from all roles
-			const allMembers = [...primary, ...backup, ...escalation];
-
-			if (allMembers.length === 0) {
-				console.log('[push] No on-call members found - skipping notifications');
+			if (primary.length === 0) {
+				console.log('[push] No PRIMARY on-call members found - skipping notifications');
 				return;
 			}
+
+			console.log(`[push] Sending initial alert to ${primary.length} PRIMARY member(s) only`);
 
 			const message = this.createNotificationMessage(incident, 'incident_alert');
 			let sentCount = 0;
 			let skippedCount = 0;
 
-			// Loop through each on-call member
-			for (const member of allMembers) {
+			// ✅ Loop through ONLY primary members
+			for (const member of primary) {
 				// Only send if member has a push token
 				if (member.pushToken) {
 					const success = await this.sendPushNotification(member.pushToken, message);
@@ -81,15 +79,16 @@ export class PushNotificationService {
 							member.pushToken,
 							member.fcmToken
 						);
-						console.log(`[push] ✓ Sent to ${member.fullname} (${member.role}) - Team: ${member.teamName}`);
+						console.log(`[push] ✓ Sent to ${member.fullname} (primary) - Team: ${member.teamName}`);
 					}
 				} else {
 					skippedCount++;
-					console.log(`[push] ⊘ No token for ${member.fullname} (${member.role}) - Team: ${member.teamName}`);
+					console.log(`[push] ⊘ No token for ${member.fullname} (primary) - Team: ${member.teamName}`);
 				}
 			}
 
-			console.log(`[push] Sent incident alert to ${sentCount} on-call members, ${skippedCount} skipped (no token)`);
+			console.log(`[push] Initial alert sent to ${sentCount} PRIMARY members, ${skippedCount} skipped`);
+			console.log(`[push] 📝 Backup and escalation will be notified if no response (handled by backend reminders)`);
 		} catch (error) {
 			console.error('[push] Error sending incident alerts:', error);
 		}

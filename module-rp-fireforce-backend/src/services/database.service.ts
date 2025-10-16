@@ -102,13 +102,10 @@ export class DatabaseService {
 			INSERT INTO incidents
 			(id, title, description, severity, status, timestamp, reported_by, location,
 			 aws_alarm_name, aws_account_id, state_reason, metric_name, aws_console_url,
-			 resolved_at, assigned_to, resolved_by, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			 resolved_at, assigned_to, team_id, resolved_by, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`;
 
-
-
-		// Map incident properties to match database column names and convert undefined to null
 		const params = [
 			incidentId,
 			incident.title || 'Unknown Incident',
@@ -116,18 +113,19 @@ export class DatabaseService {
 			incident.severity || 'medium',
 			incident.status || 'open',
 			incident.timestamp || this.currentTime,
-			incident.reportedBy || 'AWS CloudWatch',
+			incident.reported_by || 'AWS CloudWatch',      // ✅ Use snake_case
 			incident.location || null,
-			incident.awsAlarmName || null,
-			incident.awsAccountId || null,
-			incident.stateReason || null,
-			incident.metricName || null,
-			incident.aws_console_url || null,
-			incident.resolvedAt || null,     // resolved_at from Incident interface
-			null,                            // assigned_to (not in Incident interface, set to null)
-			null,                            // resolved_by (not in Incident interface, set to null)
-			incident.createdAt || this.currentTime,   // created_at from Incident interface
-			incident.updatedAt || this.currentTime   // updated_at from Incident interface
+			incident.aws_alarm_name || null,               // ✅ Use snake_case
+			incident.aws_account_id || null,               // ✅ Use snake_case
+			incident.state_reason || null,                 // ✅ Use snake_case
+			incident.metric_name || null,                  // ✅ Use snake_case
+			incident.aws_console_url || null,              // ✅ Already correct
+			incident.resolved_at || null,                  // ✅ Use snake_case
+			null,                                          // assigned_to
+			incident.team_id || null,                      // ✅ Use snake_case - THIS WAS NULL BEFORE
+			null,                                          // resolved_by
+			incident.created_at || this.currentTime,       // ✅ Use snake_case
+			incident.updated_at || this.currentTime        // ✅ Use snake_case
 		];
 
 		console.log('Database insert - sanitized params:', params);
@@ -248,16 +246,20 @@ export class DatabaseService {
 				severity,
 				status,
 				timestamp,
-				reported_by as reportedBy,
+				reported_by,              -- Keep snake_case
 				location,
-				aws_alarm_name as awsAlarmName,
-				aws_account_id as awsAccountId,
-				state_reason as stateReason,
-				metric_name as metricName,
+				team_id,                  -- ✅ ADD THIS LINE
+				escalation_level,         -- ✅ ADD THIS TOO
+				aws_alarm_name,
+				aws_account_id,
+				state_reason,
+				metric_name,
 				aws_console_url,
-				resolved_at as resolvedAt,
-				created_at as createdAt,
-				updated_at as updatedAt
+				resolved_at,
+				assigned_to,              -- ✅ ADD THIS
+				resolved_by,              -- ✅ ADD THIS
+				created_at,
+				updated_at
 			FROM incidents
 			WHERE id = ?
 		`;
