@@ -1,136 +1,82 @@
 // src/router/AppRouter.jsx
 import { useState, useEffect } from 'react';
-import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
-import { LoginPage } from '../pages/LoginPage';
-import { DashboardPage } from '../pages/DashboardPage';
+import { Routes, Route, Navigate, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { authService } from '../services/auth-service';
+import { ProtectedRoute } from './routes';
 
-// ==================== OAUTH SUCCESS HANDLER ====================
-function OAuthSuccessHandler({ onSuccess }) {
+// Import pages
+import { LoginPage } from '../pages/LoginPage';
+import { OAuthSuccessPage } from '../pages/OAuthSuccessPage';
+import { OAuthErrorPage } from '../pages/OAuthErrorPage';
+
+// Import Dashboard components
+import { DashboardTopNav } from '../components/layout/DashboardTopNav';
+import { DashboardSideNav } from '../components/layout/DashboardSideNav';
+import { GlobalAlertModal } from '../components/modals/GlobalAlertModal';
+import { DashboardOverview } from '../components/dashboard/DashboardOverview';
+import { AnalyticsPage } from '../components/dashboard/AnalyticsPage';
+import { IncidentsPage } from '../components/dashboard/IncidentsPage';
+import { OnCallPage } from '../components/dashboard/OnCallPageClean';
+import { TeamsPage } from '../components/dashboard/TeamsPage';
+import { AuditTrailPage } from '../components/dashboard/AuditTrailPage';
+import { SettingsPage } from '../components/dashboard/SettingsPage';
+
+// ==================== DASHBOARD LAYOUT WRAPPER ====================
+function DashboardLayoutWrapper({ onLogout }) {
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const navigate = useNavigate();
-    const [processing, setProcessing] = useState(true);
+    const location = useLocation();
 
-    useEffect(() => {
-        console.log('🎯 OAuth Success Handler mounted');
-        console.log('📍 Current URL:', window.location.href);
-        console.log('📍 Pathname:', window.location.pathname);
-        console.log('📍 Hash:', window.location.hash);
-        
-        const processCallback = async () => {
-            try {
-                // Extract OAuth data from URL fragment
-                const oauthData = authService.processOAuthCallback();
-
-                if (!oauthData) {
-                    console.error('❌ Failed to extract OAuth data - redirecting to login with error');
-                    setProcessing(false);
-                    navigate('/?error=oauth_incomplete', { replace: true });
-                    return;
-                }
-
-                console.log('✅ OAuth data extracted successfully');
-                console.log('💾 Storing OAuth data...');
-
-                // Store authentication data
-                authService.storeOAuthData(oauthData);
-
-                console.log('✅ OAuth data stored in localStorage');
-                console.log('🔐 Calling onSuccess to update login state...');
-
-                // Update login state FIRST
-                onSuccess();
-
-                console.log('⏱️ Waiting 1.5s before redirect...');
-
-                // Show success briefly, then redirect to dashboard
-                setTimeout(() => {
-                    console.log('🚀 Redirecting to /dashboard');
-                    setProcessing(false);
-                    navigate('/dashboard', { replace: true });
-                }, 1500);
-
-            } catch (error) {
-                console.error('❌ OAuth processing error:', error);
-                setProcessing(false);
-                navigate('/?error=oauth_error', { replace: true });
-            }
-        };
-
-        processCallback();
-    }, [navigate, onSuccess]);
-
-    return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center">
-            <div className="max-w-md w-full mx-4">
-                <div className="bg-black/30 backdrop-blur-2xl border border-white/20 rounded-xl p-8 text-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500 mx-auto mb-4"></div>
-                    <h1 className="text-2xl font-bold text-white mb-2">Authentication Successful!</h1>
-                    <p className="text-white/70 mb-4">Completing your login...</p>
-                    <div className="flex items-center justify-center gap-2 text-sm text-green-400">
-                        <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                        <span>Redirecting to dashboard</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-}
-
-// ==================== OAUTH ERROR HANDLER ====================
-function OAuthErrorHandler() {
-    const navigate = useNavigate();
-
-    const getErrorMessage = () => {
-        const urlParams = new URLSearchParams(window.location.search);
-        const error = urlParams.get('error');
-
-        switch (error) {
-            case 'no_code':
-                return 'Authorization code was not received from the provider.';
-            case 'authentication_failed':
-                return 'Authentication failed. Your account may not be authorized.';
-            case 'server_error':
-                return 'A server error occurred during authentication.';
-            case 'oauth_incomplete':
-                return 'OAuth data was incomplete. Please try again.';
-            case 'oauth_error':
-                return 'An error occurred while processing your authentication.';
-            default:
-                return 'An unknown authentication error occurred.';
-        }
+    const toggleSidebar = () => {
+        setIsSidebarOpen(!isSidebarOpen);
     };
 
+    const handleNavigate = (page) => {
+        console.log('📍 DashboardLayout handleNavigate called:', page);
+        
+        if (page === "logout") {
+            onLogout();
+            return;
+        }
+        
+        // Don't navigate here - let the sidebar handle it with React Router
+        console.log('⚠️ Navigation should be handled by sidebar directly');
+    };
+
+    // Get current page from URL
+    const currentPage = location.pathname.split('/')[2] || 'overview';
+    console.log('📍 Current page from URL:', currentPage, '(full path:', location.pathname, ')');
+
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center">
-            <div className="max-w-md w-full mx-4">
-                <div className="bg-black/30 backdrop-blur-2xl border border-red-500/20 rounded-xl p-8 text-center">
-                    <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <svg className="h-8 w-8 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                        </svg>
+        <div className="min-h-screen bg-background">
+            {/* Global alert modal */}
+            <GlobalAlertModal />
+            
+            {/* Top Navigation */}
+            <DashboardTopNav 
+                onMenuToggle={toggleSidebar} 
+                isSidebarOpen={isSidebarOpen}
+                onNavigate={handleNavigate}
+            />
+
+            <div className="flex">
+                {/* Side Navigation */}
+                <DashboardSideNav
+                    isOpen={isSidebarOpen}
+                    onNavigate={handleNavigate}
+                    onToggle={toggleSidebar}
+                    currentPage={currentPage}
+                />
+
+                {/* Main Content - This is where nested routes render */}
+                <main className="flex-1 min-h-screen bg-gradient-to-br from-slate-50 to-white dark:from-slate-900 dark:to-slate-800">
+                    <div className="w-full max-w-[1600px] mx-auto p-6 lg:p-8">
+                        <Outlet />
                     </div>
-                    <h1 className="text-2xl font-bold text-white mb-4">Authentication Error</h1>
-                    <p className="text-white/70 mb-6">{getErrorMessage()}</p>
-                    <button
-                        onClick={() => navigate('/', { replace: true })}
-                        className="w-full bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-600 hover:to-red-700 text-white font-medium py-3 px-4 rounded-xl transition-all duration-200"
-                    >
-                        Back to Login
-                    </button>
-                </div>
+                </main>
             </div>
         </div>
     );
-}
-
-// ==================== PROTECTED ROUTE ====================
-function ProtectedRoute({ children, isAuthenticated }) {
-    if (!isAuthenticated) {
-        console.log('🚫 Protected route - not authenticated, redirecting to login');
-        return <Navigate to="/" replace />;
-    }
-
-    return children;
 }
 
 // ==================== MAIN APP ROUTER ====================
@@ -176,7 +122,9 @@ export function AppRouter() {
 
     return (
         <Routes>
-            {/* Login Route */}
+            {/* ==================== GUEST ROUTES ==================== */}
+            
+            {/* Login */}
             <Route 
                 path="/" 
                 element={
@@ -188,32 +136,42 @@ export function AppRouter() {
                 } 
             />
 
-            {/* OAuth Success Route */}
+            {/* OAuth Success */}
             <Route 
                 path="/auth/success" 
-                element={<OAuthSuccessHandler onSuccess={handleLogin} />} 
+                element={<OAuthSuccessPage onSuccess={handleLogin} />} 
             />
 
-            {/* OAuth Error Route */}
+            {/* OAuth Error */}
             <Route 
                 path="/auth/error" 
-                element={<OAuthErrorHandler />} 
+                element={<OAuthErrorPage />} 
             />
 
-            {/* Dashboard Route (Protected) */}
+            {/* ==================== DASHBOARD ROUTES (NESTED) ==================== */}
+            
             <Route 
                 path="/dashboard" 
                 element={
                     <ProtectedRoute isAuthenticated={isLoggedIn}>
-                        <DashboardPage onLogout={handleLogout} />
+                        <DashboardLayoutWrapper onLogout={handleLogout} />
                     </ProtectedRoute>
-                } 
-            />
+                }
+            >
+                {/* Nested Dashboard Routes */}
+                <Route index element={<DashboardOverview />} />
+                <Route path="analytics" element={<AnalyticsPage />} />
+                <Route path="incidents" element={<IncidentsPage />} />
+                <Route path="on-call" element={<OnCallPage />} />
+                <Route path="teams" element={<TeamsPage />} />
+                <Route path="audit-trail" element={<AuditTrailPage />} />
+                <Route path="settings" element={<SettingsPage />} />
+            </Route>
 
-            {/* Catch-all - redirect to login or dashboard */}
+            {/* ==================== FALLBACK ==================== */}
             <Route 
                 path="*" 
-                element={<Navigate to={isLoggedIn ? "/dashboard" : "/"} replace />} 
+                element={<Navigate to={isLoggedIn ? '/dashboard' : '/'} replace />} 
             />
         </Routes>
     );
