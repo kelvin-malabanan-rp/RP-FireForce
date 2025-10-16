@@ -210,10 +210,10 @@ export class AuthenticationServices {
 	 */
 	private async findOrCreateOAuthUser(provider: 'google' | 'github', userInfo: OAuthUserInfo): Promise<any | null> {
 		try {
-			// ADD DEBUG LOGGING
-			console.log('📋 Full userInfo object:', JSON.stringify(userInfo, null, 2));
-
-			const oauthId = provider === 'google' ? userInfo.sub : userInfo.id?.toString();
+			// Google returns 'id', not 'sub' in this endpoint
+			const oauthId = provider === 'google'
+				? (userInfo.id?.toString() || userInfo.sub) // Try id first, then sub
+				: userInfo.id?.toString();
 
 			console.log('🔑 OAuth ID:', oauthId);
 			console.log('🔑 Provider:', provider);
