@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "RP-Fireforce-Pager",
+    "name": "RP FireForce",
     "slug": "RP-Fireforce-Pager",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -10,12 +10,27 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.rocketpartners.rpfireforcepager"
+      "bundleIdentifier": "com.rocketpartners.rpfireforcepager",
+      "infoPlist": {
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLSchemes": ["rpfireforcepager"]
+          }
+        ]
+      }
     },
     "android": {
       "package": "com.rocketpartners.rpfireforcepager",
+      "versionCode": 1,
+      "permissions": [
+        "NOTIFICATIONS",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE",
+        "WAKE_LOCK",
+        "USE_FULL_SCREEN_INTENT"
+      ],
       "adaptiveIcon": {
-        "backgroundColor": "#1da0d6",
+        "backgroundColor": "#0F172A",
         "foregroundImage": "./assets/images/notification-icon.png",
         "backgroundImage": "./assets/images/notification-icon.png",
         "monochromeImage": "./assets/images/notification-icon.png"
@@ -23,7 +38,21 @@
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "googleServicesFile": "./google-services.json",
-      "useNextNotificationsApi": true
+      "useNextNotificationsApi": true,
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "rpfireforcepager",
+              "host": "auth",
+              "pathPrefix": "/callback"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
     },
     "web": {
       "output": "static",
@@ -37,9 +66,9 @@
           "image": "./assets/images/notification-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#1da0d6",
+          "backgroundColor": "#0F172A",
           "dark": {
-            "backgroundColor": "#1da0d6"
+            "backgroundColor": "#0F172A"
           }
         }
       ],
@@ -47,7 +76,7 @@
         "expo-notifications",
         {
           "icon": "./assets/images/notification-icon.png",
-          "color": "#1da0d6",
+          "color": "#F97316",
           "defaultChannel": "default-v4",
           "sounds": [
             "./assets/sounds/alarm_sound.mp3",
@@ -59,7 +88,8 @@
           ]
         }
       ],
-      "expo-font"
+      "expo-font",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,

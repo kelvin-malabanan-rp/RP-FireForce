@@ -30,7 +30,16 @@ import {
     retrieveUserSession,
 } from "@/constants/local-storage";
 
-export const LoginComponent = ({ onLogin }: LoginProps) => {
+interface LoginComponentProps extends LoginProps {
+    onGoogleLogin?: () => void;
+    onGithubLogin?: () => void;
+}
+
+export const LoginComponent = ({
+                                   onLogin,
+                                   onGoogleLogin,
+                                   onGithubLogin
+                               }: LoginComponentProps) => {
     const [formData, setFormData] = useState<LoginData>({
         email: "kelvin.malabanan@rocketpartners.io",
         password: "password123",
@@ -52,7 +61,6 @@ export const LoginComponent = ({ onLogin }: LoginProps) => {
         try {
             console.log('🔔 Auto-registering device for user:', userId);
 
-            // Configure notification handler
             await Notifications.setNotificationHandler({
                 handleNotification: async () => ({
                     shouldShowAlert: true,
@@ -63,7 +71,6 @@ export const LoginComponent = ({ onLogin }: LoginProps) => {
                 }),
             });
 
-            // Request permissions
             const { status } = await Notifications.requestPermissionsAsync();
             console.log('Permission status:', status);
 
@@ -72,7 +79,6 @@ export const LoginComponent = ({ onLogin }: LoginProps) => {
                 return;
             }
 
-            // Check if already registered
             const savedRegStatus = await retrieveRegistrationStatus();
             const savedToken = await retrievePushToken();
 
@@ -83,17 +89,14 @@ export const LoginComponent = ({ onLogin }: LoginProps) => {
 
             console.log('📝 Registering device...');
 
-            // Get Expo push token
             const tokenData = await Notifications.getExpoPushTokenAsync();
             await storePushToken(tokenData.data);
 
-            // Get FCM token for Android
             let platformToken = null;
             if (Platform.OS === 'android') {
                 platformToken = await Notifications.getDevicePushTokenAsync();
             }
 
-            // Load or create default settings
             let settings = await retrieveAlertSettings();
             if (!settings) {
                 settings = {
@@ -110,7 +113,6 @@ export const LoginComponent = ({ onLogin }: LoginProps) => {
                 await storeAlertSettings(settings);
             }
 
-            // Register with backend
             const response = await registerPushToken({
                 userId: userId,
                 token: tokenData.data,
@@ -127,7 +129,6 @@ export const LoginComponent = ({ onLogin }: LoginProps) => {
                 console.warn('⚠️ Device registration failed:', response);
             }
 
-            // Setup Android notification channel
             if (Platform.OS === 'android') {
                 await Notifications.setNotificationChannelAsync('critical-alerts-v4', {
                     name: 'Critical Incidents',
@@ -167,11 +168,9 @@ export const LoginComponent = ({ onLogin }: LoginProps) => {
             setError(errors.authError || "");
             setIsLoading(false);
         } else {
-            // ✅ Login successful - auto-register device
             try {
                 const session = await retrieveUserSession();
                 if (session?.id) {
-                    // Run registration in background, don't wait
                     autoRegisterDevice(session.id)
                         .then(() => console.log('✅ Device registration completed'))
                         .catch(err => console.warn('⚠️ Device registration failed:', err));
@@ -179,7 +178,6 @@ export const LoginComponent = ({ onLogin }: LoginProps) => {
             } catch (error) {
                 console.error('Error retrieving session for auto-registration:', error);
             }
-            // Don't set isLoading to false here - let the onLogin callback handle navigation
         }
     };
 
@@ -197,7 +195,6 @@ export const LoginComponent = ({ onLogin }: LoginProps) => {
                 behavior={Platform.OS === "ios" ? "padding" : "height"}
             >
                 <ScrollView contentContainerStyle={styles.scrollContainer}>
-                    {/* Header with Logo */}
                     <View style={styles.headerContainer}>
                         <Image
                             source={require("@/assets/images/rp-fireforce-white.png")}
@@ -273,13 +270,6 @@ export const LoginComponent = ({ onLogin }: LoginProps) => {
                                     </TouchableOpacity>
                                 </View>
                             </View>
-
-                            <View style={styles.options}>
-                                <TouchableOpacity style={styles.forgotPassword}>
-                                    <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
-                                </TouchableOpacity>
-                            </View>
-
                             <TouchableOpacity
                                 style={styles.loginButtonWrapper}
                                 onPress={handleLogin}
@@ -305,6 +295,40 @@ export const LoginComponent = ({ onLogin }: LoginProps) => {
                                     )}
                                 </LinearGradient>
                             </TouchableOpacity>
+
+                            {/* OAuth Divider */}
+                            <View style={styles.dividerContainer}>
+                                <View style={styles.divider} />
+                                <Text style={styles.dividerText}>OR</Text>
+                                <View style={styles.divider} />
+                            </View>
+
+                            {/* OAuth Buttons */}
+                            <View style={styles.oauthContainer}>
+                                <TouchableOpacity
+                                    style={styles.oauthButton}
+                                    onPress={onGoogleLogin}
+                                    disabled={isLoading}
+                                    activeOpacity={0.8}
+                                >
+                                    <View style={styles.oauthButtonContent}>
+                                        <Ionicons name="logo-google" size={20} color="#FFFFFF" />
+                                        <Text style={styles.oauthButtonText}>Continue with Google</Text>
+                                    </View>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    style={styles.oauthButton}
+                                    onPress={onGithubLogin}
+                                    disabled={isLoading}
+                                    activeOpacity={0.8}
+                                >
+                                    <View style={styles.oauthButtonContent}>
+                                        <Ionicons name="logo-github" size={20} color="#FFFFFF" />
+                                        <Text style={styles.oauthButtonText}>Continue with GitHub</Text>
+                                    </View>
+                                </TouchableOpacity>
+                            </View>
                         </View>
 
                         <View style={styles.footer}>
@@ -457,6 +481,45 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: "600",
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
+    },
+    dividerContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginVertical: 8,
+    },
+    divider: {
+        flex: 1,
+        height: 1,
+        backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    },
+    dividerText: {
+        color: 'rgba(255, 255, 255, 0.5)',
+        paddingHorizontal: 16,
+        fontSize: 13,
+        fontFamily: FONT_FAMILY.POPPINS_REGULAR,
+    },
+    oauthContainer: {
+        gap: 12,
+    },
+    oauthButton: {
+        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.2)',
+        borderRadius: 12,
+        paddingVertical: 14,
+        paddingHorizontal: 16,
+    },
+    oauthButtonContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 10,
+    },
+    oauthButtonText: {
+        color: '#FFFFFF',
+        fontSize: 15,
+        fontWeight: '500',
+        fontFamily: FONT_FAMILY.POPPINS_MEDIUM,
     },
     footer: {
         alignItems: "center",
