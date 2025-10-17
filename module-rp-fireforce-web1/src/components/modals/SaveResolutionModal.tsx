@@ -10,13 +10,18 @@ import {
   FileText,
   AlertTriangle,
   Tags,
-  Hash,
-  Sparkles
+  Sparkles,
+  Lock,
+  Zap,
+  Info
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Input } from "../ui/input";
 import type { Incident } from "../../types";
+
+// ✅ API Configuration
+const AI_API_BASE_URL = 'https://web-production-34444.up.railway.app';
 
 interface SaveResolutionModalProps {
   isOpen: boolean;
@@ -91,28 +96,12 @@ export function SaveResolutionModal({ isOpen, onClose, incident, onSuccess }: Sa
   };
 
   const validateForm = () => {
-    if (!formData.incidentId.trim()) {
-      setError('Incident ID is required');
-      return false;
-    }
-    if (!formData.title.trim()) {
-      setError('Title is required');
-      return false;
-    }
-    if (!formData.description.trim()) {
-      setError('Description is required');
-      return false;
-    }
-    if (!formData.service.trim()) {
-      setError('Service is required');
-      return false;
-    }
     if (!formData.rootCause.trim()) {
-      setError('Root Cause is required');
+      setError('Root Cause is required - this is critical for AI learning');
       return false;
     }
     if (!formData.resolution.trim()) {
-      setError('Resolution is required');
+      setError('Resolution steps are required - help others solve similar issues');
       return false;
     }
     return true;
@@ -138,7 +127,7 @@ export function SaveResolutionModal({ isOpen, onClose, incident, onSuccess }: Sa
         tags: formData.tags.split(',').map(tag => tag.trim()).filter(tag => tag)
       };
 
-      const response = await fetch('http://localhost:8000/incidents/add', {
+      const response = await fetch(`${AI_API_BASE_URL}/incidents/add`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -147,11 +136,12 @@ export function SaveResolutionModal({ isOpen, onClose, incident, onSuccess }: Sa
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
       }
 
       const result = await response.json();
-      console.log('Resolution saved successfully:', result);
+      console.log('✅ Resolution saved successfully:', result);
 
       setShowSuccess(true);
 
@@ -159,11 +149,11 @@ export function SaveResolutionModal({ isOpen, onClose, incident, onSuccess }: Sa
         setShowSuccess(false);
         onClose();
         if (onSuccess) onSuccess(result);
-      }, 2000);
+      }, 2500);
 
     } catch (err: any) {
-      console.error('Error saving resolution:', err);
-      setError('Failed to save resolution. Please ensure the AI service is running on port 8000.');
+      console.error('❌ Error saving resolution:', err);
+      setError(err.message || 'Failed to save resolution. Please check your connection and try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -177,275 +167,306 @@ export function SaveResolutionModal({ isOpen, onClose, incident, onSuccess }: Sa
     }
   };
 
+  const getSeverityBadge = (severity: string) => {
+    const badges = {
+      critical: { emoji: '🔴', color: 'bg-red-100 text-red-800 border-red-300' },
+      high: { emoji: '🟠', color: 'bg-orange-100 text-orange-800 border-orange-300' },
+      medium: { emoji: '🟡', color: 'bg-yellow-100 text-yellow-800 border-yellow-300' },
+      low: { emoji: '🟢', color: 'bg-green-100 text-green-800 border-green-300' }
+    };
+    return badges[severity as keyof typeof badges] || badges.medium;
+  };
+
+  if (!isOpen) return null;
+
   return (
     <AnimatePresence>
-      {isOpen && (
-        <>
-          {/* Backdrop */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={handleClose}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
-          />
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        {/* Solid Backdrop */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={handleClose}
+          className="absolute inset-0 bg-slate-900/95"
+        />
 
-          {/* Modal */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            transition={{ type: "spring", duration: 0.3 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto"
-          >
-            <Card className="w-full max-w-3xl max-h-[90vh] overflow-y-auto border-2 border-purple-500/30 shadow-2xl">
-              {/* Header */}
-              <CardHeader className="sticky top-0 bg-gradient-to-r from-purple-600 to-blue-600 text-white border-b-0 z-10">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-white/20 rounded-lg">
-                      <Brain className="h-6 w-6" />
-                    </div>
-                    <div>
-                      <CardTitle className="text-2xl font-bold">Save Resolution for AI Learning</CardTitle>
-                      <p className="text-purple-100 text-sm mt-1">Help the AI learn from this incident</p>
-                    </div>
+        {/* Modal */}
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.9, y: 20 }}
+          transition={{ type: "spring", duration: 0.4, bounce: 0.3 }}
+          className="relative w-full max-w-5xl max-h-[95vh] flex flex-col"
+        >
+          <Card className="w-full h-full bg-white dark:bg-slate-900 border-none shadow-2xl overflow-hidden flex flex-col">
+            {/* Gradient Header */}
+            <CardHeader className="shrink-0 bg-gradient-to-r from-violet-600 via-purple-600 to-fuchsia-600 text-white p-8">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 bg-white/20 backdrop-blur-md rounded-2xl shadow-lg ring-2 ring-white/30">
+                    <Brain className="h-8 w-8" />
                   </div>
-                  <Button
-                    onClick={handleClose}
-                    disabled={isSubmitting}
-                    variant="ghost"
-                    size="sm"
-                    className="text-white hover:bg-white/20 disabled:opacity-50"
-                  >
-                    <X className="h-5 w-5" />
-                  </Button>
+                  <div>
+                    <CardTitle className="text-3xl font-bold">
+                      Save to AI Knowledge Base
+                    </CardTitle>
+                    <p className="text-purple-100 text-sm mt-2 flex items-center gap-2">
+                      <Sparkles className="h-4 w-4" />
+                      Help AI learn from this resolution to assist future incidents
+                    </p>
+                  </div>
                 </div>
-              </CardHeader>
+                <Button
+                  onClick={handleClose}
+                  disabled={isSubmitting}
+                  variant="ghost"
+                  size="icon"
+                  className="text-white hover:bg-white/20 rounded-full transition-all h-10 w-10"
+                >
+                  <X className="h-6 w-6" />
+                </Button>
+              </div>
+            </CardHeader>
 
-              <CardContent className="p-6">
-                {/* Success Message */}
-                <AnimatePresence>
-                  {showSuccess && (
-                    <motion.div
-                      initial={{ opacity: 0, y: -10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0 }}
-                      className="mb-6 p-4 bg-green-50 dark:bg-green-900/20 border-2 border-green-500 rounded-lg flex items-start gap-3"
-                    >
-                      <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
+            {/* Scrollable Content */}
+            <CardContent className="flex-1 overflow-y-auto p-8 space-y-6">
+              {/* Success Banner */}
+              <AnimatePresence>
+                {showSuccess && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="p-6 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/30 border-l-4 border-green-500 rounded-xl shadow-sm"
+                  >
+                    <div className="flex items-start gap-4">
+                      <div className="p-2 bg-green-500 rounded-full">
+                        <CheckCircle className="h-6 w-6 text-white" />
+                      </div>
                       <div>
-                        <h3 className="font-bold text-green-900 dark:text-green-100 text-lg">✅ Saved Successfully!</h3>
+                        <h4 className="font-bold text-green-900 dark:text-green-100 text-lg">
+                          ✅ Successfully Saved!
+                        </h4>
                         <p className="text-green-700 dark:text-green-300 mt-1">
-                          AI will learn from this incident and improve future recommendations.
+                          This resolution is now part of the AI knowledge base and will help with similar incidents.
                         </p>
                       </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
-                {/* Error Message */}
-                <AnimatePresence>
-                  {error && (
-                    <motion.div
-                      initial={{ opacity: 0, y: -10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0 }}
-                      className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border-2 border-red-500 rounded-lg flex items-start gap-3"
-                    >
-                      <AlertCircle className="h-6 w-6 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-                      <div>
-                        <h3 className="font-bold text-red-900 dark:text-red-100">Error</h3>
-                        <p className="text-red-700 dark:text-red-300 text-sm mt-1">{error}</p>
+              {/* Error Banner */}
+              <AnimatePresence>
+                {error && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="p-6 bg-gradient-to-r from-red-50 to-orange-50 dark:from-red-900/30 dark:to-orange-900/30 border-l-4 border-red-500 rounded-xl shadow-sm"
+                  >
+                    <div className="flex items-start gap-4">
+                      <div className="p-2 bg-red-500 rounded-full">
+                        <AlertCircle className="h-6 w-6 text-white" />
                       </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                      <div>
+                        <h4 className="font-bold text-red-900 dark:text-red-100 text-lg">
+                          Error Saving Resolution
+                        </h4>
+                        <p className="text-red-700 dark:text-red-300 mt-1">{error}</p>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
-                {/* Form */}
-                <form onSubmit={handleSubmit} className="space-y-5">
-                  {/* Incident ID */}
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-900 dark:text-white mb-2 flex items-center gap-2">
-                      <Hash className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                      Incident ID
+              {/* Info Banner */}
+              <div className="p-5 bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 dark:from-blue-900/20 dark:via-indigo-900/20 dark:to-purple-900/20 border border-blue-200 dark:border-blue-800 rounded-xl">
+                <div className="flex items-start gap-3">
+                  <Info className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
+                  <div className="text-sm text-blue-900 dark:text-blue-100">
+                    <span className="font-semibold block mb-1">📚 How AI Learning Works:</span>
+                    The more detailed your root cause and resolution, the better AI can identify patterns and suggest solutions for similar future incidents.
+                  </div>
+                </div>
+              </div>
+
+              <form onSubmit={handleSubmit} className="space-y-8">
+                {/* Read-Only Section */}
+                <div className="space-y-6">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wide">
+                    <Lock className="h-4 w-4" />
+                    Incident Information (Read-Only)
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {/* Incident ID - Read Only */}
+                    <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
+                      <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide flex items-center gap-1 mb-2">
+                        <Lock className="h-3 w-3" />
+                        Incident ID
+                      </label>
+                      <div className="text-base font-mono font-semibold text-slate-900 dark:text-white">
+                        {formData.incidentId}
+                      </div>
+                    </div>
+
+                    {/* Service - Read Only */}
+                    <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
+                      <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide flex items-center gap-1 mb-2">
+                        <Lock className="h-3 w-3" />
+                        Service
+                      </label>
+                      <div className="text-base font-semibold text-slate-900 dark:text-white">
+                        {formData.service}
+                      </div>
+                    </div>
+
+                    {/* Severity - Read Only */}
+                    <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
+                      <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide flex items-center gap-1 mb-2">
+                        <Lock className="h-3 w-3" />
+                        Severity
+                      </label>
+                      <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-semibold border ${getSeverityBadge(formData.severity).color}`}>
+                        <span>{getSeverityBadge(formData.severity).emoji}</span>
+                        {formData.severity.charAt(0).toUpperCase() + formData.severity.slice(1)}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Title - Read Only */}
+                  <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
+                    <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide flex items-center gap-1 mb-2">
+                      <Lock className="h-3 w-3" />
+                      Title
                     </label>
-                    <Input
-                      name="incidentId"
-                      value={formData.incidentId}
+                    <div className="text-base font-semibold text-slate-900 dark:text-white">
+                      {formData.title}
+                    </div>
+                  </div>
+
+                  {/* Description - Read Only */}
+                  <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
+                    <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide flex items-center gap-1 mb-2">
+                      <Lock className="h-3 w-3" />
+                      Description
+                    </label>
+                    <div className="text-sm text-slate-700 dark:text-slate-200 leading-relaxed">
+                      {formData.description}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Editable Section */}
+                <div className="space-y-6 pt-6 border-t-2 border-dashed border-slate-300 dark:border-slate-700">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-purple-600 dark:text-purple-400 uppercase tracking-wide">
+                    <Zap className="h-4 w-4" />
+                    Add Your Analysis (Required)
+                  </div>
+
+                  {/* Root Cause */}
+                  <div>
+                    <label className="block text-sm font-bold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
+                      <div className="p-1.5 bg-orange-100 dark:bg-orange-900/30 rounded-lg">
+                        <AlertCircle className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                      </div>
+                      Root Cause Analysis <span className="text-red-500">*</span>
+                    </label>
+                    <textarea
+                      name="rootCause"
+                      value={formData.rootCause}
                       onChange={handleChange}
-                      placeholder="e.g., INC-2024-001 or auto-generated"
-                      className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
+                      placeholder="What caused this incident? Be as specific as possible...&#10;&#10;Example: Memory leak in user authentication service after deployment of version 2.3.4. The connection pool wasn't properly closed, causing gradual memory buildup over 6 hours."
+                      required
+                      rows={5}
+                      className="w-full px-4 py-3 border-2 border-slate-300 dark:border-slate-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm resize-none bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 transition-all"
                     />
-                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                      Auto-generated if not provided
+                    <p className="mt-2 text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                      <Sparkles className="h-3.5 w-3.5 text-purple-500" />
+                      <span className="font-medium">AI Learning Tip:</span> Include technical details, error codes, and what led to the issue
                     </p>
                   </div>
 
-                  {/* Title */}
+                  {/* Resolution */}
                   <div>
-                    <label className="block text-sm font-semibold text-slate-900 dark:text-white mb-2 flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                      Title <span className="text-red-500 ml-1">*</span>
-                    </label>
-                    <Input
-                      name="title"
-                      value={formData.title}
-                      onChange={handleChange}
-                      placeholder="Brief title of the incident"
-                      required
-                      className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
-                    />
-                  </div>
-
-                  {/* Description */}
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-900 dark:text-white mb-2 flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                      Description <span className="text-red-500 ml-1">*</span>
+                    <label className="block text-sm font-bold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
+                      <div className="p-1.5 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                        <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
+                      </div>
+                      Resolution Steps <span className="text-red-500">*</span>
                     </label>
                     <textarea
-                      name="description"
-                      value={formData.description}
+                      name="resolution"
+                      value={formData.resolution}
                       onChange={handleChange}
-                      placeholder="Detailed description of what happened"
+                      placeholder="How did you fix it? Include step-by-step instructions...&#10;&#10;Example:&#10;1. Identified memory leak using heap dump analysis&#10;2. Rolled back to version 2.3.3 immediately&#10;3. Fixed connection pool closure in authentication module&#10;4. Deployed hotfix version 2.3.5 with proper resource cleanup&#10;5. Monitored memory usage for 24 hours - stable"
                       required
-                      rows={3}
-                      className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 dark:focus:ring-purple-400 text-sm resize-none bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500"
+                      rows={6}
+                      className="w-full px-4 py-3 border-2 border-slate-300 dark:border-slate-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm resize-none bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 transition-all"
                     />
+                    <p className="mt-2 text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                      <Sparkles className="h-3.5 w-3.5 text-purple-500" />
+                      <span className="font-medium">AI Learning Tip:</span> Include commands, configuration changes, and verification steps
+                    </p>
                   </div>
 
-                  {/* Service */}
+                  {/* Tags (Optional) */}
                   <div>
-                    <label className="block text-sm font-semibold text-slate-900 dark:text-white mb-2 flex items-center gap-2">
-                      <Sparkles className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                      Service <span className="text-red-500 ml-1">*</span>
+                    <label className="block text-sm font-bold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
+                      <div className="p-1.5 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+                        <Tags className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                      </div>
+                      Tags (Optional)
                     </label>
                     <Input
-                      name="service"
-                      value={formData.service}
+                      name="tags"
+                      value={formData.tags}
                       onChange={handleChange}
-                      placeholder="e.g., web-server, database, api"
-                      required
-                      className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
+                      placeholder="memory-leak, authentication, deployment, hotfix"
+                      className="border-2 border-slate-300 dark:border-slate-600 focus:border-purple-500 focus:ring-2 focus:ring-purple-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-12"
                     />
+                    <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                      Add comma-separated keywords to help categorize this incident
+                    </p>
                   </div>
+                </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                    {/* Root Cause */}
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-semibold text-slate-900 dark:text-white mb-2 flex items-center gap-2">
-                        <AlertCircle className="h-4 w-4 text-orange-600 dark:text-orange-400" />
-                        Root Cause <span className="text-red-500 ml-1">*</span>
-                      </label>
-                      <textarea
-                        name="rootCause"
-                        value={formData.rootCause}
-                        onChange={handleChange}
-                        placeholder="What was the underlying cause of this incident?"
-                        required
-                        rows={4}
-                        className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 dark:focus:ring-purple-400 text-sm resize-none bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500"
-                      />
-                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                        Be specific - this helps AI understand similar issues in the future
-                      </p>
-                    </div>
-
-                    {/* Resolution */}
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-semibold text-slate-900 dark:text-white mb-2 flex items-center gap-2">
-                        <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
-                        Resolution <span className="text-red-500 ml-1">*</span>
-                      </label>
-                      <textarea
-                        name="resolution"
-                        value={formData.resolution}
-                        onChange={handleChange}
-                        placeholder="How was this incident resolved? What steps were taken?"
-                        required
-                        rows={4}
-                        className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 dark:focus:ring-purple-400 text-sm resize-none bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500"
-                      />
-                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                        Include step-by-step actions for future reference
-                      </p>
-                    </div>
-
-                    {/* Severity */}
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-900 dark:text-white mb-2 flex items-center gap-2">
-                        <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
-                        Severity <span className="text-red-500 ml-1">*</span>
-                      </label>
-                      <select
-                        name="severity"
-                        value={formData.severity}
-                        onChange={handleChange}
-                        required
-                        className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 dark:focus:ring-purple-400 text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                      >
-                        <option value="low">Low</option>
-                        <option value="medium">Medium</option>
-                        <option value="high">High</option>
-                        <option value="critical">Critical</option>
-                      </select>
-                    </div>
-
-                    {/* Tags */}
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-900 dark:text-white mb-2 flex items-center gap-2">
-                        <Tags className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                        Tags (Optional)
-                      </label>
-                      <Input
-                        name="tags"
-                        value={formData.tags}
-                        onChange={handleChange}
-                        placeholder="e.g., network, outage, dns"
-                        className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
-                      />
-                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                        Comma-separated
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Submit Button */}
-                  <div className="flex gap-3 pt-4">
-                    <Button
-                      type="button"
-                      onClick={handleClose}
-                      disabled={isSubmitting}
-                      variant="outline"
-                      className="flex-1"
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      type="submit"
-                      disabled={isSubmitting}
-                      className="flex-1 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white shadow-lg"
-                    >
-                      {isSubmitting ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Saving...
-                        </>
-                      ) : (
-                        <>
-                          <Save className="h-4 w-4 mr-2" />
-                          Save Resolution
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </form>
-              </CardContent>
-            </Card>
-          </motion.div>
-        </>
-      )}
+                {/* Action Buttons */}
+                <div className="flex gap-4 pt-6 border-t-2 border-slate-200 dark:border-slate-700">
+                  <Button
+                    type="button"
+                    onClick={handleClose}
+                    disabled={isSubmitting}
+                    variant="outline"
+                    className="flex-1 h-12 border-2 border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold transition-all"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="flex-1 h-12 bg-gradient-to-r from-violet-600 via-purple-600 to-fuchsia-600 hover:from-violet-700 hover:via-purple-700 hover:to-fuchsia-700 text-white font-semibold shadow-lg hover:shadow-xl transition-all"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                        Saving to AI Knowledge Base...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="h-5 w-5 mr-2" />
+                        Save to Knowledge Base
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        </motion.div>
+      </div>
     </AnimatePresence>
   );
 }
