@@ -11,12 +11,16 @@ import {
   AlertTriangle,
   Tags,
   Hash,
-  Sparkles
+  Sparkles,
+  TrendingUp
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Input } from "../ui/input";
 import type { Incident } from "../../types";
+
+// ✅ API Configuration
+const AI_API_BASE_URL = 'https://web-production-34444.up.railway.app';
 
 interface SaveResolutionModalProps {
   isOpen: boolean;
@@ -138,7 +142,8 @@ export function SaveResolutionModal({ isOpen, onClose, incident, onSuccess }: Sa
         tags: formData.tags.split(',').map(tag => tag.trim()).filter(tag => tag)
       };
 
-      const response = await fetch('http://localhost:8000/incidents/add', {
+      // ✅ Use Railway API endpoint
+      const response = await fetch(`${AI_API_BASE_URL}/incidents/add`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -147,11 +152,12 @@ export function SaveResolutionModal({ isOpen, onClose, incident, onSuccess }: Sa
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
       }
 
       const result = await response.json();
-      console.log('Resolution saved successfully:', result);
+      console.log('✅ Resolution saved successfully:', result);
 
       setShowSuccess(true);
 
@@ -162,8 +168,8 @@ export function SaveResolutionModal({ isOpen, onClose, incident, onSuccess }: Sa
       }, 2000);
 
     } catch (err: any) {
-      console.error('Error saving resolution:', err);
-      setError('Failed to save resolution. Please ensure the AI service is running on port 8000.');
+      console.error('❌ Error saving resolution:', err);
+      setError(err.message || 'Failed to save resolution. Please check your connection and try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -187,7 +193,7 @@ export function SaveResolutionModal({ isOpen, onClose, incident, onSuccess }: Sa
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={handleClose}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50"
           />
 
           {/* Modal */}
@@ -198,17 +204,22 @@ export function SaveResolutionModal({ isOpen, onClose, incident, onSuccess }: Sa
             transition={{ type: "spring", duration: 0.3 }}
             className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto"
           >
-            <Card className="w-full max-w-3xl max-h-[90vh] overflow-y-auto border-2 border-purple-500/30 shadow-2xl">
+            <Card className="w-full max-w-4xl max-h-[90vh] overflow-hidden shadow-2xl border-slate-200 dark:border-slate-700">
               {/* Header */}
-              <CardHeader className="sticky top-0 bg-gradient-to-r from-purple-600 to-blue-600 text-white border-b-0 z-10">
+              <CardHeader className="sticky top-0 bg-gradient-to-r from-purple-600 via-blue-600 to-indigo-600 text-white border-b-0 z-10 pb-6">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-white/20 rounded-lg">
-                      <Brain className="h-6 w-6" />
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 bg-white/20 backdrop-blur-sm rounded-xl shadow-lg">
+                      <Brain className="h-7 w-7" />
                     </div>
                     <div>
-                      <CardTitle className="text-2xl font-bold">Save Resolution for AI Learning</CardTitle>
-                      <p className="text-purple-100 text-sm mt-1">Help the AI learn from this incident</p>
+                      <CardTitle className="text-2xl font-bold flex items-center gap-2">
+                        AI Knowledge Base
+                        <TrendingUp className="h-5 w-5 text-purple-200" />
+                      </CardTitle>
+                      <p className="text-purple-100 text-sm mt-1 font-medium">
+                        Document this resolution to improve AI predictions
+                      </p>
                     </div>
                   </div>
                   <Button
@@ -216,14 +227,14 @@ export function SaveResolutionModal({ isOpen, onClose, incident, onSuccess }: Sa
                     disabled={isSubmitting}
                     variant="ghost"
                     size="sm"
-                    className="text-white hover:bg-white/20 disabled:opacity-50"
+                    className="text-white hover:bg-white/20 disabled:opacity-50 rounded-lg transition-all"
                   >
                     <X className="h-5 w-5" />
                   </Button>
                 </div>
               </CardHeader>
 
-              <CardContent className="p-6">
+              <CardContent className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
                 {/* Success Message */}
                 <AnimatePresence>
                   {showSuccess && (
@@ -231,14 +242,20 @@ export function SaveResolutionModal({ isOpen, onClose, incident, onSuccess }: Sa
                       initial={{ opacity: 0, y: -10 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0 }}
-                      className="mb-6 p-4 bg-green-50 dark:bg-green-900/20 border-2 border-green-500 rounded-lg flex items-start gap-3"
+                      className="mb-6 p-5 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-2 border-green-500 rounded-xl shadow-md"
                     >
-                      <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
-                      <div>
-                        <h3 className="font-bold text-green-900 dark:text-green-100 text-lg">✅ Saved Successfully!</h3>
-                        <p className="text-green-700 dark:text-green-300 mt-1">
-                          AI will learn from this incident and improve future recommendations.
-                        </p>
+                      <div className="flex items-start gap-3">
+                        <div className="p-2 bg-green-500 rounded-lg">
+                          <CheckCircle className="h-5 w-5 text-white" />
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-green-900 dark:text-green-100 text-lg">
+                            Successfully Saved!
+                          </h3>
+                          <p className="text-green-700 dark:text-green-300 mt-1 text-sm">
+                            AI will now use this resolution to help with similar incidents in the future.
+                          </p>
+                        </div>
                       </div>
                     </motion.div>
                   )}
@@ -251,50 +268,85 @@ export function SaveResolutionModal({ isOpen, onClose, incident, onSuccess }: Sa
                       initial={{ opacity: 0, y: -10 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0 }}
-                      className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border-2 border-red-500 rounded-lg flex items-start gap-3"
+                      className="mb-6 p-5 bg-gradient-to-r from-red-50 to-orange-50 dark:from-red-900/20 dark:to-orange-900/20 border-2 border-red-500 rounded-xl shadow-md"
                     >
-                      <AlertCircle className="h-6 w-6 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-                      <div>
-                        <h3 className="font-bold text-red-900 dark:text-red-100">Error</h3>
-                        <p className="text-red-700 dark:text-red-300 text-sm mt-1">{error}</p>
+                      <div className="flex items-start gap-3">
+                        <div className="p-2 bg-red-500 rounded-lg">
+                          <AlertCircle className="h-5 w-5 text-white" />
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-red-900 dark:text-red-100 text-lg">
+                            Error Saving Resolution
+                          </h3>
+                          <p className="text-red-700 dark:text-red-300 text-sm mt-1">{error}</p>
+                        </div>
                       </div>
                     </motion.div>
                   )}
                 </AnimatePresence>
 
-                {/* Form */}
-                <form onSubmit={handleSubmit} className="space-y-5">
-                  {/* Incident ID */}
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-900 dark:text-white mb-2 flex items-center gap-2">
-                      <Hash className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                      Incident ID
-                    </label>
-                    <Input
-                      name="incidentId"
-                      value={formData.incidentId}
-                      onChange={handleChange}
-                      placeholder="e.g., INC-2024-001 or auto-generated"
-                      className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
-                    />
-                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                      Auto-generated if not provided
+                {/* Info Banner */}
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border border-blue-200 dark:border-blue-800 rounded-xl"
+                >
+                  <div className="flex items-start gap-3">
+                    <Sparkles className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5" />
+                    <p className="text-sm text-blue-900 dark:text-blue-100">
+                      <span className="font-semibold">How this helps:</span> By documenting root causes and resolutions, the AI can suggest relevant solutions when similar incidents occur.
                     </p>
+                  </div>
+                </motion.div>
+
+                {/* Form */}
+                <form onSubmit={handleSubmit} className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Incident ID */}
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-900 dark:text-white mb-2 flex items-center gap-2">
+                        <Hash className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                        Incident ID
+                      </label>
+                      <Input
+                        name="incidentId"
+                        value={formData.incidentId}
+                        onChange={handleChange}
+                        placeholder="Auto-generated"
+                        className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white focus:border-purple-500 dark:focus:border-purple-400"
+                      />
+                    </div>
+
+                    {/* Service */}
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-900 dark:text-white mb-2 flex items-center gap-2">
+                        <Sparkles className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                        Service <span className="text-red-500">*</span>
+                      </label>
+                      <Input
+                        name="service"
+                        value={formData.service}
+                        onChange={handleChange}
+                        placeholder="e.g., api-gateway, database"
+                        required
+                        className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white focus:border-purple-500 dark:focus:border-purple-400"
+                      />
+                    </div>
                   </div>
 
                   {/* Title */}
                   <div>
                     <label className="block text-sm font-semibold text-slate-900 dark:text-white mb-2 flex items-center gap-2">
                       <FileText className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                      Title <span className="text-red-500 ml-1">*</span>
+                      Incident Title <span className="text-red-500">*</span>
                     </label>
                     <Input
                       name="title"
                       value={formData.title}
                       onChange={handleChange}
-                      placeholder="Brief title of the incident"
+                      placeholder="Brief, descriptive title"
                       required
-                      className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
+                      className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white focus:border-purple-500 dark:focus:border-purple-400"
                     />
                   </div>
 
@@ -302,93 +354,79 @@ export function SaveResolutionModal({ isOpen, onClose, incident, onSuccess }: Sa
                   <div>
                     <label className="block text-sm font-semibold text-slate-900 dark:text-white mb-2 flex items-center gap-2">
                       <FileText className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                      Description <span className="text-red-500 ml-1">*</span>
+                      Description <span className="text-red-500">*</span>
                     </label>
                     <textarea
                       name="description"
                       value={formData.description}
                       onChange={handleChange}
-                      placeholder="Detailed description of what happened"
+                      placeholder="What happened? Include symptoms and impact..."
                       required
                       rows={3}
-                      className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 dark:focus:ring-purple-400 text-sm resize-none bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500"
+                      className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 dark:focus:ring-purple-400 text-sm resize-none bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 transition-all"
                     />
                   </div>
 
-                  {/* Service */}
+                  {/* Root Cause */}
                   <div>
                     <label className="block text-sm font-semibold text-slate-900 dark:text-white mb-2 flex items-center gap-2">
-                      <Sparkles className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                      Service <span className="text-red-500 ml-1">*</span>
+                      <AlertCircle className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                      Root Cause <span className="text-red-500">*</span>
                     </label>
-                    <Input
-                      name="service"
-                      value={formData.service}
+                    <textarea
+                      name="rootCause"
+                      value={formData.rootCause}
                       onChange={handleChange}
-                      placeholder="e.g., web-server, database, api"
+                      placeholder="What was the underlying cause? Be specific for better AI learning..."
                       required
-                      className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
+                      rows={4}
+                      className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 dark:focus:ring-purple-400 text-sm resize-none bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 transition-all"
                     />
+                    <p className="mt-2 text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                      <Sparkles className="h-3 w-3" />
+                      Be detailed - this helps AI recognize patterns
+                    </p>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                    {/* Root Cause */}
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-semibold text-slate-900 dark:text-white mb-2 flex items-center gap-2">
-                        <AlertCircle className="h-4 w-4 text-orange-600 dark:text-orange-400" />
-                        Root Cause <span className="text-red-500 ml-1">*</span>
-                      </label>
-                      <textarea
-                        name="rootCause"
-                        value={formData.rootCause}
-                        onChange={handleChange}
-                        placeholder="What was the underlying cause of this incident?"
-                        required
-                        rows={4}
-                        className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 dark:focus:ring-purple-400 text-sm resize-none bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500"
-                      />
-                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                        Be specific - this helps AI understand similar issues in the future
-                      </p>
-                    </div>
+                  {/* Resolution */}
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-900 dark:text-white mb-2 flex items-center gap-2">
+                      <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
+                      Resolution Steps <span className="text-red-500">*</span>
+                    </label>
+                    <textarea
+                      name="resolution"
+                      value={formData.resolution}
+                      onChange={handleChange}
+                      placeholder="How was it fixed? Include step-by-step actions taken..."
+                      required
+                      rows={4}
+                      className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 dark:focus:ring-purple-400 text-sm resize-none bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 transition-all"
+                    />
+                    <p className="mt-2 text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                      <CheckCircle className="h-3 w-3" />
+                      Include commands, configs, or procedures used
+                    </p>
+                  </div>
 
-                    {/* Resolution */}
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-semibold text-slate-900 dark:text-white mb-2 flex items-center gap-2">
-                        <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
-                        Resolution <span className="text-red-500 ml-1">*</span>
-                      </label>
-                      <textarea
-                        name="resolution"
-                        value={formData.resolution}
-                        onChange={handleChange}
-                        placeholder="How was this incident resolved? What steps were taken?"
-                        required
-                        rows={4}
-                        className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 dark:focus:ring-purple-400 text-sm resize-none bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500"
-                      />
-                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                        Include step-by-step actions for future reference
-                      </p>
-                    </div>
-
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* Severity */}
                     <div>
                       <label className="block text-sm font-semibold text-slate-900 dark:text-white mb-2 flex items-center gap-2">
                         <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
-                        Severity <span className="text-red-500 ml-1">*</span>
+                        Severity <span className="text-red-500">*</span>
                       </label>
                       <select
                         name="severity"
                         value={formData.severity}
                         onChange={handleChange}
                         required
-                        className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 dark:focus:ring-purple-400 text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                        className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 dark:focus:ring-purple-400 text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-white transition-all"
                       >
-                        <option value="low">Low</option>
-                        <option value="medium">Medium</option>
-                        <option value="high">High</option>
-                        <option value="critical">Critical</option>
+                        <option value="low">🟢 Low</option>
+                        <option value="medium">🟡 Medium</option>
+                        <option value="high">🟠 High</option>
+                        <option value="critical">🔴 Critical</option>
                       </select>
                     </div>
 
@@ -402,40 +440,40 @@ export function SaveResolutionModal({ isOpen, onClose, incident, onSuccess }: Sa
                         name="tags"
                         value={formData.tags}
                         onChange={handleChange}
-                        placeholder="e.g., network, outage, dns"
-                        className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
+                        placeholder="network, timeout, memory"
+                        className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white focus:border-purple-500 dark:focus:border-purple-400"
                       />
-                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                        Comma-separated
+                      <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                        Comma-separated keywords
                       </p>
                     </div>
                   </div>
 
-                  {/* Submit Button */}
-                  <div className="flex gap-3 pt-4">
+                  {/* Action Buttons */}
+                  <div className="flex gap-3 pt-6 border-t border-slate-200 dark:border-slate-700">
                     <Button
                       type="button"
                       onClick={handleClose}
                       disabled={isSubmitting}
                       variant="outline"
-                      className="flex-1"
+                      className="flex-1 border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all"
                     >
                       Cancel
                     </Button>
                     <Button
                       type="submit"
                       disabled={isSubmitting}
-                      className="flex-1 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white shadow-lg"
+                      className="flex-1 bg-gradient-to-r from-purple-600 via-blue-600 to-indigo-600 hover:from-purple-700 hover:via-blue-700 hover:to-indigo-700 text-white shadow-lg hover:shadow-xl transition-all"
                     >
                       {isSubmitting ? (
                         <>
                           <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Saving...
+                          Saving to AI...
                         </>
                       ) : (
                         <>
                           <Save className="h-4 w-4 mr-2" />
-                          Save Resolution
+                          Save to Knowledge Base
                         </>
                       )}
                     </Button>

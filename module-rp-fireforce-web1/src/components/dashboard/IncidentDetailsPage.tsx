@@ -32,6 +32,9 @@ import { ResolveIncidentModal } from "../modals/ResolveIncidentModal";
 import { SuccessModal, ErrorModal, WarningModal } from "../modals/NotificationModal";
 import { MarkdownContent } from "../../utils/markdownRenderer";
 
+// ✅ NEW: API Configuration
+const AI_API_BASE_URL = 'https://web-production-34444.up.railway.app';
+
 interface IncidentDetailsPageProps {
   incidentId: string;
   onBack: () => void;
@@ -419,7 +422,7 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
     }
   };
 
-  // FIXED: AI Message Handler with proper incident ID tracking
+  // ✅ UPDATED: AI Message Handler with Railway API endpoint
   const handleSendAIMessage = async () => {
     if (!inputMessage.trim() || isStreaming || !incident) return;
 
@@ -439,7 +442,6 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
       abortControllerRef.current = new AbortController();
 
       // CRITICAL: Use consistent incident ID for conversation tracking
-      // Priority: incident.id > incident.incident_id > incidentId prop > title (fallback)
       const trackingId = incident.id || (incident as any).incident_id || incidentId || incident.title;
       
       console.log('🔑 Using tracking ID:', trackingId);
@@ -449,7 +451,7 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
       const enhancedDescription = `${incident.description}\n\nUser Question: ${inputMessage}`;
 
       const requestBody = {
-        incident_id: trackingId,  // MUST be consistent
+        incident_id: trackingId,
         title: incident.title,
         description: enhancedDescription,
         service: incident.location || 'system',
@@ -458,7 +460,8 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
 
       console.log('📦 Request body:', requestBody);
 
-      const response = await fetch('http://localhost:8000/analyze/agentic-stream', {
+      // ✅ UPDATED: Use Railway API endpoint
+      const response = await fetch(`${AI_API_BASE_URL}/analyze/agentic-stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestBody),
@@ -567,7 +570,7 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
     }
   };
 
-  // NEW: Clear conversation history
+  // ✅ UPDATED: Clear conversation with Railway API
   const handleClearConversation = async () => {
     if (!incident) return;
     
@@ -576,7 +579,8 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
     try {
       console.log('🧹 Clearing conversation for:', trackingId);
       
-      await fetch(`http://localhost:8000/conversation/${encodeURIComponent(trackingId)}`, {
+      // ✅ UPDATED: Use Railway API endpoint
+      await fetch(`${AI_API_BASE_URL}/conversation/${encodeURIComponent(trackingId)}`, {
         method: 'DELETE'
       });
       
