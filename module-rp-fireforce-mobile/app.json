@@ -84,6 +84,10 @@
             "./assets/sounds/alarm_high.mp3",
             "./assets/sounds/alarm_medium.mp3",
             "./assets/sounds/alarm_low.mp3",
+            "./assets/sounds/alarm_critical_ios.wav",
+            "./assets/sounds/alarm_high_ios.wav",
+            "./assets/sounds/alarm_medium_ios.wav",
+            "./assets/sounds/alarm_low_ios.wav",
             "./assets/sounds/alarm_sound_ios.wav"
           ]
         }
@@ -98,6 +102,11 @@
     "extra": {
       "eas": {
         "projectId": "ed4b748d-8758-4d6a-999c-549c023d50d0"
+      },
+      "googleOAuth": {
+        "webClientId": "688145840657-ps40srtg7635hmegdhuehco0r9cj3qbe.apps.googleusercontent.com",
+        "iosClientId": "688145840657-k8jel0co1ksul0pok9aunt0l8ddj526p.apps.googleusercontent.com",
+        "androidClientId": "688145840657-2hjotef33ajs8n26cmu5ut7fmjh7n9ka.apps.googleusercontent.com"
       }
     },
     "owner": "rp-keannubrillante"

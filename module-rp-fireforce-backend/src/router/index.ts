@@ -6,9 +6,12 @@ import {
 	handleCreateIncident,
 	handleGetIncidents,
 	handleGetStats,
-	handleIncidentResponse, handlePostIncidentComment, handleResolveIncident,
+	handleIncidentResponse,
+	handlePostIncidentComment,
+	handleResolveIncident,
 	handleSelectIncident,
-	handleTestIncident, handleUpdateIncidentStatus
+	handleTestIncident,
+	handleUpdateIncidentStatus
 } from "../handlers/incident.handlers";
 import { handleWebhook } from "../handlers/webook.handlers";
 import {
@@ -16,13 +19,15 @@ import {
 	handleGoogleCallback,
 	handleLogin,
 	handleLogout,
-	handleMobileOAuth
+	handleMobileGoogleAuth,
+	handleMobileGithubAuth
 } from "../handlers/auth.handlers";
 import {handleRegisterPushToken, handleSendTestAlert} from "../handlers/push-notification.handlers";
 import {handleFetchIncidentComment} from "../handlers/incident-comment.handlers";
 import {
 	handleCreateOnCallSchedule,
-	handleCreateOverride, handleDeleteOnCallSchedule,
+	handleCreateOverride,
+	handleDeleteOnCallSchedule,
 	handleEscalateIncident,
 	handleGetAllCurrentOnCall,
 	handleGetCurrentOnCallByTeamId,
@@ -31,10 +36,13 @@ import {
 	handleGetOnCallCalendarData,
 	handleGetOnCallSchedule,
 	handleGetOnCallTeams,
-	handleGetScheduleConfig, handleGetTeamDetails,
+	handleGetScheduleConfig,
+	handleGetTeamDetails,
 	handleGetUsersForEmergencyOverride,
-	handleGetUserTeam, handleUpdateOnCallSchedule,
-	handleUpdateScheduleConfig, handleGetAllNotOnCallToday, handleGetAllOnCallUsers
+	handleGetUserTeam,
+	handleUpdateOnCallSchedule,
+	handleUpdateScheduleConfig,
+	handleGetAllOnCallUsers
 } from "../handlers/oncall.handler";
 import {handleGetAllUsers, handleGetUserById} from "../handlers/user-handlers";
 import {
@@ -48,7 +56,8 @@ import {
 	handleSendEscalationEmail,
 	handleSendIncidentAlertEmail,
 	handleSendReminderEmail,
-	handleSendStatusChangeEmail, handleSendTestEmail
+	handleSendStatusChangeEmail,
+	handleSendTestEmail
 } from "../handlers/email.handlers";
 
 export class Router {
@@ -72,25 +81,24 @@ export class Router {
 		}
 
 		try {
-			// Public routes (no auth required)
+			// ============================================
+			// PUBLIC ROUTES (no auth required)
+			// ============================================
+
 			if (path === '/health' && method === 'GET') {
 				return handleHealth(CORS_HEADERS);
 			}
-			// Users routes
-			if (path === '/api/users' && method === 'GET') {
-				return handleGetAllUsers(request, this.env, CORS_HEADERS);
-			}
 
-			// In your worker/router file
-			if (path === '/api/users/by-id' && method === 'GET') {
-				return handleGetUserById(request, this.env, CORS_HEADERS);
-			}
+			// ============================================
+			// AUTHENTICATION ROUTES
+			// ============================================
 
-			// Authentication routes
+			// Traditional email/password login
 			if (path === '/api/auth/login' && method === 'POST') {
 				return handleLogin(request, this.env, CORS_HEADERS);
 			}
 
+			// Web OAuth callbacks (redirect-based)
 			if (path === '/auth/google/callback' && method === 'GET') {
 				return handleGoogleCallback(request, this.env);
 			}
@@ -99,16 +107,49 @@ export class Router {
 				return handleGithubCallback(request, this.env);
 			}
 
+			// ✅ Mobile OAuth endpoints (JSON-based)
+			if (path === '/api/auth/google/mobile' && method === 'POST') {
+				return handleMobileGoogleAuth(request, this.env, CORS_HEADERS);
+			}
+
+			if (path === '/api/auth/github/mobile' && method === 'POST') {
+				return handleMobileGithubAuth(request, this.env, CORS_HEADERS);
+			}
+
+			// Logout
 			if (path === '/api/auth/logout' && method === 'POST') {
 				return handleLogout(request, this.env, CORS_HEADERS);
 			}
+
+			// ============================================
+			// USER ROUTES
+			// ============================================
+
+			if (path === '/api/users' && method === 'GET') {
+				return handleGetAllUsers(request, this.env, CORS_HEADERS);
+			}
+
+			if (path === '/api/users/by-id' && method === 'GET') {
+				return handleGetUserById(request, this.env, CORS_HEADERS);
+			}
+
+			if (path === '/api/users/emergency-override' && method === 'POST') {
+				return handleGetUsersForEmergencyOverride(request, this.env, CORS_HEADERS);
+			}
+
+			// ============================================
+			// WEBHOOK ROUTES
+			// ============================================
 
 			// Webhook (no auth required for AWS)
 			if (path === '/webhook/aws-cloudwatch' && method === 'POST') {
 				return handleWebhook(request, this.env, CORS_HEADERS);
 			}
 
-			// Push notification routes (add these two lines here)
+			// ============================================
+			// PUSH NOTIFICATION ROUTES
+			// ============================================
+
 			if (path === '/api/push-token' && method === 'POST') {
 				return handleRegisterPushToken(request, this.env, CORS_HEADERS);
 			}
@@ -117,7 +158,10 @@ export class Router {
 				return handleSendTestAlert(request, this.env, CORS_HEADERS);
 			}
 
-			// Protected routes (will add auth middleware later)
+			// ============================================
+			// INCIDENT ROUTES
+			// ============================================
+
 			if (path === '/api/incidents' && method === 'GET') {
 				return handleGetIncidents(url, this.env, CORS_HEADERS);
 			}
@@ -144,22 +188,32 @@ export class Router {
 				return handleSelectIncident(request, this.env, CORS_HEADERS);
 			}
 
-			// POST Incident comment
-			if (path === '/api/incidents-comment' && method === 'POST') {
-				return handlePostIncidentComment(request, this.env, CORS_HEADERS);
-			}
-
-			// Get specific incident by ID
-			if (path === '/api/incidents-comment' && method === 'GET') {
-				return handleFetchIncidentComment(request, this.env, CORS_HEADERS);
-			}
-
 			// Update incident status
 			if (path === '/api/incidents-status' && method === 'PUT') {
 				return handleUpdateIncidentStatus(request, this.env, CORS_HEADERS);
 			}
 
-			// OnCall Routes
+			// Resolve incident
+			if (path.startsWith('/api/incidents/') && path.endsWith('/resolve') && method === 'POST') {
+				return handleResolveIncident(request, this.env, CORS_HEADERS);
+			}
+
+			// ============================================
+			// INCIDENT COMMENT ROUTES
+			// ============================================
+
+			if (path === '/api/incidents-comment' && method === 'POST') {
+				return handlePostIncidentComment(request, this.env, CORS_HEADERS);
+			}
+
+			if (path === '/api/incidents-comment' && method === 'GET') {
+				return handleFetchIncidentComment(request, this.env, CORS_HEADERS);
+			}
+
+			// ============================================
+			// ON-CALL ROUTES
+			// ============================================
+
 			if (path === '/api/oncall/team' && method === 'GET') {
 				return handleGetCurrentOnCallByTeamId(request, this.env, CORS_HEADERS);
 			}
@@ -200,6 +254,10 @@ export class Router {
 				return handleDeleteOnCallSchedule(request, this.env, CORS_HEADERS);
 			}
 
+			if (path === '/api/oncall/schedule' && method === 'PUT') {
+				return handleUpdateOnCallSchedule(request, this.env, CORS_HEADERS);
+			}
+
 			if (path === '/api/oncall/schedules/all' && method === 'GET') {
 				return handleGetAllSchedules(request, this.env, CORS_HEADERS);
 			}
@@ -216,24 +274,12 @@ export class Router {
 				return handleGetTeamDetails(request, this.env, CORS_HEADERS);
 			}
 
-			if (path === '/api/oncall/schedule' && method === 'PUT') {
-				return handleUpdateOnCallSchedule(request, this.env, CORS_HEADERS);
-			}
-
-			if (path === '/api/users/emergency-override' && method === 'POST') {
-				return handleGetUsersForEmergencyOverride(request, this.env, CORS_HEADERS);
-			}
-
-			// router/index.ts (add alongside your other oncall routes)
 			if (path === '/api/oncall/schedule/config' && method === 'GET') {
 				return handleGetScheduleConfig(url, this.env, CORS_HEADERS);
 			}
+
 			if (path === '/api/oncall/schedule/config' && method === 'PUT') {
 				return handleUpdateScheduleConfig(request, this.env, CORS_HEADERS);
-			}
-
-			if (path.startsWith('/api/incidents/') && path.endsWith('/resolve') && method === 'POST') {
-				return handleResolveIncident(request, this.env, CORS_HEADERS);
 			}
 
 			// ============================================
@@ -260,6 +306,10 @@ export class Router {
 				return handleGetAuditStats(request, this.env, CORS_HEADERS);
 			}
 
+			// ============================================
+			// EMAIL ROUTES
+			// ============================================
+
 			if (path === '/api/email/incident-alert' && method === 'POST') {
 				return handleSendIncidentAlertEmail(request, this.env, CORS_HEADERS);
 			}
@@ -284,15 +334,25 @@ export class Router {
 				return handleSendTestEmail(request, this.env, CORS_HEADERS);
 			}
 
-			// 404 Not Found
-			return new Response(JSON.stringify({ error: 'Not found' }), {
+			// ============================================
+			// 404 NOT FOUND
+			// ============================================
+
+			return new Response(JSON.stringify({
+				error: 'Not found',
+				path: path,
+				method: method
+			}), {
 				status: 404,
 				headers: CORS_HEADERS
 			});
 
 		} catch (error) {
 			console.error('Request error:', error);
-			return new Response(JSON.stringify({ error: 'Internal server error' }), {
+			return new Response(JSON.stringify({
+				error: 'Internal server error',
+				message: error instanceof Error ? error.message : 'Unknown error'
+			}), {
 				status: 500,
 				headers: CORS_HEADERS
 			});

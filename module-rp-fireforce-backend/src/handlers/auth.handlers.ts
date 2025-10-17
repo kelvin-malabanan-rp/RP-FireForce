@@ -1,12 +1,6 @@
 import { ApiResponse, Env, LoginRequest, LoginResponse } from '../types';
 import { AuthenticationServices } from "../services/authentication.services";
 
-// Define the expected structure for mobile OAuth request body
-interface MobileOAuthRequest {
-	code: string;
-	redirectUri: string;
-}
-
 export async function handleLogin(
 	request: Request,
 	env: Env,
@@ -104,7 +98,7 @@ export async function handleLogin(
 			data: loginResponse
 		};
 
-		console.log(`Successful login: ${user.email} — Team: ${user.teamId}, Team Role: ${user.teamRole}`);
+		console.log(`✅ Successful login: ${user.email} — Team: ${user.teamId}, Team Role: ${user.teamRole}`);
 
 		return new Response(JSON.stringify(response), {
 			status: 200,
@@ -124,7 +118,7 @@ export async function handleLogin(
 	}
 }
 
-// --- ORIGINAL WEB OAUTH HANDLERS (RETAINED) ---
+// --- WEB OAUTH HANDLERS (For web app with redirects) ---
 
 export async function handleGoogleCallback(
 	request: Request,
@@ -151,7 +145,7 @@ export async function handleGoogleCallback(
 		}
 
 		const authService = new AuthenticationServices(env);
-		// Calls the original handleGoogleOAuth (without redirectUri)
+		// Uses web redirect URI internally
 		const result = await authService.handleGoogleOAuth(code);
 
 		if (!result) {
@@ -203,7 +197,7 @@ export async function handleGithubCallback(
 		}
 
 		const authService = new AuthenticationServices(env);
-		// Calls the original handleGithubOAuth (without redirectUri)
+		// Uses web redirect URI internally
 		const result = await authService.handleGithubOAuth(code);
 
 		if (!result) {
@@ -227,6 +221,186 @@ export async function handleGithubCallback(
 		return Response.redirect(
 			`${frontendUrl}/auth/error?error=server_error`
 		);
+	}
+}
+
+// --- MOBILE OAUTH HANDLERS (For mobile app with JSON responses) ---
+
+/**
+ * ✅ Mobile Google OAuth - Returns JSON instead of redirect
+ */
+export async function handleMobileGoogleAuth(
+	request: Request,
+	env: Env,
+	corsHeaders: Record<string, string>
+): Promise<Response> {
+	try {
+		const body = await request.json() as {
+			code: string;
+			redirectUri: string;
+		};
+
+		if (!body.code) {
+			return new Response(JSON.stringify({
+				httpStatus: "BAD_REQUEST",
+				message: "Authorization code is required",
+				data: null
+			}), {
+				status: 400,
+				headers: corsHeaders
+			});
+		}
+
+		if (!body.redirectUri) {
+			return new Response(JSON.stringify({
+				httpStatus: "BAD_REQUEST",
+				message: "Redirect URI is required",
+				data: null
+			}), {
+				status: 400,
+				headers: corsHeaders
+			});
+		}
+
+		const authService = new AuthenticationServices(env);
+
+		// ✅ Use mobile OAuth method with dynamic redirect URI
+		const result = await authService.handleGoogleOAuthMobile(body.code, body.redirectUri);
+
+		if (!result) {
+			console.error('❌ Mobile Google OAuth failed');
+			return new Response(JSON.stringify({
+				httpStatus: "UNAUTHORIZED",
+				message: "OAuth authentication failed",
+				data: null
+			}), {
+				status: 401,
+				headers: corsHeaders
+			});
+		}
+
+		// ✅ Return complete user data matching mobile app's storeUserSession format
+		const response = {
+			httpStatus: "OK",
+			message: "Login successful",
+			data: {
+				id: result.user.id,
+				email: result.user.email,
+				firstName: result.user.first_name || "",
+				lastName: result.user.last_name || "",
+				role: result.user.user_role || "user",
+				teamId: result.user.team_id || null,
+				teamRole: result.user.team_role || null,
+				token: result.token
+			}
+		};
+
+		console.log('✅ Mobile Google OAuth login successful for:', result.user.email);
+
+		return new Response(JSON.stringify(response), {
+			status: 200,
+			headers: corsHeaders
+		});
+
+	} catch (error) {
+		console.error('❌ Mobile Google OAuth error:', error);
+		return new Response(JSON.stringify({
+			httpStatus: "INTERNAL_SERVER_ERROR",
+			message: error instanceof Error ? error.message : "OAuth authentication failed",
+			data: null
+		}), {
+			status: 500,
+			headers: corsHeaders
+		});
+	}
+}
+
+/**
+ * ✅ Mobile GitHub OAuth - Returns JSON instead of redirect
+ */
+export async function handleMobileGithubAuth(
+	request: Request,
+	env: Env,
+	corsHeaders: Record<string, string>
+): Promise<Response> {
+	try {
+		const body = await request.json() as {
+			code: string;
+			redirectUri: string;
+		};
+
+		if (!body.code) {
+			return new Response(JSON.stringify({
+				httpStatus: "BAD_REQUEST",
+				message: "Authorization code is required",
+				data: null
+			}), {
+				status: 400,
+				headers: corsHeaders
+			});
+		}
+
+		if (!body.redirectUri) {
+			return new Response(JSON.stringify({
+				httpStatus: "BAD_REQUEST",
+				message: "Redirect URI is required",
+				data: null
+			}), {
+				status: 400,
+				headers: corsHeaders
+			});
+		}
+
+		const authService = new AuthenticationServices(env);
+
+		// ✅ Use mobile OAuth method with dynamic redirect URI
+		const result = await authService.handleGithubOAuthMobile(body.code, body.redirectUri);
+
+		if (!result) {
+			console.error('❌ Mobile GitHub OAuth failed');
+			return new Response(JSON.stringify({
+				httpStatus: "UNAUTHORIZED",
+				message: "OAuth authentication failed",
+				data: null
+			}), {
+				status: 400,
+				headers: corsHeaders
+			});
+		}
+
+		// ✅ Return complete user data matching mobile app's format
+		const response = {
+			httpStatus: "OK",
+			message: "Login successful",
+			data: {
+				id: result.user.id,
+				email: result.user.email,
+				firstName: result.user.first_name || "",
+				lastName: result.user.last_name || "",
+				role: result.user.user_role || "user",
+				teamId: result.user.team_id || null,
+				teamRole: result.user.team_role || null,
+				token: result.token
+			}
+		};
+
+		console.log('✅ Mobile GitHub OAuth login successful for:', result.user.email);
+
+		return new Response(JSON.stringify(response), {
+			status: 200,
+			headers: corsHeaders
+		});
+
+	} catch (error) {
+		console.error('❌ Mobile GitHub OAuth error:', error);
+		return new Response(JSON.stringify({
+			httpStatus: "INTERNAL_SERVER_ERROR",
+			message: error instanceof Error ? error.message : "OAuth authentication failed",
+			data: null
+		}), {
+			status: 500,
+			headers: corsHeaders
+		});
 	}
 }
 

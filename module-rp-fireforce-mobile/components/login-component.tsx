@@ -1,7 +1,9 @@
+// components/login.component.tsx
+
 import { LoginProps, LoginData } from "@/types";
 import { FONT_FAMILY } from "@/constants/fonts";
 import { Image } from "expo-image";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -19,7 +21,11 @@ import { ParticleNetwork } from "@/components/animations/particles-network";
 import { BlurView } from "expo-blur";
 import { Ionicons } from "@expo/vector-icons";
 import * as Notifications from 'expo-notifications';
+import * as WebBrowser from 'expo-web-browser';
+import * as AuthSession from 'expo-auth-session';
+import Constants from 'expo-constants';
 import { registerPushToken } from '@/api/alert-controller';
+import { loginWithGoogle } from '@/api/auth-controller';
 import {
     retrieveAlertSettings,
     retrievePushToken,
@@ -28,23 +34,114 @@ import {
     storePushToken,
     storeRegistrationStatus,
     retrieveUserSession,
+    storeUserSession,
 } from "@/constants/local-storage";
+import { router } from 'expo-router';
+
+WebBrowser.maybeCompleteAuthSession();
 
 interface LoginComponentProps extends LoginProps {
-    // Removed onGoogleLogin and onGithubLogin props
+    onLogin: (email: string, password: string) => Promise<any>;
 }
 
-export const LoginComponent = ({
-                                   onLogin,
-                               }: LoginComponentProps) => {
+export const LoginComponent = ({ onLogin }: LoginComponentProps) => {
     const [formData, setFormData] = useState<LoginData>({
         email: "kelvin.malabanan@rocketpartners.io",
         password: "password123",
     });
     const [isLoading, setIsLoading] = useState<boolean>(false);
+    const [isOAuthLoading, setIsOAuthLoading] = useState<boolean>(false);
     const [error, setError] = useState<string>("");
     const [focusedInput, setFocusedInput] = useState<string | null>(null);
     const [showPassword, setShowPassword] = useState<boolean>(false);
+
+    // ✅ Get platform-specific Google Client ID
+    const getGoogleClientId = () => {
+        const oauth = Constants.expoConfig?.extra?.googleOAuth;
+
+        if (Platform.OS === 'ios') {
+            return oauth?.iosClientId;
+        } else if (Platform.OS === 'android') {
+            return oauth?.androidClientId;
+        }
+        return oauth?.webClientId;
+    };
+
+    // ✅ Google OAuth Configuration
+    const googleRedirectUri = AuthSession.makeRedirectUri({
+        scheme: 'rpfireforcepager',
+        path: 'auth/callback'
+    });
+
+    console.log('[oauth] Platform:', Platform.OS);
+    console.log('[oauth] Google Client ID:', getGoogleClientId());
+    console.log('[oauth] Google redirect URI:', googleRedirectUri);
+
+    const [googleRequest, googleResponse, googlePromptAsync] = AuthSession.useAuthRequest(
+        {
+            clientId: getGoogleClientId(),
+            scopes: ['profile', 'email'],
+            redirectUri: googleRedirectUri,
+        },
+        {
+            authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
+        }
+    );
+
+    // ✅ Handle Google OAuth Response
+    useEffect(() => {
+        if (googleResponse?.type === 'success') {
+            const { code } = googleResponse.params;
+            handleGoogleOAuthSuccess(code);
+        } else if (googleResponse?.type === 'error') {
+            console.error('Google OAuth error:', googleResponse.error);
+            Alert.alert('Login Failed', 'Could not complete Google sign-in');
+            setIsOAuthLoading(false);
+        }
+    }, [googleResponse]);
+
+    const handleGoogleOAuthSuccess = async (code: string) => {
+        try {
+            setIsOAuthLoading(true);
+            console.log('[oauth] Processing Google login...');
+
+            const response = await loginWithGoogle(code, googleRedirectUri);
+
+            if (response.httpStatus === 'OK' && response.data) {
+                // ✅ Store session WITHOUT password field
+                await storeUserSession({
+                    id: response.data.id,
+                    email: response.data.email,
+                    firstName: response.data.firstName,
+                    lastName: response.data.lastName,
+                    role: response.data.role,
+                    teamId: response.data.teamId,
+                    teamRole: response.data.teamRole,
+                    token: response.data.token
+                });
+
+                console.log('✅ Google OAuth login successful:', response.data.email);
+
+                // Auto-register for push notifications
+                await autoRegisterDevice(response.data.id);
+
+                // Navigate to main app
+                router.replace('/(tabs)');
+            } else {
+                throw new Error(response.message || 'OAuth login failed');
+            }
+        } catch (error) {
+            console.error('Google OAuth error:', error);
+            Alert.alert('Login Failed', 'Could not complete Google sign-in. Please try again.');
+            setIsOAuthLoading(false);
+        }
+    };
+
+    const handleGoogleLogin = async () => {
+        setIsOAuthLoading(true);
+        setError("");
+        await googlePromptAsync();
+    };
 
     const handleChange = (name: keyof LoginData, value: string): void => {
         setFormData((prev: LoginData) => ({
@@ -178,6 +275,8 @@ export const LoginComponent = ({
         }
     };
 
+    const isAnyLoading = isLoading || isOAuthLoading;
+
     return (
         <LinearGradient
             colors={['#0f172a', '#581c87', '#0f172a']}
@@ -230,7 +329,7 @@ export const LoginComponent = ({
                                     keyboardType="email-address"
                                     autoCapitalize="none"
                                     autoCorrect={false}
-                                    editable={!isLoading}
+                                    editable={!isAnyLoading}
                                 />
                             </View>
 
@@ -253,11 +352,12 @@ export const LoginComponent = ({
                                         secureTextEntry={!showPassword}
                                         autoCapitalize="none"
                                         autoCorrect={false}
-                                        editable={!isLoading}
+                                        editable={!isAnyLoading}
                                     />
                                     <TouchableOpacity
                                         style={styles.eyeIcon}
                                         onPress={() => setShowPassword(!showPassword)}
+                                        disabled={isAnyLoading}
                                     >
                                         <Ionicons
                                             name={showPassword ? "eye-off-outline" : "eye-outline"}
@@ -267,10 +367,12 @@ export const LoginComponent = ({
                                     </TouchableOpacity>
                                 </View>
                             </View>
+
+                            {/* Email/Password Login Button */}
                             <TouchableOpacity
                                 style={styles.loginButtonWrapper}
                                 onPress={handleLogin}
-                                disabled={isLoading}
+                                disabled={isAnyLoading}
                                 activeOpacity={0.8}
                             >
                                 <LinearGradient
@@ -279,7 +381,7 @@ export const LoginComponent = ({
                                     end={{ x: 1, y: 0 }}
                                     style={[
                                         styles.loginButton,
-                                        isLoading && styles.loginButtonDisabled,
+                                        isAnyLoading && styles.loginButtonDisabled,
                                     ]}
                                 >
                                     {isLoading ? (
@@ -293,8 +395,45 @@ export const LoginComponent = ({
                                 </LinearGradient>
                             </TouchableOpacity>
 
-                            {/* Removed OAuth Divider and Buttons */}
+                            {/* ✅ OAuth Divider */}
+                            <View style={styles.divider}>
+                                <View style={styles.dividerLine} />
+                                <Text style={styles.dividerText}>or continue with</Text>
+                                <View style={styles.dividerLine} />
+                            </View>
 
+                            {/* ✅ OAuth Buttons */}
+                            <View style={styles.oauthButtonsContainer}>
+                                {/* Google OAuth Button */}
+                                <TouchableOpacity
+                                    style={styles.oauthButton}
+                                    onPress={handleGoogleLogin}
+                                    disabled={isAnyLoading || !googleRequest}
+                                    activeOpacity={0.8}
+                                >
+                                    {isOAuthLoading ? (
+                                        <ActivityIndicator color="#FFFFFF" size="small" />
+                                    ) : (
+                                        <>
+                                            <Ionicons name="logo-google" size={20} color="#FFFFFF" />
+                                            <Text style={styles.oauthButtonText}>Google</Text>
+                                        </>
+                                    )}
+                                </TouchableOpacity>
+
+                                {/* GitHub OAuth Button - Optional */}
+                                {/* Uncomment if you want GitHub login
+                                <TouchableOpacity
+                                    style={styles.oauthButton}
+                                    onPress={handleGithubLogin}
+                                    disabled={isAnyLoading}
+                                    activeOpacity={0.8}
+                                >
+                                    <Ionicons name="logo-github" size={20} color="#FFFFFF" />
+                                    <Text style={styles.oauthButtonText}>GitHub</Text>
+                                </TouchableOpacity>
+                                */}
+                            </View>
                         </View>
 
                         <View style={styles.footer}>
@@ -411,18 +550,6 @@ const styles = StyleSheet.create({
         borderColor: '#ef4444',
         borderWidth: 2,
     },
-    options: {
-        alignItems: "flex-end",
-    },
-    forgotPassword: {
-        padding: 4,
-    },
-    forgotPasswordText: {
-        color: '#f97316',
-        fontSize: 13,
-        fontWeight: "500",
-        fontFamily: FONT_FAMILY.POPPINS_MEDIUM,
-    },
     loginButtonWrapper: {
         borderRadius: 12,
         overflow: 'hidden',
@@ -448,7 +575,45 @@ const styles = StyleSheet.create({
         fontWeight: "600",
         fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
-    // Removed divider and oauth styling
+    // ✅ OAuth Styles
+    divider: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginVertical: 8,
+        gap: 12,
+    },
+    dividerLine: {
+        flex: 1,
+        height: 1,
+        backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    },
+    dividerText: {
+        fontSize: 13,
+        color: 'rgba(255, 255, 255, 0.5)',
+        fontFamily: FONT_FAMILY.POPPINS_REGULAR,
+    },
+    oauthButtonsContainer: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    oauthButton: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.2)',
+        borderRadius: 12,
+        paddingVertical: 14,
+        gap: 8,
+    },
+    oauthButtonText: {
+        color: '#FFFFFF',
+        fontSize: 15,
+        fontWeight: '600',
+        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
+    },
     footer: {
         alignItems: "center",
         marginTop: 24,

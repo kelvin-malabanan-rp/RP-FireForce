@@ -68,16 +68,63 @@ export class AuthenticationServices {
 		}
 	}
 
-	// --- ORIGINAL WEB OAUTH HANDLERS (RETAINED FOR WEB COMPATIBILITY) ---
+	// --- WEB OAUTH HANDLERS (Fixed redirect URI for web) ---
 
 	/**
-	 * Handle Google OAuth authentication (Web Flow: uses fixed redirect URI)
+	 * Handle Google OAuth authentication (Web Flow)
 	 */
 	async handleGoogleOAuth(code: string): Promise<OAuthResult | null> {
-		try {
-			console.log('🔵 Starting Google Web OAuth flow...');
+		return this.handleGoogleOAuthWithRedirect(
+			code,
+			'https://incident-webhook-api.rapidresponse.workers.dev/auth/google/callback'
+		);
+	}
 
-			// Exchange code for tokens (Uses fixed, backend redirect URI)
+	/**
+	 * Handle GitHub OAuth authentication (Web Flow)
+	 */
+	async handleGithubOAuth(code: string): Promise<OAuthResult | null> {
+		return this.handleGithubOAuthWithRedirect(
+			code,
+			'https://incident-webhook-api.rapidresponse.workers.dev/auth/github/callback'
+		);
+	}
+
+	// --- MOBILE OAUTH HANDLERS (Dynamic redirect URI for mobile) ---
+
+	/**
+	 * Handle Google OAuth authentication (Mobile Flow)
+	 * @param code - Authorization code from Google
+	 * @param redirectUri - The exact redirect URI used by the mobile app
+	 */
+	async handleGoogleOAuthMobile(code: string, redirectUri: string): Promise<OAuthResult | null> {
+		console.log('🔵 Starting Mobile Google OAuth flow...');
+		console.log('📱 Mobile Redirect URI:', redirectUri);
+		return this.handleGoogleOAuthWithRedirect(code, redirectUri);
+	}
+
+	/**
+	 * Handle GitHub OAuth authentication (Mobile Flow)
+	 * @param code - Authorization code from GitHub
+	 * @param redirectUri - The exact redirect URI used by the mobile app
+	 */
+	async handleGithubOAuthMobile(code: string, redirectUri: string): Promise<OAuthResult | null> {
+		console.log('🔵 Starting Mobile GitHub OAuth flow...');
+		console.log('📱 Mobile Redirect URI:', redirectUri);
+		return this.handleGithubOAuthWithRedirect(code, redirectUri);
+	}
+
+	// --- PRIVATE OAUTH IMPLEMENTATION ---
+
+	/**
+	 * Generic Google OAuth handler with custom redirect URI
+	 */
+	private async handleGoogleOAuthWithRedirect(code: string, redirectUri: string): Promise<OAuthResult | null> {
+		try {
+			console.log('🔵 Processing Google OAuth...');
+			console.log('📍 Using Redirect URI:', redirectUri);
+
+			// Exchange code for tokens
 			const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -85,7 +132,7 @@ export class AuthenticationServices {
 					code,
 					client_id: this.env.GOOGLE_CLIENT_ID,
 					client_secret: this.env.GOOGLE_CLIENT_SECRET,
-					redirect_uri: 'https://incident-webhook-api.rapidresponse.workers.dev/auth/google/callback',
+					redirect_uri: redirectUri,
 					grant_type: 'authorization_code'
 				})
 			});
@@ -93,7 +140,8 @@ export class AuthenticationServices {
 			const tokens = await tokenResponse.json();
 
 			if (tokens.error) {
-				console.error('Google token exchange error:', tokens.error);
+				console.error('❌ Google token exchange error:', tokens.error);
+				console.error('Error details:', tokens.error_description);
 				return null;
 			}
 
@@ -106,6 +154,12 @@ export class AuthenticationServices {
 
 			const userInfo: OAuthUserInfo = await userResponse.json();
 			console.log('✅ User info retrieved:', userInfo.email);
+
+			// Validate email domain
+			if (!userInfo.email.endsWith('@rocketpartners.io')) {
+				console.error('❌ Invalid email domain:', userInfo.email);
+				return null;
+			}
 
 			// Find or create user
 			const user = await this.findOrCreateOAuthUser('google', userInfo);
@@ -123,19 +177,20 @@ export class AuthenticationServices {
 			return { user, token };
 
 		} catch (error) {
-			console.error('Google Web OAuth error:', error);
+			console.error('❌ Google OAuth error:', error);
 			return null;
 		}
 	}
 
 	/**
-	 * Handle GitHub OAuth authentication (Web Flow: uses fixed redirect URI)
+	 * Generic GitHub OAuth handler with custom redirect URI
 	 */
-	async handleGithubOAuth(code: string): Promise<OAuthResult | null> {
+	private async handleGithubOAuthWithRedirect(code: string, redirectUri: string): Promise<OAuthResult | null> {
 		try {
-			console.log('🔵 Starting GitHub Web OAuth flow...');
+			console.log('🔵 Processing GitHub OAuth...');
+			console.log('📍 Using Redirect URI:', redirectUri);
 
-			// Exchange code for access token (Uses fixed, backend redirect URI)
+			// Exchange code for access token
 			const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
 				method: 'POST',
 				headers: {
@@ -146,14 +201,15 @@ export class AuthenticationServices {
 					client_id: this.env.GITHUB_CLIENT_ID,
 					client_secret: this.env.GITHUB_CLIENT_SECRET,
 					code,
-					redirect_uri: 'https://incident-webhook-api.rapidresponse.workers.dev/auth/github/callback'
+					redirect_uri: redirectUri
 				})
 			});
 
 			const tokens = await tokenResponse.json();
 
 			if (tokens.error) {
-				console.error('GitHub token exchange error:', tokens.error);
+				console.error('❌ GitHub token exchange error:', tokens.error);
+				console.error('Error details:', tokens.error_description);
 				return null;
 			}
 
@@ -185,6 +241,12 @@ export class AuthenticationServices {
 
 			console.log('✅ User info retrieved:', userInfo.email);
 
+			// Validate email domain
+			if (!userInfo.email.endsWith('@rocketpartners.io')) {
+				console.error('❌ Invalid email domain:', userInfo.email);
+				return null;
+			}
+
 			// Find or create user
 			const user = await this.findOrCreateOAuthUser('github', userInfo);
 
@@ -201,12 +263,12 @@ export class AuthenticationServices {
 			return { user, token };
 
 		} catch (error) {
-			console.error('GitHub Web OAuth error:', error);
+			console.error('❌ GitHub OAuth error:', error);
 			return null;
 		}
 	}
 
-	// --- UTILITY FUNCTIONS (RETAINED) ---
+	// --- UTILITY FUNCTIONS ---
 
 	/**
 	 * Find or create OAuth user (safe against duplicate email constraint)
@@ -246,12 +308,26 @@ export class AuthenticationServices {
 
 				await this.env.DB.prepare(`
 					UPDATE users
-					SET oauth_provider = ?, oauth_id = ?, updated_at = CURRENT_TIMESTAMP
+					SET oauth_provider = ?, oauth_id = ?,
+					    display_name = ?, avatar_url = ?,
+					    updated_at = CURRENT_TIMESTAMP
 					WHERE email = ?
-				`).bind(provider, oauthId, userInfo.email).run();
+				`).bind(
+					provider,
+					oauthId,
+					userInfo.name || userInfo.login || existingByEmail.display_name,
+					userInfo.picture || userInfo.avatar_url || existingByEmail.avatar_url,
+					userInfo.email
+				).run();
 
 				await this.updateLastLogin(existingByEmail.id);
-				return existingByEmail;
+
+				// Re-fetch updated user
+				user = await this.env.DB.prepare(
+					`SELECT * FROM users WHERE email = ?`
+				).bind(userInfo.email).first();
+
+				return user;
 			}
 
 			// Step 3: Create new user
@@ -358,8 +434,6 @@ export class AuthenticationServices {
 	 */
 	private async verifyPassword(password: string, hash: string): Promise<boolean> {
 		console.log('Verifying password...');
-		// console.log('Hash from DB:', hash); // Commented out sensitive info
-		// console.log('Password provided:', password); // Commented out sensitive info
 
 		// For testing with sample data
 		if (hash === '$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe') {

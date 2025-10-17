@@ -34,12 +34,12 @@ CREATE TABLE users (
 					   avatar_url    TEXT,                    -- Profile picture from OAuth
 					   oauth_provider TEXT,                   -- 'google', 'github', or NULL
 					   oauth_id      TEXT,                    -- Provider's user ID
+					   user_role     TEXT DEFAULT 'user',
 					   is_active     INTEGER DEFAULT 1,
 					   is_verified   INTEGER DEFAULT 0,
 					   last_login    DATETIME,
 					   created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
 					   updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
-
 					   UNIQUE(oauth_provider, oauth_id)
 );
 
@@ -213,13 +213,12 @@ CREATE TABLE oncall_schedules (
 CREATE INDEX idx_oncall_schedules_team   ON oncall_schedules(team_id);
 CREATE INDEX idx_oncall_schedules_active ON oncall_schedules(is_active);
 
--- ✅ SIMPLIFIED: Just an array of individual dates
 CREATE TABLE oncall_assignments (
 									id          TEXT PRIMARY KEY,
 									schedule_id TEXT,
 									user_id     TEXT,
 									team_id     TEXT,
-									dates       TEXT NOT NULL,  -- ✅ JSON array: ["2025-10-15","2025-10-16","2025-10-17"]
+									dates       TEXT NOT NULL,
 									role        TEXT,
 									is_active   INTEGER,
 									created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -334,16 +333,14 @@ CREATE INDEX idx_notif_responses_notification ON notification_responses(notifica
 
 INSERT OR IGNORE INTO users (
     id, email, username, password_hash, first_name, last_name,
-    display_name, avatar_url, oauth_provider, oauth_id,
+    display_name, avatar_url, user_role, oauth_provider, oauth_id,
     is_active, is_verified
 )
 VALUES
-    -- Traditional auth users
-    ('user-1', 'admin@rocketpartners.io', 'admin', '$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe', 'Admin', 'User', 'Admin User', NULL, NULL, NULL, 1, 1),
-    ('user-4', 'kelvin.malabanan@rocketpartners.io', 'kmalabanan', '$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe', 'Kelvin', 'Malabanan', 'Kelvin Malabanan', NULL, NULL, NULL, 1, 1),
-
-    ('user-11', 'keannu.brillante@rocketpartners.io', 'kbrillante', '$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe', 'Keannu', 'Brillante', 'Keannu Brillante', NULL, NULL, NULL, 1, 1),
-    ('user-12', 'sean.ticzon@rocketpartners.io', 'sticzon', '$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe', 'Sean', 'Ticzon', 'Sean Ticzon', NULL, NULL, NULL, 1, 1);
+    ('user-1', 'admin@rocketpartners.io', 'admin', '$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe', 'Admin', 'User', 'Admin User', NULL, 'admin', NULL, NULL, 1, 1),
+    ('user-4', 'kelvin.malabanan@rocketpartners.io', 'kmalabanan', '$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe', 'Kelvin', 'Malabanan', 'Kelvin Malabanan', NULL, 'user', NULL, NULL, 1, 1),
+    ('user-11', 'keannu.brillante@rocketpartners.io', 'kbrillante', '$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe', 'Keannu', 'Brillante', 'Keannu Brillante', NULL, 'user', NULL, NULL, 1, 1),
+    ('user-12', 'sean.ticzon@rocketpartners.io', 'sticzon', '$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe', 'Sean', 'Ticzon', 'Sean Ticzon', NULL, 'user', NULL, NULL, 1, 1);
 
 INSERT OR IGNORE INTO incidents (id, title, description, severity, status, priority, escalation_level, timestamp, location, aws_alarm_name, assigned_to)
 VALUES
@@ -361,17 +358,15 @@ VALUES
 
 INSERT OR IGNORE INTO oncall_team_members (id, team_id, user_id, role, order_index, is_active)
 VALUES
--- ✅ TEAM-1: Keannu (primary), Kelvin (backup), Sean (escalation)
-    ('member-1', 'team-1', 'user-11', 'primary', 0, 1),    -- Keannu Brillante
-    ('member-2', 'team-1', 'user-4', 'backup', 1, 1),      -- Kelvin Malabanan
-    ('member-3', 'team-1', 'user-12', 'escalation', 2, 1), -- Sean Ticzon
+    ('member-1', 'team-1', 'user-11', 'primary', 0, 1),
+    ('member-2', 'team-1', 'user-4', 'backup', 1, 1),
+    ('member-3', 'team-1', 'user-12', 'escalation', 2, 1);
 
 INSERT OR IGNORE INTO escalation_chains (id, team_id, user_id, level, is_active)
 VALUES
--- ✅ TEAM-1: Level 0 → Keannu, Level 1 → Kelvin, Level 2 → Sean
-    ('ec-1', 'team-1', 'user-11', 0, 1),  -- Keannu
-    ('ec-2', 'team-1', 'user-4', 1, 1),   -- Kelvin
-    ('ec-3', 'team-1', 'user-12', 2, 1),  -- Sean
+    ('ec-1', 'team-1', 'user-11', 0, 1),
+    ('ec-2', 'team-1', 'user-4', 1, 1),
+    ('ec-3', 'team-1', 'user-12', 2, 1);
 
 INSERT OR IGNORE INTO oncall_schedules (id, team_id, name, rotation_type, rotation_start, rotation_length_hours, is_active)
 VALUES
@@ -379,24 +374,12 @@ VALUES
     ('schedule-2', 'team-2', 'October 2025 App Support', 'manual', datetime('now'), 0, 1),
     ('schedule-3', 'team-3', 'October 2025 Database Ops', 'manual', datetime('now'), 0, 1);
 
--- ✅ TEAM-1: Keannu (primary) works weekdays Mon-Fri in October
 INSERT OR IGNORE INTO oncall_assignments (id, schedule_id, user_id, team_id, dates, role, is_active)
-VALUES ('assign-1', 'schedule-1', 'user-11', 'team-1',
-        '["2025-10-13","2025-10-14","2025-10-15","2025-10-16","2025-10-17","2025-10-20","2025-10-21","2025-10-22","2025-10-23","2025-10-24","2025-10-27","2025-10-28","2025-10-29","2025-10-30","2025-10-31"]',
-        'primary', 1);
-
--- ✅ TEAM-1: Kelvin (backup) works THE SAME DAYS as Keannu (primary)
-INSERT OR IGNORE INTO oncall_assignments (id, schedule_id, user_id, team_id, dates, role, is_active)
-VALUES ('assign-2', 'schedule-1', 'user-4', 'team-1',
-        '["2025-10-13","2025-10-14","2025-10-15","2025-10-16","2025-10-17","2025-10-20","2025-10-21","2025-10-22","2025-10-23","2025-10-24","2025-10-27","2025-10-28","2025-10-29","2025-10-30","2025-10-31"]',
-        'backup', 1);
-
--- ✅ TEAM-1: Sean (escalation) always available every day
-INSERT OR IGNORE INTO oncall_assignments (id, schedule_id, user_id, team_id, dates, role, is_active)
-VALUES ('assign-3', 'schedule-1', 'user-12', 'team-1',
-        '["2025-10-01","2025-10-02","2025-10-03","2025-10-04","2025-10-05","2025-10-06","2025-10-07","2025-10-08","2025-10-09","2025-10-10","2025-10-11","2025-10-12","2025-10-13","2025-10-14","2025-10-15","2025-10-16","2025-10-17","2025-10-18","2025-10-19","2025-10-20","2025-10-21","2025-10-22","2025-10-23","2025-10-24","2025-10-25","2025-10-26","2025-10-27","2025-10-28","2025-10-29","2025-10-30","2025-10-31"]',
-        'escalation', 1);
+VALUES
+    ('assign-1', 'schedule-1', 'user-11', 'team-1', '["2025-10-13","2025-10-14","2025-10-15","2025-10-16","2025-10-17","2025-10-20","2025-10-21","2025-10-22","2025-10-23","2025-10-24","2025-10-27","2025-10-28","2025-10-29","2025-10-30","2025-10-31"]', 'primary', 1),
+    ('assign-2', 'schedule-1', 'user-4', 'team-1', '["2025-10-13","2025-10-14","2025-10-15","2025-10-16","2025-10-17","2025-10-20","2025-10-21","2025-10-22","2025-10-23","2025-10-24","2025-10-27","2025-10-28","2025-10-29","2025-10-30","2025-10-31"]', 'backup', 1),
+    ('assign-3', 'schedule-1', 'user-12', 'team-1', '["2025-10-01","2025-10-02","2025-10-03","2025-10-04","2025-10-05","2025-10-06","2025-10-07","2025-10-08","2025-10-09","2025-10-10","2025-10-11","2025-10-12","2025-10-13","2025-10-14","2025-10-15","2025-10-16","2025-10-17","2025-10-18","2025-10-19","2025-10-20","2025-10-21","2025-10-22","2025-10-23","2025-10-24","2025-10-25","2025-10-26","2025-10-27","2025-10-28","2025-10-29","2025-10-30","2025-10-31"]', 'escalation', 1);
 
 INSERT OR IGNORE INTO escalation_policies (id, team_id, name, steps, timeout_minutes, is_active)
 VALUES
-    ('escalation-1', 'team-1', 'Platform Escalation', '[{"step":1,"notify":["primary"],"wait_minutes":5},{"step":2,"notify":["backup"],"wait_minutes":10},{"step":3,"notify":["primary","backup"],"wait_minutes":15}]', 15, 1)
+    ('escalation-1', 'team-1', 'Platform Escalation', '[{"step":1,"notify":["primary"],"wait_minutes":5},{"step":2,"notify":["backup"],"wait_minutes":10},{"step":3,"notify":["primary","backup"],"wait_minutes":15}]', 15, 1);
