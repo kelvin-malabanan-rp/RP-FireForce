@@ -18,13 +18,14 @@ import {
   CheckCircle,
   ArrowUpRight,
   Zap,
-  RefreshCw
+  RefreshCw,
+  Database,
+  TrendingUp
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Badge } from "../ui/badge";
 import { Input } from "../ui/input";
-// ✅ UPDATED: Added escalationService import
 import { incidentService, auditService, escalationService, onCallService } from "../../services";
 import type { Incident, IncidentComment } from "../../types";
 import { SaveResolutionModal } from "../modals/SaveResolutionModal";
@@ -32,7 +33,7 @@ import { ResolveIncidentModal } from "../modals/ResolveIncidentModal";
 import { SuccessModal, ErrorModal, WarningModal } from "../modals/NotificationModal";
 import { MarkdownContent } from "../../utils/markdownRenderer";
 
-// ✅ NEW: API Configuration
+// ✅ API Configuration
 const AI_API_BASE_URL = 'https://web-production-34444.up.railway.app';
 
 interface IncidentDetailsPageProps {
@@ -46,6 +47,7 @@ interface ChatMessage {
   content: string;
   timestamp: Date;
   similarIncidents?: any[];
+  metadata?: any;
 }
 
 interface ExtendedIncident extends Incident {
@@ -58,6 +60,107 @@ interface ExtendedIncident extends Incident {
   escalation_reason?: string;
   escalation_level?: number;
 }
+
+// ============================================================================
+// 🆕 NEW COMPONENT: Similar Incidents Badge
+// ============================================================================
+interface SimilarIncidentsBadgeProps {
+  metadata: any;
+}
+
+const SimilarIncidentsBadge = ({ metadata }: SimilarIncidentsBadgeProps) => {
+  if (!metadata || !metadata.matches || metadata.matches.length === 0) {
+    return null;
+  }
+
+  const getConfidenceColor = (confidence: string) => {
+    switch (confidence) {
+      case 'high': return 'bg-green-100 dark:bg-green-900/30 border-green-300 dark:border-green-700 text-green-700 dark:text-green-400';
+      case 'medium': return 'bg-yellow-100 dark:bg-yellow-900/30 border-yellow-300 dark:border-yellow-700 text-yellow-700 dark:text-yellow-400';
+      default: return 'bg-orange-100 dark:bg-orange-900/30 border-orange-300 dark:border-orange-700 text-orange-700 dark:text-orange-400';
+    }
+  };
+
+  const getConfidenceEmoji = (confidence: string) => {
+    switch (confidence) {
+      case 'high': return '🟢';
+      case 'medium': return '🟡';
+      default: return '🔴';
+    }
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="mb-4 p-4 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/20 dark:to-purple-950/20 rounded-xl border border-blue-200 dark:border-blue-800/30 shadow-md"
+    >
+      <div className="flex items-center gap-2 mb-3">
+        <Database className="h-5 w-5 text-blue-600" />
+        <div>
+          <h4 className="text-sm font-semibold text-slate-900 dark:text-white">
+            🎯 Similar Incidents Found
+          </h4>
+          <p className="text-xs text-slate-600 dark:text-slate-400">
+            {metadata.matches.length} matching incident{metadata.matches.length > 1 ? 's' : ''} in knowledge base
+          </p>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        {metadata.matches.map((match: any, index: number) => (
+          <motion.div
+            key={index}
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: index * 0.1 }}
+            className="bg-white dark:bg-slate-800 rounded-lg p-3 border border-slate-200 dark:border-slate-700 hover:shadow-md transition-shadow"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-lg">{getConfidenceEmoji(match.confidence)}</span>
+                  <span className="font-mono text-xs text-blue-600 dark:text-blue-400 font-semibold">
+                    {match.id}
+                  </span>
+                </div>
+                <p className="text-sm text-slate-900 dark:text-white font-medium truncate" title={match.title}>
+                  {match.title}
+                </p>
+              </div>
+              
+              <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                <div className={`px-2.5 py-1 rounded-full border text-xs font-bold flex items-center gap-1 ${getConfidenceColor(match.confidence)}`}>
+                  <TrendingUp className="h-3 w-3" />
+                  {match.similarity_pct}%
+                </div>
+                <span className={`text-[10px] font-medium px-2 py-0.5 rounded ${getConfidenceColor(match.confidence)}`}>
+                  {match.confidence.toUpperCase()}
+                </span>
+              </div>
+            </div>
+          </motion.div>
+        ))}
+      </div>
+
+      {metadata.matches.length > 0 && metadata.matches[0].similarity_pct >= 70 && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.3 }}
+          className="mt-3 p-2.5 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800/30"
+        >
+          <div className="flex items-center gap-2 text-green-700 dark:text-green-400">
+            <CheckCircle className="h-4 w-4" />
+            <p className="text-xs font-medium">
+              Strong pattern match! AI will reference <span className="font-mono font-bold">{metadata.matches[0].id}</span> in its analysis.
+            </p>
+          </div>
+        </motion.div>
+      )}
+    </motion.div>
+  );
+};
 
 export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageProps) {
   // State management
@@ -91,6 +194,7 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingMessage, setStreamingMessage] = useState('');
   const [isChatOpen, setIsChatOpen] = useState(true);
+  const [currentMetadata, setCurrentMetadata] = useState<any>(null); // 🆕 NEW STATE
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -305,9 +409,6 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
     }
   };
 
-  // ============================================================================
-  // 🆕 UPDATED: handleEscalate - Now uses proper escalationService
-  // ============================================================================
   const handleEscalate = async () => {
     if (!incident) return;
     
@@ -315,11 +416,9 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
     try {
       const userId = localStorage.getItem('userId') || 'user-unknown';
       
-      // Get user's team - try multiple approaches
-      let teamId = incident.team_id; // Try to get from incident first
+      let teamId = incident.team_id;
       
       if (!teamId) {
-        // Try to fetch user's team
         try {
           const userTeamResponse = await onCallService.getUserTeam(userId);
           if (userTeamResponse.success && userTeamResponse.data) {
@@ -331,13 +430,11 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
         }
       }
       
-      // Fallback to default team if still no teamId
       if (!teamId) {
         teamId = 'default-team';
         console.warn('⚠️ Using fallback team ID:', teamId);
       }
       
-      // Get user role
       let userRole = 'primary';
       try {
         const userStr = localStorage.getItem('user');
@@ -349,7 +446,6 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
         console.warn('Could not parse user role');
       }
       
-      // Map severity to priority
       const priorityMap: Record<string, 'low' | 'medium' | 'high' | 'critical'> = {
         'low': 'low',
         'medium': 'medium',
@@ -365,7 +461,6 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
         userRole
       });
       
-      // Call the proper escalation endpoint
       const response = await escalationService.escalateIncident({
         teamId: teamId,
         incidentId: incident.id,
@@ -375,7 +470,6 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
       });
       
       if (response.success) {
-        // Create audit log
         try {
           const userName = localStorage.getItem('user')
             ? JSON.parse(localStorage.getItem('user')!).first_name + ' ' + JSON.parse(localStorage.getItem('user')!).last_name
@@ -422,7 +516,7 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
     }
   };
 
-  // ✅ UPDATED: AI Message Handler with Railway API endpoint
+  // ✅ UPDATED: AI Message Handler with metadata capture
   const handleSendAIMessage = async () => {
     if (!inputMessage.trim() || isStreaming || !incident) return;
 
@@ -437,17 +531,16 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
     setInputMessage('');
     setIsStreaming(true);
     setStreamingMessage('');
+    setCurrentMetadata(null); // 🆕 Clear previous metadata
 
     try {
       abortControllerRef.current = new AbortController();
 
-      // CRITICAL: Use consistent incident ID for conversation tracking
       const trackingId = incident.id || (incident as any).incident_id || incidentId || incident.title;
       
       console.log('🔑 Using tracking ID:', trackingId);
       console.log('📤 Sending question:', inputMessage);
 
-      // Build description with user question
       const enhancedDescription = `${incident.description}\n\nUser Question: ${inputMessage}`;
 
       const requestBody = {
@@ -460,7 +553,6 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
 
       console.log('📦 Request body:', requestBody);
 
-      // ✅ UPDATED: Use Railway API endpoint
       const response = await fetch(`${AI_API_BASE_URL}/analyze/agentic-stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -480,7 +572,6 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
       let similarIncidents: any[] = [];
       let metadata: any = null;
 
-      // Process stream
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -501,11 +592,23 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
                   console.log('📊 Status:', parsed.message);
                   break;
 
+                case 'classification':
+                  console.log('🎯 Classification:', parsed.category, `(${parsed.confidence})`);
+                  break;
+
                 case 'metadata':
                   metadata = parsed;
+                  setCurrentMetadata(parsed); // 🆕 Save metadata to state
+                  
                   if (parsed.similar_past_incidents) {
                     similarIncidents = parsed.similar_past_incidents;
                   }
+                  
+                  // 🆕 Log the matches for debugging
+                  if (parsed.matches && parsed.matches.length > 0) {
+                    console.log('🎯 Similar incidents found:', parsed.matches);
+                  }
+                  
                   if (parsed.conversation_length !== undefined) {
                     console.log(`💬 Conversation length: ${parsed.conversation_length} messages`);
                   }
@@ -538,13 +641,13 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
         }
       }
 
-      // Create final bot message
       const botMessage: ChatMessage = {
         id: Date.now() + 1,
         type: 'bot',
         content: accumulatedText || 'I received your message but couldn\'t generate a response.',
         timestamp: new Date(),
-        similarIncidents: similarIncidents.length > 0 ? similarIncidents : undefined
+        similarIncidents: similarIncidents.length > 0 ? similarIncidents : undefined,
+        metadata: metadata
       };
 
       setMessages(prev => [...prev, botMessage]);
@@ -570,7 +673,7 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
     }
   };
 
-  // ✅ UPDATED: Clear conversation with Railway API
+  // ✅ UPDATED: Clear conversation with metadata reset
   const handleClearConversation = async () => {
     if (!incident) return;
     
@@ -579,12 +682,12 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
     try {
       console.log('🧹 Clearing conversation for:', trackingId);
       
-      // ✅ UPDATED: Use Railway API endpoint
       await fetch(`${AI_API_BASE_URL}/conversation/${encodeURIComponent(trackingId)}`, {
         method: 'DELETE'
       });
       
-      // Reset to welcome message
+      setCurrentMetadata(null); // 🆕 Clear metadata too
+      
       setMessages([
         {
           id: Date.now(),
@@ -1102,6 +1205,10 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
                 >
                   <CardContent className="p-4 bg-gradient-to-b from-slate-50/50 to-transparent dark:from-slate-900/30 dark:to-transparent">
                     <div className="space-y-4 max-h-96 overflow-y-auto mb-4 pr-2 scrollbar-thin scrollbar-thumb-purple-500/20 scrollbar-track-transparent">
+                      
+                      {/* 🆕 Display similar incidents badge */}
+                      {currentMetadata && <SimilarIncidentsBadge metadata={currentMetadata} />}
+                      
                       {messages.map((msg, index) => (
                         <motion.div
                           key={msg.id}

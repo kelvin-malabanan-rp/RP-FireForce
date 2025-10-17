@@ -27,7 +27,9 @@ import { PieChart as PieChartComponent } from "../charts/PieChart";
 import { Histogram } from "../charts/Histogram";
 import { incidentService, aiAnalyticsService } from "../../services";
 import { apiService } from "../../services/apiService";
-import { analyticsService } from "../../services/analytics-service";
+
+// ✅ API Configuration
+const AI_API_BASE_URL = 'https://web-production-34444.up.railway.app';
 
 export function AnalyticsPage() {
   const [stats, setStats] = useState<any>(null);
@@ -44,7 +46,7 @@ export function AnalyticsPage() {
   const [aiTimePatterns, setAiTimePatterns] = useState<any>(null);
   const [aiLoading, setAiLoading] = useState(true);
   
-  // NEW: Analytics Overview from analytics-service
+  // Analytics Overview from Railway API
   const [analyticsOverview, setAnalyticsOverview] = useState<any>(null);
 
   // All incidents data for monthly chart
@@ -129,38 +131,27 @@ export function AnalyticsPage() {
     }
   };
 
-  // Load AI Analytics data
+  // ✅ Load AI Analytics data from Railway API
   const loadAIAnalytics = async () => {
     try {
       setAiLoading(true);
-      console.log('🤖 Loading AI Analytics data...');
+      console.log('🤖 Loading AI Analytics from Railway...');
       
-      // Load analytics overview from new analytics-service
-      const overviewResponse = await analyticsService.getAnalyticsOverview();
-      if (overviewResponse.success) {
-        console.log('✅ Analytics Overview loaded:', overviewResponse.data);
-        setAnalyticsOverview(overviewResponse.data);
-      } else {
-        console.warn('⚠️ Failed to load analytics overview');
+      // Load analytics overview from Railway API
+      const response = await fetch(`${AI_API_BASE_URL}/api/analytics/overview`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
       
-      const [dashboard, confidence, predictions, services, timePatterns] = await Promise.all([
-        aiAnalyticsService.getDashboard(),
-        aiAnalyticsService.getConfidence(),
-        aiAnalyticsService.getPredictions(),
-        aiAnalyticsService.getServices(),
-        aiAnalyticsService.getTimePatterns()
-      ]);
-
-      if (dashboard.success) setAiDashboard(dashboard.data);
-      if (confidence.success) setAiConfidence(confidence.data);
-      if (predictions.success) setAiPredictions(predictions.data);
-      if (services.success) setAiServices(services.data);
-      if (timePatterns.success) setAiTimePatterns(timePatterns.data);
-
-      console.log('✅ AI Analytics loaded');
+      const data = await response.json();
+      console.log('✅ Analytics Overview loaded from Railway:', data);
+      setAnalyticsOverview(data);
+      
     } catch (err: any) {
-      console.error('❌ Error loading AI analytics:', err);
+      console.error('❌ Error loading AI analytics from Railway:', err);
+      // Show error but don't break the page
+      console.warn('⚠️ AI Analytics unavailable, continuing without it');
     } finally {
       setAiLoading(false);
     }
@@ -185,7 +176,7 @@ export function AnalyticsPage() {
     { label: "Open", value: stats.open || 0, color: "#f97316" }, // Orange
     { label: "Investigating", value: stats.investigating || 0, color: "#3b82f6" }, // Blue
     { label: "Resolved", value: stats.resolved || 0, color: "#22c55e" } // Green
-  ] : []; // Show all statuses including zeros
+  ] : [];
 
   // Log the calculated data for debugging
   console.log('📊 Stats Object:', stats);
@@ -193,36 +184,6 @@ export function AnalyticsPage() {
   console.log('📊 Status Data:', incidentStatusData);
   console.log('📊 Total Incidents:', stats?.total);
   console.log('📊 Open:', stats?.open, 'Investigating:', stats?.investigating, 'Resolved:', stats?.resolved);
-
-  // Sample data for historical charts (keep for demo purposes)
-  const yearlyIncidents = [
-    { month: "Jan", incidents: 45, resolved: 42, mttr: 2.5 },
-    { month: "Feb", incidents: 38, resolved: 36, mttr: 2.8 },
-    { month: "Mar", incidents: 52, resolved: 49, mttr: 2.1 },
-    { month: "Apr", incidents: 41, resolved: 40, mttr: 2.3 },
-    { month: "May", incidents: 35, resolved: 34, mttr: 1.9 },
-    { month: "Jun", incidents: 48, resolved: 46, mttr: 2.6 },
-    { month: "Jul", incidents: 43, resolved: 41, mttr: 2.4 },
-    { month: "Aug", incidents: 39, resolved: 38, mttr: 2.0 },
-    { month: "Sep", incidents: 47, resolved: 45, mttr: 2.2 },
-    { month: "Oct", incidents: 33, resolved: 32, mttr: 1.8 },
-    { month: "Nov", incidents: 41, resolved: 40, mttr: 2.1 },
-    { month: "Dec", incidents: 36, resolved: 35, mttr: 2.3 }
-  ];
-
-  const aiMetrics = [
-    { metric: "Pattern Recognition Accuracy", value: "94.7%", trend: "+2.3%" },
-    { metric: "Predictive Alerts Generated", value: "156", trend: "+18%" },
-    { metric: "False Positive Rate", value: "3.2%", trend: "-1.1%" },
-    { metric: "Learning Model Updates", value: "847", trend: "+5.4%" }
-  ];
-
-  const teamPerformance = [
-    { team: "Platform", incidents: 125, avgTime: "1.8h", uptime: "99.9%" },
-    { team: "Infrastructure", incidents: 98, avgTime: "2.1h", uptime: "99.7%" },
-    { team: "Security", incidents: 67, avgTime: "3.2h", uptime: "99.8%" },
-    { team: "Database", incidents: 89, avgTime: "2.5h", uptime: "99.6%" }
-  ];
 
   return (
     <div className="space-y-6">
@@ -253,7 +214,10 @@ export function AnalyticsPage() {
           <Button
             variant="outline"
             size="icon"
-            onClick={() => loadStats(true)}
+            onClick={() => {
+              loadStats(true);
+              loadAIAnalytics();
+            }}
             disabled={isRefreshing}
             className="text-slate-900 dark:text-white border-slate-200 dark:border-slate-700"
           >
@@ -451,8 +415,6 @@ export function AnalyticsPage() {
         </>
       )}
 
-      {/* Sample Charts Section (Historical Data) */}
-
       {/* Additional Charts Row */}
       <div className="grid grid-cols-1 gap-6">
         {/* Incidents Per Month */}
@@ -505,6 +467,9 @@ export function AnalyticsPage() {
             <CardTitle className="flex items-center gap-2 text-slate-900 dark:text-white">
               <Brain className="h-5 w-5 text-purple-600" />
               AI & RAG System Analytics
+              {aiLoading && (
+                <RefreshCw className="h-4 w-4 animate-spin text-purple-500" />
+              )}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -646,17 +611,31 @@ export function AnalyticsPage() {
                   </div>
                 </div>
               </div>
+            ) : aiLoading ? (
+              <div className="text-center py-12 text-slate-500 dark:text-slate-400">
+                <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-2 text-purple-500" />
+                Loading AI analytics from Railway...
+              </div>
             ) : (
-              <div className="text-center py-8 text-slate-500 dark:text-slate-400">
-                Loading analytics overview...
+              <div className="text-center py-12">
+                <AlertTriangle className="h-12 w-12 mx-auto mb-4 text-orange-500" />
+                <p className="text-slate-600 dark:text-slate-400 mb-2">
+                  AI Analytics unavailable
+                </p>
+                <Button 
+                  onClick={loadAIAnalytics}
+                  variant="outline"
+                  size="sm"
+                  className="text-slate-900 dark:text-white"
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Retry
+                </Button>
               </div>
             )}
           </CardContent>
         </Card>
       </motion.div>
-
-
-
     </div>
   );
 }
