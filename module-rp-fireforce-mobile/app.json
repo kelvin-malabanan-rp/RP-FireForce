@@ -31,9 +31,9 @@
       ],
       "adaptiveIcon": {
         "backgroundColor": "#0F172A",
-        "foregroundImage": "./assets/images/notification-icon.png",
-        "backgroundImage": "./assets/images/notification-icon.png",
-        "monochromeImage": "./assets/images/notification-icon.png"
+        "foregroundImage": "./assets/images/rp-fireforce-white.png",
+        "backgroundImage": "./assets/images/rp-fireforce-white.png",
+        "monochromeImage": "./assets/images/rp-fireforce-white.png"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
@@ -63,7 +63,7 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/notification-icon.png",
+          "image": "./assets/images/rp-fireforce-white.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#0F172A",
@@ -75,7 +75,7 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/images/notification-icon.png",
+          "icon": "./assets/images/rp-fireforce-white.png",
           "color": "#F97316",
           "defaultChannel": "default-v4",
           "sounds": [
