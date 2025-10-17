@@ -455,4 +455,4 @@ export function useNotifications(options: UseNotificationsOptions = {}) {
     markAllAsRead,
     refresh
   };
-}
+} 
