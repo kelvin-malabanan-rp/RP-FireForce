@@ -13,6 +13,7 @@ import { PushNotificationService } from './push-notification.service';
 import { EmailService } from "./email.service";
 import { OnCallService } from "./oncall.service";
 import {ReminderService} from "./reminder.service";
+import {AuditService} from "./audit.services";
 
 export class IncidentService {
 	private env: Env;
@@ -20,6 +21,7 @@ export class IncidentService {
 	private pushService: PushNotificationService;
 	private emailService: EmailService;
 	private oncallService: OnCallService;
+	private auditService: AuditService;
 
 	constructor(env: Env) {
 		this.env = env;
@@ -27,6 +29,7 @@ export class IncidentService {
 		this.pushService = new PushNotificationService(env);
 		this.emailService = new EmailService(env);
 		this.oncallService = new OnCallService(env);
+		this.auditService = new AuditService(env);
 	}
 
 	// ──────────────────────────────────────────────
@@ -144,6 +147,36 @@ export class IncidentService {
 
 		const result = await this.dbService.insertIncident(incident);
 		console.log('[incident] New incident created:', result.id);
+
+		// --- ADDED: Create audit log for CloudWatch-created incident ---
+		try {
+			const auditPayload = {
+				action: "CREATE_INCIDENT",
+				incidentId: result.id,
+				userId: 'user-1', // source/system user
+				description: `CloudWatch alarm "${alarm.AlarmName}" created incident "${incident.title}"`,
+				details: {
+					alarmName: alarm.AlarmName,
+					awsAccountId: alarm.AWSAccountId,
+					region: alarm.Region,
+					severity: incident.severity,
+					teamId: teamId,
+					createdFrom: "cloudwatch_alarm_processor",
+				},
+				metadata: {
+					source: 'cloudwatch',
+					rawAlarm: alarm,
+					timestamp: new Date().toISOString(),
+					device: 'aws',
+				},
+			};
+
+			// createAuditLog should be available like in createNewIncident; adjust call if you use a service method instead
+			await this.auditService.createAuditLog(auditPayload);
+			console.log('[incident] ✅ Audit log created for CloudWatch incident:', result.id);
+		} catch (auditErr) {
+			console.warn('[incident] ⚠️ Failed to create audit log for CloudWatch incident:', auditErr);
+		}
 
 		// ✅ Get reminder configuration from primary on-call user
 		const reminderConfig = await this.getUserReminderSettings(result.id);
