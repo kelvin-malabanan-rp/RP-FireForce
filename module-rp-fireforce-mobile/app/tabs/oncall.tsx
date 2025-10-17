@@ -59,14 +59,12 @@ export default function OnCallTab() {
         for (let i = 0; i < 7; i++) {
             const date = new Date(today);
             date.setDate(today.getDate() + i);
-            const dateString = date.toISOString().split('T')[0]; // "2025-10-15"
+            const dateString = date.toISOString().split('T')[0];
 
-            // Find primary on call for this date
             const primary = members.find(m =>
                 m.role === 'primary' && m.assignedDates?.includes(dateString)
             );
 
-            // Find backup on call for this date
             const backup = members.find(m =>
                 m.role === 'backup' && m.assignedDates?.includes(dateString)
             );
@@ -101,7 +99,6 @@ export default function OnCallTab() {
         try {
             setLoading(true);
 
-            // Get user's team
             const userTeam = await oncallController.getUserTeam(userIdParam);
             if (!userTeam) {
                 setHasActiveOnCall(false);
@@ -109,7 +106,6 @@ export default function OnCallTab() {
                 return;
             }
 
-            // Get team details
             const response = await getTeamDetails(userTeam.id);
 
             if (response.httpStatus !== 'OK' || !response.data) {
@@ -120,61 +116,64 @@ export default function OnCallTab() {
 
             const { team, members, currentOnCall: onCall } = response.data;
 
-            // Set team info
-            setMyTeam(team);
-            setTeamMembers(members);
+            // ✅ Sort members: Primary first, then Backup, then Escalation
+            const sortedMembers = [...members].sort((a, b) => {
+                const roleOrder = { primary: 1, backup: 2, escalation: 3 };
+                const aOrder = roleOrder[a.role as keyof typeof roleOrder] || 4;
+                const bOrder = roleOrder[b.role as keyof typeof roleOrder] || 4;
+                return aOrder - bOrder;
+            });
 
-            // Build 7-day schedule
+            setMyTeam(team);
+            setTeamMembers(sortedMembers);
+
             const scheduleData = build7DaySchedule(members);
             setSchedule(scheduleData);
 
-            // Set current on-call
-            if (onCall) {
-                setCurrentOnCall(onCall);
-                console.log('onCall response:', onCall);
+            // ✅ IMPROVED: Check user's on-call status from TODAY's schedule
+            const today = new Date().toISOString().split('T')[0];
+            const todaySchedule = scheduleData.find(day => day.date === today);
+
+            if (todaySchedule && todaySchedule.assignment) {
                 setHasActiveOnCall(true);
 
-                // ✅ Normalize to arrays (handle both single object and array formats)
-                const primaryArray = Array.isArray(onCall.primary)
-                    ? onCall.primary
-                    : onCall.primary ? [onCall.primary] : [];
+                // Check if user is on-call today based on TODAY's assignment
+                const isPrimary = todaySchedule.assignment.primary?.id === userIdParam ||
+                                 todaySchedule.assignment.primary?.email === userEmailParam;
+                const isBackup = todaySchedule.assignment.backup?.id === userIdParam ||
+                                todaySchedule.assignment.backup?.email === userEmailParam;
 
-                const backupArray = Array.isArray(onCall.backup)
-                    ? onCall.backup
-                    : onCall.backup ? [onCall.backup] : [];
-
-                const escalationArray = Array.isArray(onCall.escalation)
-                    ? onCall.escalation
-                    : onCall.escalation ? [onCall.escalation] : [];
-
-                // Now check with .some()
-                const isPrimary = primaryArray.some(p => p.email === userEmailParam);
-                const isBackup = backupArray.some(b => b.email === userEmailParam);
-                const isEscalation = escalationArray.some(e => e.email === userEmailParam);
-
-                console.log('isPrimary:', isPrimary);
-                console.log('isBackup:', isBackup);
-                console.log('isEscalation:', isEscalation);
+                console.log('📅 Today schedule assignment:', todaySchedule.assignment);
+                console.log('👤 Current user ID:', userIdParam);
+                console.log('📧 Current user email:', userEmailParam);
+                console.log('✅ isPrimary:', isPrimary);
+                console.log('✅ isBackup:', isBackup);
 
                 if (isPrimary) {
                     setIsUserOnCallToday(true);
                     setUserOnCallRole('primary');
-                    console.log('User is on call today! : PRIMARY');
+                    console.log('✅ User is PRIMARY on-call today!');
                 } else if (isBackup) {
                     setIsUserOnCallToday(true);
                     setUserOnCallRole('backup');
-                    console.log('User is on call today! : BACKUP');
-                } else if (isEscalation) {
-                    setIsUserOnCallToday(true);
-                    setUserOnCallRole('escalation');
-                    console.log('User is on call today! : ESCALATION');
+                    console.log('✅ User is BACKUP on-call today!');
                 } else {
-                    setIsUserOnCallToday(false);
-                    setUserOnCallRole(null);
-                    console.log('User is not on call today!');
+                    // Check if user is in escalation (from members list)
+                    const userMember = members.find((m: any) => m.id === userIdParam || m.email === userEmailParam);
+                    if (userMember?.role === 'escalation') {
+                        setIsUserOnCallToday(true);
+                        setUserOnCallRole('escalation');
+                        console.log('✅ User is ESCALATION on-call!');
+                    } else {
+                        setIsUserOnCallToday(false);
+                        setUserOnCallRole(null);
+                        console.log('ℹ️ User is not on-call today');
+                    }
                 }
             } else {
                 setHasActiveOnCall(false);
+                setIsUserOnCallToday(false);
+                setUserOnCallRole(null);
             }
 
         } catch (error: any) {
@@ -197,21 +196,6 @@ export default function OnCallTab() {
     const formatUserName = (user: any) => {
         if (!user) return 'Unknown';
         return `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email || 'Unknown';
-    };
-
-    const formatTime = (dateString: string) => {
-        if (!dateString) return 'N/A';
-        try {
-            return new Date(dateString).toLocaleString([], {
-                weekday: 'short',
-                month: 'short',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
-            });
-        } catch {
-            return 'Invalid date';
-        }
     };
 
     if (loading) {
@@ -293,7 +277,13 @@ export default function OnCallTab() {
                 {isUserOnCallToday ? (
                     <View style={styles.statusCard}>
                         <LinearGradient
-                            colors={userOnCallRole === 'primary' ? ['#10B981', '#059669'] : ['#F59E0B', '#D97706']}
+                            colors={
+                                userOnCallRole === 'primary'
+                                    ? ['#10B981', '#059669']  // Green for Primary
+                                    : userOnCallRole === 'backup'
+                                    ? ['#F59E0B', '#D97706']  // Orange for Backup
+                                    : ['#8B5CF6', '#7C3AED']  // Purple for Escalation
+                            }
                             start={{ x: 0, y: 0 }}
                             end={{ x: 1, y: 1 }}
                             style={styles.statusGradient}
@@ -318,6 +308,7 @@ export default function OnCallTab() {
                         </View>
                     </View>
                 )}
+
                 {/* Team Members */}
                 {teamMembers.length > 0 && (
                     <View style={styles.scheduleCard}>
@@ -342,7 +333,7 @@ export default function OnCallTab() {
                                         member.role === 'escalation' && styles.avatarEscalation
                                     ]}>
                                         <Text style={styles.avatarText}>
-                                            {member.firstName[0]}{member.lastName[0]}
+                                            {member.firstName?.[0] || '?'}{member.lastName?.[0] || '?'}
                                         </Text>
                                     </View>
                                     <View style={styles.memberDetails}>
@@ -365,76 +356,75 @@ export default function OnCallTab() {
                         ))}
                     </View>
                 )}
-                            {/* 7-Day Schedule */}
-                            {schedule.length > 0 && (
-                                <View style={styles.scheduleCard}>
-                                    <View style={styles.cardTitleRow}>
-                                        <Text style={styles.cardTitle}>7-Day Schedule</Text>
-                                        <Ionicons name="calendar-outline" size={20} color="#F97316" />
+
+                {/* 7-Day Schedule */}
+                {schedule.length > 0 && (
+                    <View style={styles.scheduleCard}>
+                        <View style={styles.cardTitleRow}>
+                            <Text style={styles.cardTitle}>7-Day Schedule</Text>
+                            <Ionicons name="calendar-outline" size={20} color="#F97316" />
+                        </View>
+
+                        {schedule.map((day, index) => {
+                            const isToday = index === 0;
+
+                            return (
+                                <View
+                                    key={day.date}
+                                    style={[
+                                        styles.scheduleItemRow,
+                                        isToday && styles.scheduleItemToday,
+                                        index === 0 && styles.scheduleItemFirst,
+                                        index === schedule.length - 1 && { borderBottomWidth: 0 }
+                                    ]}
+                                >
+                                    <View style={styles.scheduleDateColumn}>
+                                        {isToday && <View style={styles.todayDot} />}
+                                        <View>
+                                            <Text style={[styles.scheduleDayOfWeek, isToday && styles.todayText]}>
+                                                {day.dayOfWeek}
+                                            </Text>
+                                            <Text style={[styles.scheduleDateText, isToday && styles.todayText]}>
+                                                {day.fullDate}
+                                            </Text>
+                                        </View>
                                     </View>
 
-                                    {schedule.map((day, index) => {
-                                        const isToday = index === 0;
-
-                                        return (
-                                            <View
-                                                key={day.date}
-                                                style={[
-                                                    styles.scheduleItemRow,
-                                                    isToday && styles.scheduleItemToday,
-                                                    index === 0 && styles.scheduleItemFirst,
-                                                    index === schedule.length - 1 && { borderBottomWidth: 0 }
-                                                ]}
-                                            >
-                                                {/* Left: Date */}
-                                                <View style={styles.scheduleDateColumn}>
-                                                    {isToday && <View style={styles.todayDot} />}
-                                                    <View>
-                                                        <Text style={[styles.scheduleDayOfWeek, isToday && styles.todayText]}>
-                                                            {day.dayOfWeek}
-                                                        </Text>
-                                                        <Text style={[styles.scheduleDateText, isToday && styles.todayText]}>
-                                                            {day.fullDate}
+                                    <View style={styles.scheduleAssignmentsColumn}>
+                                        {day.assignment.primary || day.assignment.backup ? (
+                                            <>
+                                                {day.assignment.primary && (
+                                                    <View style={styles.scheduleAssignment}>
+                                                        <View style={styles.scheduleRoleIndicator}>
+                                                            <View style={styles.primaryDot} />
+                                                            <Text style={styles.scheduleRoleText}>P</Text>
+                                                        </View>
+                                                        <Text style={styles.schedulePersonName}>
+                                                            {formatUserName(day.assignment.primary)}
                                                         </Text>
                                                     </View>
-                                                </View>
-
-                                                {/* Right: Assignments */}
-                                                <View style={styles.scheduleAssignmentsColumn}>
-                                                    {day.assignment.primary || day.assignment.backup ? (
-                                                        <>
-                                                            {day.assignment.primary && (
-                                                                <View style={styles.scheduleAssignment}>
-                                                                    <View style={styles.scheduleRoleIndicator}>
-                                                                        <View style={styles.primaryDot} />
-                                                                        <Text style={styles.scheduleRoleText}>P</Text>
-                                                                    </View>
-                                                                    <Text style={styles.schedulePersonName}>
-                                                                        {formatUserName(day.assignment.primary)}
-                                                                    </Text>
-                                                                </View>
-                                                            )}
-                                                            {day.assignment.backup && (
-                                                                <View style={styles.scheduleAssignment}>
-                                                                    <View style={styles.scheduleRoleIndicator}>
-                                                                        <View style={styles.backupDot} />
-                                                                        <Text style={styles.scheduleRoleText}>B</Text>
-                                                                    </View>
-                                                                    <Text style={styles.schedulePersonName}>
-                                                                        {formatUserName(day.assignment.backup)}
-                                                                    </Text>
-                                                                </View>
-                                                            )}
-                                                        </>
-                                                    ) : (
-                                                        <Text style={styles.noAssignmentText}>No assignment</Text>
-                                                    )}
-                                                </View>
-                                            </View>
-                                        );
-                                    })}
+                                                )}
+                                                {day.assignment.backup && (
+                                                    <View style={styles.scheduleAssignment}>
+                                                        <View style={styles.scheduleRoleIndicator}>
+                                                            <View style={styles.backupDot} />
+                                                            <Text style={styles.scheduleRoleText}>B</Text>
+                                                        </View>
+                                                        <Text style={styles.schedulePersonName}>
+                                                            {formatUserName(day.assignment.backup)}
+                                                        </Text>
+                                                    </View>
+                                                )}
+                                            </>
+                                        ) : (
+                                            <Text style={styles.noAssignmentText}>No assignment</Text>
+                                        )}
+                                    </View>
                                 </View>
-                            )}
+                            );
+                        })}
+                    </View>
+                )}
 
             </ScrollView>
         </View>
@@ -568,11 +558,6 @@ const styles = StyleSheet.create({
         marginBottom: 4,
         fontFamily: FONT_FAMILY.POPPINS_BOLD,
     },
-    statusSubtitle: {
-        fontSize: 15,
-        color: 'rgba(255, 255, 255, 0.9)',
-        fontFamily: FONT_FAMILY.POPPINS_REGULAR,
-    },
     statusOffDuty: {
         backgroundColor: 'rgba(30, 41, 59, 0.95)',
         padding: 24,
@@ -593,19 +578,9 @@ const styles = StyleSheet.create({
         color: '#94A3B8',
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
-    currentOnCallCard: {
-        backgroundColor: 'rgba(30, 41, 59, 0.95)',
-        borderRadius: 16,
-        padding: 20,
-        marginHorizontal: 16,
-        marginBottom: 16,
-        borderWidth: 1,
-        borderColor: '#334155',
-    },
     cardTitle: {
         fontSize: 18,
         color: '#FFFFFF',
-        marginBottom: 16,
         fontFamily: FONT_FAMILY.POPPINS_BOLD,
     },
     cardTitleRow: {
@@ -613,18 +588,6 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
         marginBottom: 20,
-    },
-    memberCard: {
-        backgroundColor: 'rgba(15, 23, 42, 0.95)',
-        borderRadius: 12,
-        padding: 16,
-        borderWidth: 1,
-        borderColor: '#334155',
-    },
-    memberHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
     },
     memberInfo: {
         flexDirection: 'row',
@@ -666,41 +629,22 @@ const styles = StyleSheet.create({
         fontFamily: FONT_FAMILY.POPPINS_REGULAR,
     },
     primaryBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
         backgroundColor: '#10B981',
         paddingHorizontal: 10,
         paddingVertical: 6,
         borderRadius: 8,
-        gap: 4,
-    },
-    primaryBadgeText: {
-        fontSize: 12,
-        color: '#FFFFFF',
-        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
     backupBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
         backgroundColor: '#F59E0B',
         paddingHorizontal: 10,
         paddingVertical: 6,
         borderRadius: 8,
-        gap: 4,
-    },
-    backupBadgeText: {
-        fontSize: 12,
-        color: '#FFFFFF',
-        fontFamily: FONT_FAMILY.POPPINS_SEMI_BOLD,
     },
     escalationBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
         backgroundColor: '#8B5CF6',
         paddingHorizontal: 10,
         paddingVertical: 6,
         borderRadius: 8,
-        gap: 4,
     },
     roleBadgeText: {
         fontSize: 12,
