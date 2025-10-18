@@ -607,7 +607,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#F59E0B',
     },
     avatarEscalation: {
-        backgroundColor: '#8B5CF6',
+        backgroundColor: '#8B5CF6',  // ✅ Violet
     },
     avatarText: {
         fontSize: 16,
@@ -641,7 +641,7 @@ const styles = StyleSheet.create({
         borderRadius: 8,
     },
     escalationBadge: {
-        backgroundColor: '#8B5CF6',
+        backgroundColor: '#8B5CF6',  // ✅ Violet
         paddingHorizontal: 10,
         paddingVertical: 6,
         borderRadius: 8,

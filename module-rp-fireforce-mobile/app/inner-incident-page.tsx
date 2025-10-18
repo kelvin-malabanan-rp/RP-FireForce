@@ -261,18 +261,30 @@ export default function InnerIncidentPage() {
             const escalationData = escalationResponse.data;
             console.log('[escalate] Escalation response:', escalationData);
 
-            // Step 2: Send push notifications to escalated users
+            // Step 2: Send push notifications to escalated users (EXCLUDING YOURSELF)
             if (escalationData?.object?.notifiedUsers && escalationData.object.notifiedUsers.length > 0) {
-                console.log('[escalate] Sending notifications to', escalationData.object.notifiedUsers.length, 'users');
-
-                const notificationResult = await sendEscalationNotifications(
-                    escalationData.object.notifiedUsers,
-                    incident!,
-                    escalationData.object.escalatedToRole || 'escalation',
-                    escalationReason.trim()
+                // ✅ FILTER OUT THE CURRENT USER - Don't notify yourself!
+                const usersToNotify = escalationData.object.notifiedUsers.filter(
+                    (user: any) => user.userId !== userSession.id
                 );
 
-                console.log('[escalate] Notification results:', notificationResult);
+                console.log('[escalate] Total users in response:', escalationData.object.notifiedUsers.length);
+                console.log('[escalate] Users to notify (excluding self):', usersToNotify.length);
+
+                if (usersToNotify.length > 0) {
+                    console.log('[escalate] Sending notifications to', usersToNotify.length, 'users');
+
+                    const notificationResult = await sendEscalationNotifications(
+                        usersToNotify, // ✅ Use filtered list - excludes yourself
+                        incident!,
+                        escalationData.object.escalatedToRole || 'escalation',
+                        escalationReason.trim()
+                    );
+
+                    console.log('[escalate] Notification results:', notificationResult);
+                } else {
+                    console.warn('[escalate] No users to notify after filtering out current user');
+                }
             } else {
                 console.warn('[escalate] No users to notify in escalation response');
             }
