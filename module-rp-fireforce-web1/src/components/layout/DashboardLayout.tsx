@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { OnCallPage } from '../dashboard/OnCallPageClean';
 import { motion, AnimatePresence } from "framer-motion";
 import { DashboardTopNav } from "./DashboardTopNav";
 import { DashboardSideNav } from "./DashboardSideNav";
@@ -13,6 +12,7 @@ import { SettingsPage } from "../dashboard/SettingsPage";
 import { TeamsPage } from "../dashboard/TeamsPage";
 import { AuditTrailPage } from "../dashboard/AuditTrailPage";
 import { GlobalAlertModal } from "../modals/GlobalAlertModal";
+import OnCallPage from "@/components/dashboard/OnCallPageClean.tsx";
 
 
 

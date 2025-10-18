@@ -267,11 +267,14 @@ CREATE TABLE escalation_chains (
 								   user_id    TEXT,
 								   level      INTEGER,
 								   is_active  INTEGER,
-								   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+								   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+								   FOREIGN KEY (team_id) REFERENCES oncall_teams(id) ON DELETE CASCADE,
+								   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
-CREATE UNIQUE INDEX uq_escalation_chain_team_level ON escalation_chains(team_id, level);
-CREATE INDEX idx_escalation_chains_team  ON escalation_chains(team_id);
-CREATE INDEX idx_escalation_chains_level ON escalation_chains(team_id, level);
+CREATE UNIQUE INDEX uq_escalation_chain_team_user ON escalation_chains(team_id, user_id);
+CREATE INDEX idx_escalation_chains_team   ON escalation_chains(team_id);
+CREATE INDEX idx_escalation_chains_level  ON escalation_chains(team_id, level);
+CREATE INDEX idx_escalation_chains_active ON escalation_chains(is_active);
 
 CREATE TABLE incident_escalations (
 									  id                     TEXT PRIMARY KEY,
@@ -364,9 +367,9 @@ VALUES
 
 INSERT OR IGNORE INTO escalation_chains (id, team_id, user_id, level, is_active)
 VALUES
-    ('ec-1', 'team-1', 'user-11', 0, 1),
-    ('ec-2', 'team-1', 'user-4', 1, 1),
-    ('ec-3', 'team-1', 'user-12', 2, 1);
+    ('ec-1', 'team-1', 'user-11', 0, 1),  -- Keannu: Primary = Level 0 ✓
+    ('ec-2', 'team-1', 'user-4', 1, 1),   -- Kelvin: Backup = Level 1 ✓
+    ('ec-3', 'team-1', 'user-12', 2, 1);  -- Sean: Escalation = Level 2 ✓
 
 INSERT OR IGNORE INTO oncall_schedules (id, team_id, name, rotation_type, rotation_start, rotation_length_hours, is_active)
 VALUES

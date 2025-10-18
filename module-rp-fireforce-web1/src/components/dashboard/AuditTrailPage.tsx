@@ -3,20 +3,20 @@ import { motion } from "framer-motion";
 import { auditService } from '../../services/auditService';
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://incident-webhook-api.rapidresponse.workers.dev';
 import {
-  FileText,
-  Search,
-  User,
-  Clock,
-  Activity,
-  AlertCircle,
-  CheckCircle,
-  XCircle,
-  Info,
-  Loader2,
-  Download,
-  RefreshCw,
-  ChevronLeft,
-  ChevronRight,
+    FileText,
+    Search,
+    User,
+    Clock,
+    Activity,
+    AlertCircle,
+    CheckCircle,
+    XCircle,
+    Info,
+    Loader2,
+    Download,
+    RefreshCw,
+    ChevronLeft,
+    ChevronRight, PlusCircle, ArrowRightCircle, AlertTriangle,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Input } from "../ui/input";
@@ -259,29 +259,53 @@ export function AuditTrailPage() {
     }
   };
 
-  const getActionIcon = (action: string) => {
-    const lowerAction = action.toLowerCase();
-    
-    if (lowerAction.includes('create')) return <CheckCircle className="h-5 w-5 text-green-500" />;
-    if (lowerAction.includes('delete') || lowerAction.includes('remove')) return <XCircle className="h-5 w-5 text-red-500" />;
-    if (lowerAction.includes('update') || lowerAction.includes('change')) return <AlertCircle className="h-5 w-5 text-orange-500" />;
-    if (lowerAction.includes('acknowledge')) return <CheckCircle className="h-5 w-5 text-blue-500" />;
-    if (lowerAction.includes('escalate')) return <AlertCircle className="h-5 w-5 text-red-500" />;
-    
-    return <Info className="h-5 w-5 text-blue-500" />;
-  };
+    const getActionIcon = (action: string) => {
+        const lowerAction = action.toLowerCase();
 
-  const getActionBadgeColor = (action: string) => {
-    const lowerAction = action.toLowerCase();
-    
-    if (lowerAction.includes('create')) return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400';
-    if (lowerAction.includes('delete') || lowerAction.includes('remove')) return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400';
-    if (lowerAction.includes('update') || lowerAction.includes('change')) return 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400';
-    if (lowerAction.includes('acknowledge')) return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400';
-    if (lowerAction.includes('escalate')) return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400';
-    
-    return 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300';
-  };
+        if (lowerAction.includes("create"))
+            return <PlusCircle className="h-5 w-5 text-green-500" />;
+
+        if (lowerAction.includes("resolve"))
+            return <CheckCircle className="h-5 w-5 text-emerald-400" />; // ✅ distinct color for RESOLVE
+
+        if (lowerAction.includes("accept") || lowerAction.includes("acknowledge"))
+            return <ArrowRightCircle className="h-5 w-5 text-blue-400" />; // ↪️ clearer for ACCEPT
+
+        if (lowerAction.includes("update") || lowerAction.includes("change"))
+            return <RefreshCw className="h-5 w-5 text-yellow-400" />;
+
+        if (lowerAction.includes("escalate"))
+            return <AlertTriangle className="h-5 w-5 text-orange-500" />;
+
+        if (lowerAction.includes("delete") || lowerAction.includes("remove"))
+            return <XCircle className="h-5 w-5 text-red-500" />;
+
+        return <Info className="h-5 w-5 text-slate-400" />;
+    };
+
+    const getActionBadgeColor = (action: string) => {
+        const lowerAction = action.toLowerCase();
+
+        if (lowerAction.includes("create"))
+            return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400";
+
+        if (lowerAction.includes("resolve"))
+            return "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400";
+
+        if (lowerAction.includes("accept") || lowerAction.includes("acknowledge"))
+            return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400";
+
+        if (lowerAction.includes("update") || lowerAction.includes("change"))
+            return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400";
+
+        if (lowerAction.includes("escalate"))
+            return "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400";
+
+        if (lowerAction.includes("delete") || lowerAction.includes("remove"))
+            return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400";
+
+        return "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300";
+    };
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);

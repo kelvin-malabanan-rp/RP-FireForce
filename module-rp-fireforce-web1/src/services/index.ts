@@ -883,4 +883,224 @@ export const escalationService = {
   },
 };
 
+// Team Management Service
+export const teamManagementService = {
+    /**
+     * Get all members of a specific team
+     */
+    getTeamMembers: async (teamId: string): Promise<ApiResponse<any>> => {
+        try {
+            const response = await apiService.get<any>(`/api/teams/members?teamId=${teamId}`);
+            const apiData = response.data;
+
+            console.log('👥 Get team members response:', apiData);
+
+            if (apiData && apiData.httpStatus === 'OK' && apiData.data) {
+                return {
+                    data: apiData.data.members,
+                    success: true,
+                    status: 200,
+                    message: apiData.message
+                };
+            }
+
+            return {
+                data: [],
+                success: true,
+                status: 200,
+            };
+        } catch (error: any) {
+            console.error('❌ Get team members error:', error);
+            throw {
+                message: error.response?.data?.message || error.message || 'Failed to fetch team members',
+                status: error.response?.status || 500,
+                data: error.response?.data,
+            };
+        }
+    },
+
+    /**
+     * Get users available for team assignment (not in any team)
+     */
+    getAvailableUsers: async (): Promise<ApiResponse<any>> => {
+        try {
+            const response = await apiService.get<any>('/api/teams/available-users');
+            const apiData = response.data;
+
+            console.log('👤 Get available users response:', apiData);
+
+            if (apiData && apiData.httpStatus === 'OK' && apiData.data) {
+                return {
+                    data: apiData.data.users,
+                    success: true,
+                    status: 200,
+                    message: apiData.message
+                };
+            }
+
+            return {
+                data: [],
+                success: true,
+                status: 200,
+            };
+        } catch (error: any) {
+            console.error('❌ Get available users error:', error);
+            throw {
+                message: error.response?.data?.message || error.message || 'Failed to fetch available users',
+                status: error.response?.status || 500,
+                data: error.response?.data,
+            };
+        }
+    },
+
+    /**
+     * Add a user to a team
+     */
+    addMemberToTeam: async (
+        userId: string,
+        teamId: string,
+        role: 'primary' | 'backup' | 'escalation'
+    ): Promise<ApiResponse<any>> => {
+        try {
+            const response = await apiService.post<any>('/api/teams/members/add', {
+                userId,
+                teamId,
+                teamRole: role
+            });
+            const apiData = response.data;
+
+            console.log('➕ Add member response:', apiData);
+
+            if (apiData && apiData.httpStatus === 'OK') {
+                return {
+                    data: apiData.data,
+                    success: true,
+                    status: 200,
+                    message: apiData.message
+                };
+            }
+
+            throw new Error(apiData?.message || 'Failed to add member');
+        } catch (error: any) {
+            console.error('❌ Add member error:', error);
+            throw {
+                message: error.response?.data?.message || error.message || 'Failed to add team member',
+                status: error.response?.status || 500,
+                data: error.response?.data,
+            };
+        }
+    },
+
+    /**
+     * Remove a user from a team
+     */
+    removeMemberFromTeam: async (userId: string, teamId: string): Promise<ApiResponse<any>> => {
+        try {
+            const response = await apiService.post<any>('/api/teams/members/remove', {
+                userId,
+                teamId
+            });
+            const apiData = response.data;
+
+            console.log('➖ Remove member response:', apiData);
+
+            if (apiData && apiData.httpStatus === 'OK') {
+                return {
+                    data: apiData.data,
+                    success: true,
+                    status: 200,
+                    message: apiData.message
+                };
+            }
+
+            throw new Error(apiData?.message || 'Failed to remove member');
+        } catch (error: any) {
+            console.error('❌ Remove member error:', error);
+            throw {
+                message: error.response?.data?.message || error.message || 'Failed to remove team member',
+                status: error.response?.status || 500,
+                data: error.response?.data,
+            };
+        }
+    },
+
+    /**
+     * Change a user's role in their team
+     */
+    changeTeamRole: async (
+        userId: string,
+        teamId: string,
+        newRole: 'primary' | 'backup' | 'escalation'
+    ): Promise<ApiResponse<any>> => {
+        try {
+            const response = await apiService.put<any>('/api/teams/members/role', {
+                userId,
+                teamId,
+                newRole
+            });
+            const apiData = response.data;
+
+            console.log('🔄 Change role response:', apiData);
+
+            if (apiData && apiData.httpStatus === 'OK') {
+                return {
+                    data: apiData.data,
+                    success: true,
+                    status: 200,
+                    message: apiData.message
+                };
+            }
+
+            throw new Error(apiData?.message || 'Failed to change role');
+        } catch (error: any) {
+            console.error('❌ Change role error:', error);
+            throw {
+                message: error.response?.data?.message || error.message || 'Failed to change team role',
+                status: error.response?.status || 500,
+                data: error.response?.data,
+            };
+        }
+    },
+
+    /**
+     * Transfer a user from one team to another
+     */
+    transferMember: async (
+        userId: string,
+        fromTeamId: string,
+        toTeamId: string,
+        newRole: 'primary' | 'backup' | 'escalation'
+    ): Promise<ApiResponse<any>> => {
+        try {
+            const response = await apiService.post<any>('/api/teams/members/transfer', {
+                userId,
+                fromTeamId,
+                toTeamId,
+                newRole
+            });
+            const apiData = response.data;
+
+            console.log('🔀 Transfer member response:', apiData);
+
+            if (apiData && apiData.httpStatus === 'OK') {
+                return {
+                    data: apiData.data,
+                    success: true,
+                    status: 200,
+                    message: apiData.message
+                };
+            }
+
+            throw new Error(apiData?.message || 'Failed to transfer member');
+        } catch (error: any) {
+            console.error('❌ Transfer member error:', error);
+            throw {
+                message: error.response?.data?.message || error.message || 'Failed to transfer team member',
+                status: error.response?.status || 500,
+                data: error.response?.data,
+            };
+        }
+    },
+};
+
 export default authService;

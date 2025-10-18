@@ -550,7 +550,6 @@ export async function handleGetEscalationPolicy(
 	}
 }
 
-// ✅ NEW: Get all on-call data for calendar view
 export async function handleGetOnCallCalendarData(
 	request: Request,
 	env: Env,
@@ -577,11 +576,32 @@ export async function handleGetOnCallCalendarData(
 				// Get schedule for this team
 				const schedule = await svc.getOnCallSchedule(team.id, days);
 
+				// ✅ Sort members: Primary → Backup → Escalation
+				const sortedMembers = [...team.members].sort((a, b) => {
+					const roleOrder = { primary: 1, backup: 2, escalation: 3 };
+					const aOrder = roleOrder[a.role as keyof typeof roleOrder] || 4;
+					const bOrder = roleOrder[b.role as keyof typeof roleOrder] || 4;
+
+					if (aOrder !== bOrder) {
+						return aOrder - bOrder;
+					}
+
+					// If same role, sort by order_index if available
+					if (a.orderIndex !== undefined && b.orderIndex !== undefined) {
+						return a.orderIndex - b.orderIndex;
+					}
+
+					// Finally, sort alphabetically
+					return `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`);
+				});
+
+				console.log(`📋 Team ${team.name} members sorted:`, sortedMembers.map(m => `${m.firstName} (${m.role})`).join(', '));
+
 				return {
 					teamId: team.id,
 					teamName: team.name,
 					timezone: team.timezone,
-					members: team.members,
+					members: sortedMembers,  // ✅ Return sorted members
 					schedule: schedule
 				};
 			})
@@ -889,14 +909,14 @@ export async function handleUpdateOnCallSchedule(
 			scheduleId: string;
 			teamId: string;
 			name?: string;
+			clearDate?: string;
 			assignments: Array<{
 				userId: string;
 				role: 'primary' | 'backup' | 'escalation';
-				dates: string[];  // ["2025-11-01", "2025-11-02"]
+				dates: string[];
 			}>;
 		};
 
-		// Validation
 		if (!body?.scheduleId || !body?.teamId) {
 			return json({
 				success: false,
@@ -908,37 +928,43 @@ export async function handleUpdateOnCallSchedule(
 			});
 		}
 
-		if (!body.assignments || !Array.isArray(body.assignments) || body.assignments.length === 0) {
+		if (!body.clearDate && (!body.assignments || !Array.isArray(body.assignments) || body.assignments.length === 0)) {
 			return json({
 				success: false,
 				httpStatus: 'ERROR',
-				error: 'At least one assignment is required'
+				error: 'At least one assignment is required, or provide clearDate to clear schedule'
 			}, {
 				status: 400,
 				headers
 			});
 		}
 
-		console.log('[oncall-handler] Updating schedule:', body.scheduleId, 'with', body.assignments.length, 'assignment(s)');
+		console.log('[oncall-handler] Updating schedule:', body.scheduleId);
+		if (body.clearDate && body.assignments.length === 0) {
+			console.log('[oncall-handler] Clearing date:', body.clearDate);
+		} else {
+			console.log('[oncall-handler] Updating with', body.assignments.length, 'assignment(s)');
+		}
 
 		const svc = new OnCallService(env);
 
-		// Update schedule name if provided
 		if (body.name) {
 			await svc.updateScheduleName(body.scheduleId, body.name);
 		}
 
-		// Update assignments for specific dates
 		await svc.updateScheduleAssignments({
 			scheduleId: body.scheduleId,
 			teamId: body.teamId,
-			assignments: body.assignments
+			assignments: body.assignments,
+			clearDate: body.clearDate
 		});
 
 		return json({
 			success: true,
 			httpStatus: 'OK',
-			message: 'Schedule updated successfully'
+			message: body.clearDate && body.assignments.length === 0
+				? 'Schedule cleared successfully'
+				: 'Schedule updated successfully'
 		}, {
 			headers
 		});

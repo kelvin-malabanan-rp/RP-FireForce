@@ -59,6 +59,12 @@ import {
 	handleSendStatusChangeEmail,
 	handleSendTestEmail
 } from "../handlers/email.handlers";
+import {
+	handleAddTeamMember, handleChangeTeamRole, handleCreateTeam, handleGetAllTeams,
+	handleGetAvailableUsers, handleGetTeamById,
+	handleGetTeamMembers,
+	handleRemoveTeamMember, handleTransferTeamMember
+} from "../handlers/team-handlers";
 
 export class Router {
 	private env: Env;
@@ -333,6 +339,56 @@ export class Router {
 			if (path === '/api/email/test' && method === 'POST') {
 				return handleSendTestEmail(request, this.env, CORS_HEADERS);
 			}
+
+			// ============================================
+			// TEAM MANAGEMENT ROUTES (Add this section)
+			// ============================================
+
+			// Create a new team
+			if (path === '/api/teams/create' && method === 'POST') {
+				return handleCreateTeam(request, this.env, CORS_HEADERS);
+			}
+
+			// Get all teams
+			if (path === '/api/teams/all' && method === 'GET') {
+				return handleGetAllTeams(request, this.env, CORS_HEADERS);
+			}
+
+			// Get team by ID
+			if (path === '/api/teams/by-id' && method === 'GET') {
+				return handleGetTeamById(request, this.env, CORS_HEADERS);
+			}
+
+			// Get team members
+			if (path === '/api/teams/members' && method === 'GET') {
+				return handleGetTeamMembers(request, this.env, CORS_HEADERS);
+			}
+
+			// Get users available for team assignment
+			if (path === '/api/teams/available-users' && method === 'GET') {
+				return handleGetAvailableUsers(request, this.env, CORS_HEADERS);
+			}
+
+			// Add member to team
+			if (path === '/api/teams/members/add' && method === 'POST') {
+				return handleAddTeamMember(request, this.env, CORS_HEADERS);
+			}
+
+			// Remove member from team
+			if (path === '/api/teams/members/remove' && method === 'POST') {
+				return handleRemoveTeamMember(request, this.env, CORS_HEADERS);
+			}
+
+			// Change team member role (with auto-swap for Primary ↔ Backup)
+			if (path === '/api/teams/members/role' && method === 'PUT') {
+				return handleChangeTeamRole(request, this.env, CORS_HEADERS);
+			}
+
+			// Transfer member between teams
+			if (path === '/api/teams/members/transfer' && method === 'POST') {
+				return handleTransferTeamMember(request, this.env, CORS_HEADERS);
+			}
+
 
 			// ============================================
 			// 404 NOT FOUND

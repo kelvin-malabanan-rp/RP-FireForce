@@ -1,1061 +1,763 @@
-import { useState, useEffect } from "react";
+// components/pages/OnCallPage.tsx
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import React from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { 
-  Shield, 
-  Calendar,
-  ChevronLeft,
-  ChevronRight,
-  UserCheck,
-  Loader2,
-  RefreshCw,
-  User,
-  AlertCircle,
-  Mail,
-  Plus,
-  Users,
-  Info,
-  CheckCircle,
-  X,
-  Edit
+import { motion } from "framer-motion";
+import {
+    Shield, Calendar, ChevronLeft, ChevronRight, UserCheck, Loader2, RefreshCw,
+    AlertCircle, Plus, Users, CheckCircle, X, Edit2
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import { Avatar, AvatarFallback } from "../ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { Label } from "../ui/label";
-import { Input } from "../ui/input";
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuTrigger 
-} from "../ui/dropdown-menu";
-import { 
-  onCallService, 
-  Team, 
-  Assignment, 
-  TeamMember,
-  UpdateSchedulePayload
-} from "../../services/on-call-service";
+import { onCallService, Team, Assignment, TeamMember } from "../../services/on-call-service";
 
 export function OnCallPage() {
-  const [teams, setTeams] = useState<Team[]>([]);
-  const [selectedTeam, setSelectedTeam] = useState<string>('all');
-  const [calendarData, setCalendarData] = useState<Team[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  
-  const [currentDate, setCurrentDate] = useState(new Date());
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
-  const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null);
-  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
-  const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
-  const [isErrorModalOpen, setIsErrorModalOpen] = useState(false);
-  const [modalMessage, setModalMessage] = useState('');
-  
-  const [daysToShow] = useState(30);
+    const [teams, setTeams] = useState<Team[]>([]);
+    const [myTeam, setMyTeam] = useState<Team | null>(null);
+    const [selectedTeam, setSelectedTeam] = useState<string>('my-team');
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
-  // Edit mode state - ALL ROLES
-  const [isEditMode, setIsEditMode] = useState(false);
-  const [editData, setEditData] = useState({
-    scheduleName: '',
-    primaryUser: '',
-    backupUser: '',
-    escalationUsers: [] as string[],
-  });
+    const [currentDate, setCurrentDate] = useState(new Date());
+    const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+    const [selectedTeamForEdit, setSelectedTeamForEdit] = useState<Team | null>(null);
+    const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
+    const [isEditMode, setIsEditMode] = useState(false);
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      console.log('📅 Loading calendar data...');
-      
-      const calendarResponse = await onCallService.getCalendarData(daysToShow);
-      
-      if (!calendarResponse.success || !calendarResponse.data) {
-        throw new Error('Failed to load calendar data');
-      }
-
-      console.log('✅ Calendar data loaded:', calendarResponse.data);
-      
-      // Force state update to trigger re-render
-      setCalendarData([...calendarResponse.data]);
-      setTeams([...calendarResponse.data]);
-
-    } catch (error: any) {
-      console.error('❌ Error loading on-call data:', error);
-      setError(error.message || 'Failed to load on-call data');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const getTeamMembers = (teamId: string): TeamMember[] => {
-    const membersMap = new Map<string, TeamMember>();
-    
-    const team = calendarData.find(t => t.teamId === teamId);
-    team?.members?.forEach(member => {
-      membersMap.set(member.id, member);
+    const [editData, setEditData] = useState({
+        primaryUser: '',
+        backupUser: '',
+        escalationUsers: [] as string[],
     });
-    
-    team?.schedule?.forEach(day => {
-      if (day.assignment) {
-        const assignedMembers = [
-          day.assignment.primary,
-          day.assignment.backup,
-          ...(day.assignment.escalation || [])
-        ].filter(Boolean) as TeamMember[];
-        
-        assignedMembers.forEach(person => {
-          if (!membersMap.has(person.id)) {
-            membersMap.set(person.id, person);
-          }
-        });
-      }
-    });
-    
-    return Array.from(membersMap.values()).sort((a, b) => 
-      `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`)
-    );
-  };
 
-  const getTeamColor = (index: number) => {
-    const colors = ['bg-blue-500', 'bg-green-500', 'bg-red-500', 'bg-purple-500', 'bg-orange-500', 'bg-pink-500'];
-    return colors[index % colors.length];
-  };
+    const lastLoadRef = useRef<number>(0);
 
-  const getDaysInMonth = (date: Date) => {
-    return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
-  };
+    useEffect(() => {
+        loadData();
+    }, []);
 
-  const getFirstDayOfMonth = (date: Date) => {
-    return new Date(date.getFullYear(), date.getMonth(), 1).getDay();
-  };
+    const loadData = useCallback(async () => {
+        setIsLoading(true);
+        setError(null);
+        try {
+            const calendarResponse = await onCallService.getCalendarData(30);
 
-  const formatDateKey = (date: Date) => {
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-  };
+            if (!calendarResponse.success || !calendarResponse.data) {
+                throw new Error('Failed to load calendar data');
+            }
 
-  const handleCellClick = (day: number, dateKey: string) => {
-    const clickedDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
-    setSelectedDate(clickedDate);
-    setSelectedTeamId(null);
-    
-    setIsDetailModalOpen(true);
-    setIsEditMode(false);
-  };
+            setTeams(calendarResponse.data);
 
-  const closeModals = () => {
-    setIsDetailModalOpen(false);
-    setIsEditMode(false);
-    setSelectedDate(null);
-    setSelectedTeamId(null);
-    setSelectedAssignment(null);
-    setEditData({
-      scheduleName: '',
-      primaryUser: '',
-      backupUser: '',
-      escalationUsers: []
-    });
-  };
+            // Find user's team
+            const userStr = localStorage.getItem('user');
+            const currentUserId = userStr ? JSON.parse(userStr).id : null;
 
-  const handleUpdateFromModal = async () => {
-    if (!selectedTeamId || !selectedDate) {
-      setModalMessage('Missing required information');
-      setIsErrorModalOpen(true);
-      return;
-    }
-
-    if (!editData.primaryUser && !editData.backupUser && editData.escalationUsers.length === 0) {
-      setModalMessage('Please assign at least one person');
-      setIsErrorModalOpen(true);
-      return;
-    }
-
-    try {
-      const team = calendarData.find(t => t.teamId === selectedTeamId);
-
-      if (!team) {
-        throw new Error('Team not found');
-      }
-
-      let scheduleId: string | null = null;
-      for (const day of team.schedule) {
-        if (day.assignment?.scheduleId) {
-          scheduleId = day.assignment.scheduleId;
-          break;
-        }
-      }
-
-      if (!scheduleId) {
-        throw new Error('Schedule ID not found for this team.');
-      }
-
-      const dateKey = formatDateKey(selectedDate);
-      
-      // CRITICAL: Send ALL roles to prevent deletion
-      // Build complete assignments array including all roles
-      const assignments = [];
-      
-      // Always send primary (even if empty, to clear it)
-      if (editData.primaryUser) {
-        assignments.push({
-          userId: editData.primaryUser,
-          role: 'primary' as const,
-          dates: [dateKey]
-        });
-      } else if (selectedAssignment?.primary) {
-        // Keep existing primary if not changed
-        assignments.push({
-          userId: selectedAssignment.primary.id,
-          role: 'primary' as const,
-          dates: [dateKey]
-        });
-      }
-      
-      // Always send backup (even if empty, to clear it)
-      if (editData.backupUser) {
-        assignments.push({
-          userId: editData.backupUser,
-          role: 'backup' as const,
-          dates: [dateKey]
-        });
-      } else if (selectedAssignment?.backup) {
-        // Keep existing backup if not changed
-        assignments.push({
-          userId: selectedAssignment.backup.id,
-          role: 'backup' as const,
-          dates: [dateKey]
-        });
-      }
-      
-      // Handle escalation users
-      if (editData.escalationUsers.length > 0) {
-        editData.escalationUsers.forEach(userId => {
-          assignments.push({
-            userId: userId,
-            role: 'escalation' as const,
-            dates: [dateKey]
-          });
-        });
-      } else if (selectedAssignment?.escalation && selectedAssignment.escalation.length > 0) {
-        // Keep existing escalation if not changed
-        selectedAssignment.escalation.forEach(person => {
-          assignments.push({
-            userId: person.id,
-            role: 'escalation' as const,
-            dates: [dateKey]
-          });
-        });
-      }
-
-      const payload: UpdateSchedulePayload = {
-        scheduleId: scheduleId,
-        teamId: selectedTeamId,
-        name: editData.scheduleName || undefined,
-        assignments: assignments
-      };
-
-      console.log('📝 Updating schedule with all roles:', payload);
-      console.log('📝 Assignments being sent:', assignments);
-
-      const result = await onCallService.updateSchedule(payload);
-
-      console.log('✅ Update result:', result);
-
-      if (result.success) {
-        setModalMessage('Schedule updated successfully!');
-        setIsSuccessModalOpen(true);
-        closeModals();
-        
-        // Wait a bit before reloading to ensure backend has processed
-        await new Promise(resolve => setTimeout(resolve, 500));
-        await loadData();
-        
-        console.log('🔄 Data reloaded after update');
-      } else {
-        throw new Error(result.message || 'Failed to update schedule');
-      }
-    } catch (error: any) {
-      console.error('❌ Error updating schedule:', error);
-      setModalMessage(error.message || 'Failed to update schedule');
-      setIsErrorModalOpen(true);
-    }
-  };
-
-  const renderCalendar = () => {
-    const daysInMonth = getDaysInMonth(currentDate);
-    const firstDay = getFirstDayOfMonth(currentDate);
-    const days: React.ReactElement[] = [];
-    
-    // IMPORTANT: Filter teams based on selection for calendar display
-    const teamsToDisplay = selectedTeam === 'all' 
-      ? teams 
-      : teams.filter(t => t.teamId === selectedTeam);
-    
-    console.log('📊 Rendering calendar for teams:', teamsToDisplay.map(t => t.teamName));
-    
-    for (let i = 0; i < firstDay; i++) {
-      days.push(<div key={`empty-${i}`} className="h-32"></div>);
-    }
-    
-    for (let day = 1; day <= daysInMonth; day++) {
-      const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
-      const dateKey = formatDateKey(date);
-      const isToday = new Date().toDateString() === date.toDateString();
-      
-      // Get assignments ONLY from filtered teams
-      const dayAssignments = teamsToDisplay.map(team => {
-        const daySchedule = team.schedule.find(s => s.date === dateKey);
-        return {
-          team,
-          assignment: daySchedule?.assignment || null
-        };
-      }).filter(item => item.assignment !== null);
-      
-      const hasAnyAssignment = dayAssignments.length > 0;
-      
-      days.push(
-        <motion.div
-          key={`${day}-${selectedTeam}`}
-          whileHover={{ scale: 1.03, zIndex: 10 }}
-          whileTap={{ scale: 0.98 }}
-          className={`h-32 border-2 cursor-pointer relative overflow-hidden transition-all rounded-lg ${
-            isToday 
-              ? 'bg-gradient-to-br from-blue-600/30 to-purple-600/30 border-blue-500 shadow-lg' 
-              : hasAnyAssignment
-              ? 'bg-slate-700/30 border-slate-600 hover:border-purple-500 hover:bg-slate-700/50'
-              : 'bg-slate-800/20 border-slate-700 hover:border-slate-600 hover:bg-slate-700/30'
-          }`}
-          onClick={() => handleCellClick(day, dateKey)}
-        >
-          <div className="absolute top-2 left-2">
-            <span className={`text-sm font-bold ${
-              isToday ? 'text-blue-400' : hasAnyAssignment ? 'text-white' : 'text-slate-500'
-            }`}>
-              {day}
-            </span>
-          </div>
-
-          {hasAnyAssignment ? (
-            <div className="absolute inset-0 p-2 pt-8 flex flex-col gap-1 overflow-hidden">
-              {dayAssignments.slice(0, 3).map((item, idx) => {
-                const teamIndex = teams.findIndex(t => t.teamId === item.team.teamId);
-                const teamColor = getTeamColor(teamIndex);
-                const primaryName = item.assignment?.primary?.firstName || 'N/A';
-                
-                return (
-                  <div 
-                    key={`${item.team.teamId}-${idx}`}
-                    className="flex items-center gap-1.5 bg-slate-600/40 border border-slate-500/40 rounded px-2 py-1"
-                  >
-                    <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${teamColor}`}></div>
-                    <span className="text-xs text-slate-200 truncate font-medium">
-                      {selectedTeam === 'all' ? `${item.team.teamName.split(' ')[0]}: ` : ''}{primaryName}
-                    </span>
-                  </div>
+            if (currentUserId) {
+                const userTeam = calendarResponse.data.find((team: Team) =>
+                    team.members?.some(m => m.id === currentUserId)
                 );
-              })}
-              {dayAssignments.length > 3 && (
-                <div className="flex items-center justify-center">
-                  <span className="text-xs text-slate-400 font-medium">
-                    +{dayAssignments.length - 3} more
-                  </span>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <Plus className="h-5 w-5 text-slate-600" />
-            </div>
-          )}
-        </motion.div>
-      );
-    }
-    
-    return days;
-  };
+                setMyTeam(userTeam || null);
+            }
 
-  if (isLoading) {
-    return (
-      <div className="flex flex-col items-center justify-center h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-        <Loader2 className="h-12 w-12 animate-spin text-purple-500 mb-4" />
-        <p className="text-slate-400">Loading on-call schedules...</p>
-      </div>
-    );
-  }
+            lastLoadRef.current = Date.now();
 
-  if (error) {
-    return (
-      <div className="flex flex-col items-center justify-center h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-        <AlertCircle className="h-12 w-12 text-red-500 mb-4" />
-        <p className="text-white text-xl mb-2">Error Loading Data</p>
-        <p className="text-slate-400 mb-4">{error}</p>
-        <Button onClick={loadData} className="bg-purple-600 hover:bg-purple-700">
-          <RefreshCw className="h-4 w-4 mr-2" />
-          Retry
-        </Button>
-      </div>
-    );
-  }
+        } catch (error: any) {
+            console.error('❌ Error loading on-call data:', error);
+            setError(error.message || 'Failed to load on-call data');
+        } finally {
+            setIsLoading(false);
+        }
+    }, []);
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-      <div className="space-y-6 p-6">
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="flex items-center justify-between"
-        >
-          <div className="flex items-center gap-4">
-            <div className="p-3 rounded-xl bg-gradient-to-br from-purple-500 to-blue-600 shadow-lg">
-              <Shield className="h-8 w-8 text-white" />
-            </div>
-            <div>
-              <h1 className="text-3xl font-bold text-white">On-Call Schedule</h1>
-              <p className="text-slate-300 mt-1">View and manage on-call rotations for all teams</p>
-            </div>
-          </div>
-          <div className="flex gap-3">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="border-slate-600 text-white hover:bg-slate-700">
-                  <UserCheck className="h-4 w-4 mr-2" />
-                  {selectedTeam === 'all' 
-                    ? 'All Teams' 
-                    : teams.find(t => t.teamId === selectedTeam)?.teamName || 'Select Team'}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="bg-slate-800 border-slate-600">
-                <DropdownMenuItem 
-                  onClick={() => setSelectedTeam('all')}
-                  className="text-white hover:bg-slate-700"
+    const getTeamMembers = useCallback((teamId: string): TeamMember[] => {
+        const team = teams.find(t => t.teamId === teamId);
+        return team?.members || [];
+    }, [teams]);
+
+    const getUsersByRole = useCallback((teamId: string, role: 'primary' | 'backup' | 'escalation'): TeamMember[] => {
+        const members = getTeamMembers(teamId);
+        return members.filter(m => m.role?.toLowerCase() === role.toLowerCase());
+    }, [getTeamMembers]);
+
+    const filteredTeams = useMemo(() => {
+        if (selectedTeam === 'my-team' && myTeam) return [myTeam];
+        if (selectedTeam === 'all') return teams;
+        return teams.filter(t => t.teamId === selectedTeam);
+    }, [teams, selectedTeam, myTeam]);
+
+    const today = useMemo(() => new Date().toISOString().split('T')[0], []);
+
+    const formatDateKey = useCallback((date: Date) => {
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    }, []);
+
+    const handleDateClick = useCallback((day: number) => {
+        const clickedDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
+        setSelectedDate(clickedDate);
+        setIsScheduleModalOpen(true);
+        setIsEditMode(false);
+    }, [currentDate]);
+
+    const openEditModal = useCallback((team: Team, assignment: Assignment | null) => {
+        setSelectedTeamForEdit(team);
+        setEditData({
+            primaryUser: assignment?.primary?.id || '',
+            backupUser: assignment?.backup?.id || '',
+            escalationUsers: assignment?.escalation?.map(e => e.id) || []
+        });
+        setIsEditMode(true);
+    }, []);
+
+    const closeModals = useCallback(() => {
+        setIsScheduleModalOpen(false);
+        setIsEditMode(false);
+        setSelectedDate(null);
+        setSelectedTeamForEdit(null);
+        setEditData({ primaryUser: '', backupUser: '', escalationUsers: [] });
+    }, []);
+
+    const handleSaveSchedule = async () => {
+        if (!selectedDate || !selectedTeamForEdit) return;
+
+        try {
+            const scheduleId = selectedTeamForEdit.schedule.find(d => d.assignment?.scheduleId)?.assignment?.scheduleId;
+            if (!scheduleId) throw new Error('Schedule ID not found');
+
+            const dateKey = formatDateKey(selectedDate);
+            const assignments = [];
+
+            if (editData.primaryUser) {
+                assignments.push({ userId: editData.primaryUser, role: 'primary' as const, dates: [dateKey] });
+            }
+            if (editData.backupUser) {
+                assignments.push({ userId: editData.backupUser, role: 'backup' as const, dates: [dateKey] });
+            }
+            editData.escalationUsers.forEach(userId => {
+                assignments.push({ userId, role: 'escalation' as const, dates: [dateKey] });
+            });
+
+            // Prepare payload with clearDate when removing all assignments
+            const payload: any = {
+                scheduleId,
+                teamId: selectedTeamForEdit.teamId,
+                assignments
+            };
+
+            // If no assignments selected, add clearDate to remove the date
+            if (assignments.length === 0) {
+                payload.clearDate = dateKey;
+            }
+
+            const result = await onCallService.updateSchedule(payload);
+
+            if (result.success) {
+                closeModals();
+                setTimeout(() => loadData(), 300);
+            } else {
+                throw new Error(result.message || 'Failed to update schedule');
+            }
+        } catch (error: any) {
+            console.error('Error updating schedule:', error);
+            alert(error.message || 'Failed to update schedule');
+        }
+    };
+
+    const calendarDays = useMemo(() => {
+        const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
+        const firstDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getDay();
+        const days: React.ReactElement[] = [];
+
+        for (let i = 0; i < firstDay; i++) {
+            days.push(<div key={`empty-${i}`} className="h-24"></div>);
+        }
+
+        for (let day = 1; day <= daysInMonth; day++) {
+            const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
+            const dateKey = formatDateKey(date);
+            const isToday = new Date().toDateString() === date.toDateString();
+
+            const dayAssignments = filteredTeams.map(team => {
+                const daySchedule = team.schedule.find(s => s.date === dateKey);
+                return { team, assignment: daySchedule?.assignment || null };
+            }).filter(item => item.assignment !== null);
+
+            const hasAnyAssignment = dayAssignments.length > 0;
+
+            days.push(
+                <motion.div
+                    key={day}
+                    whileHover={{ scale: 1.02 }}
+                    className={`h-24 border rounded-lg cursor-pointer relative p-2 transition-all ${
+                        isToday
+                            ? 'bg-blue-500/20 border-blue-500 dark:bg-blue-500/20'
+                            : hasAnyAssignment
+                                ? 'bg-slate-50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-600 hover:border-blue-500'
+                                : 'bg-white dark:bg-slate-800/20 border-slate-200 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-600'
+                    }`}
+                    onClick={() => handleDateClick(day)}
                 >
-                  <Users className="h-4 w-4 mr-2" />
-                  All Teams
-                </DropdownMenuItem>
-                {teams.map((team, index) => (
-                  <DropdownMenuItem 
-                    key={team.teamId}
-                    onClick={() => setSelectedTeam(team.teamId)}
-                    className="text-white hover:bg-slate-700"
-                  >
-                    <div className={`w-3 h-3 rounded-full ${getTeamColor(index)} mr-2`} />
-                    {team.teamName}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
+                    <div className="flex items-center justify-between mb-1">
+                        <span className={`text-sm font-semibold ${
+                            isToday ? 'text-blue-600 dark:text-blue-400' : 'text-slate-600 dark:text-slate-400'
+                        }`}>
+                            {day}
+                        </span>
+                        {isToday && (
+                            <Badge className="bg-blue-500 text-white text-xs px-1.5 py-0 h-4">Today</Badge>
+                        )}
+                    </div>
 
-            <Button
-              onClick={loadData}
-              className="bg-gradient-to-r from-orange-500 to-red-600 text-white hover:from-orange-600 hover:to-red-700"
-            >
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Refresh
-            </Button>
-          </div>
-        </motion.div>
+                    {hasAnyAssignment && (
+                        <div className="space-y-1">
+                            {selectedTeam === 'all' ? (
+                                // All Teams view - show only team names
+                                <>
+                                    {dayAssignments.slice(0, 3).map((item, idx) => {
+                                        const teamIndex = teams.findIndex(t => t.teamId === item.team.teamId);
+                                        const teamColor = ['bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-orange-500', 'bg-pink-500'][teamIndex % 5];
 
-        {/* Current On-Call Today */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-        >
-          <Card className="bg-slate-800/50 border-slate-700">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-white">
-                <Shield className="h-5 w-5" />
-                Current On-Call Today
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {teams.map((team, idx) => {
-                  const today = new Date().toISOString().split('T')[0];
-                  const todayAssignment = team.schedule.find(day => day.date === today)?.assignment;
-                  
-                  if (selectedTeam !== 'all' && team.teamId !== selectedTeam) {
-                    return null;
-                  }
-                  
-                  return (
-                    <motion.div
-                      key={team.teamId}
-                      initial={{ opacity: 0, scale: 0.95 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ delay: 0.1 + idx * 0.05 }}
-                      className="bg-gradient-to-br from-slate-700/50 to-slate-800/50 rounded-lg p-4 border border-slate-600 hover:border-slate-500 transition-all"
-                    >
-                      <div className="flex items-center gap-2 mb-3">
-                        <div className={`w-3 h-3 rounded-full ${getTeamColor(idx)}`} />
-                        <h4 className="font-semibold text-white">{team.teamName}</h4>
-                      </div>
-                      <p className="text-xs text-slate-400 mb-3">{team.timezone}</p>
-                      
-                      {todayAssignment ? (
-                        <div className="space-y-2">
-                          {todayAssignment.primary && (
-                            <div className="bg-green-500/10 border border-green-500/30 rounded p-2">
-                              <Badge className="bg-green-500 text-white text-xs mb-1">Primary</Badge>
-                              <p className="text-sm text-white font-medium">
-                                {todayAssignment.primary.firstName} {todayAssignment.primary.lastName}
-                              </p>
-                              <p className="text-xs text-slate-400">{todayAssignment.primary.email}</p>
-                            </div>
-                          )}
-                          
-                          {todayAssignment.backup && (
-                            <div className="bg-yellow-500/10 border border-yellow-500/30 rounded p-2">
-                              <Badge className="bg-yellow-500 text-white text-xs mb-1">Backup</Badge>
-                              <p className="text-sm text-white font-medium">
-                                {todayAssignment.backup.firstName} {todayAssignment.backup.lastName}
-                              </p>
-                              <p className="text-xs text-slate-400">{todayAssignment.backup.email}</p>
-                            </div>
-                          )}
-                          
-                          {todayAssignment.escalation && todayAssignment.escalation.length > 0 && (
-                            <div className="bg-blue-500/10 border border-blue-500/30 rounded p-2">
-                              <Badge className="bg-blue-500 text-white text-xs mb-1">Escalation</Badge>
-                              {todayAssignment.escalation.map((person, pidx) => (
-                                <p key={pidx} className="text-sm text-white font-medium">
-                                  {person.firstName} {person.lastName}
-                                </p>
-                              ))}
-                            </div>
-                          )}
+                                        return (
+                                            <div key={idx} className="flex items-center gap-1.5">
+                                                <div className={`w-1.5 h-1.5 rounded-full ${teamColor} flex-shrink-0`} />
+                                                <span className="text-xs text-slate-700 dark:text-slate-300 truncate">
+                                                    {item.team.teamName}
+                                                </span>
+                                            </div>
+                                        );
+                                    })}
+                                    {dayAssignments.length > 3 && (
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 text-center">
+                                            +{dayAssignments.length - 3}
+                                        </p>
+                                    )}
+                                </>
+                            ) : (
+                                // My Team view - show all roles
+                                <>
+                                    {dayAssignments[0]?.assignment?.primary && (
+                                        <div className="flex items-center gap-1">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
+                                            <span className="text-xs text-slate-700 dark:text-slate-300 truncate">
+                                                {dayAssignments[0].assignment.primary.firstName}
+                                            </span>
+                                        </div>
+                                    )}
+                                    {dayAssignments[0]?.assignment?.backup && (
+                                        <div className="flex items-center gap-1">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-yellow-500 flex-shrink-0" />
+                                            <span className="text-xs text-slate-600 dark:text-slate-400 truncate">
+                                                {dayAssignments[0].assignment.backup.firstName}
+                                            </span>
+                                        </div>
+                                    )}
+                                    {dayAssignments[0]?.assignment?.escalation && dayAssignments[0].assignment.escalation.length > 0 && (
+                                        <div className="flex items-center gap-1">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-orange-500 flex-shrink-0" />
+                                            <span className="text-xs text-slate-600 dark:text-slate-400 truncate">
+                                                {dayAssignments[0].assignment.escalation[0].firstName}
+                                                {dayAssignments[0].assignment.escalation.length > 1 && ` +${dayAssignments[0].assignment.escalation.length - 1}`}
+                                            </span>
+                                        </div>
+                                    )}
+                                </>
+                            )}
                         </div>
-                      ) : (
-                        <div className="text-center py-4">
-                          <p className="text-sm text-slate-500">No assignment today</p>
-                        </div>
-                      )}
-                    </motion.div>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
+                    )}
+                </motion.div>
+            );
+        }
 
-        {/* Calendar View */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-          <Card className="bg-slate-800/50 border-slate-700">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2 text-white">
-                  <Calendar className="h-5 w-5" />
-                  {selectedTeam === 'all' ? 'All Teams Schedule Calendar' : `${teams.find(t => t.teamId === selectedTeam)?.teamName} Schedule`}
-                </CardTitle>
-                <div className="flex items-center gap-2">
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1))} 
-                    className="text-white hover:bg-slate-700"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  <span className="text-white font-medium min-w-[150px] text-center">
-                    {currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-                  </span>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1))} 
-                    className="text-white hover:bg-slate-700"
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-7 gap-2 mb-4">
-                {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map((day) => (
-                  <div key={day} className="h-10 flex items-center justify-center">
-                    <span className="text-sm font-semibold text-slate-400">{day}</span>
-                  </div>
-                ))}
-              </div>
-              
-              <div className="grid grid-cols-7 gap-2">
-                {renderCalendar()}
-              </div>
-              
-              <div className="mt-6 flex items-center justify-center gap-6 text-sm border-t border-slate-700 pt-6">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-green-400"></div>
-                  <span className="text-slate-400">Primary</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-yellow-400"></div>
-                  <span className="text-slate-400">Backup</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-blue-400"></div>
-                  <span className="text-slate-400">Escalation</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
+        return days;
+    }, [currentDate, filteredTeams, formatDateKey, handleDateClick, selectedTeam, teams]);
 
-        {/* Detail Modal - All Teams for Selected Date */}
-        <AnimatePresence>
-          {isDetailModalOpen && selectedDate && !isEditMode && (
+    if (isLoading) {
+        return (
+            <div className="flex flex-col items-center justify-center h-screen">
+                <Loader2 className="h-12 w-12 animate-spin text-blue-500 mb-4" />
+                <p className="text-slate-400">Loading schedules...</p>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="flex flex-col items-center justify-center h-screen">
+                <AlertCircle className="h-12 w-12 text-red-500 mb-4" />
+                <p className="text-white text-xl mb-2">Error Loading Data</p>
+                <p className="text-slate-400 mb-4">{error}</p>
+                <Button onClick={loadData} className="bg-blue-600 hover:bg-blue-700">
+                    <RefreshCw className="h-4 w-4 mr-2" />Retry
+                </Button>
+            </div>
+        );
+    }
+
+    const teamToDisplay = filteredTeams[0];
+
+    return (
+        <div className="space-y-6">
+            {/* Header */}
             <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-              onClick={closeModals}
+                className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4"
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
             >
-              <motion.div
-                initial={{ scale: 0.9, y: 20 }}
-                animate={{ scale: 1, y: 0 }}
-                exit={{ scale: 0.9, y: 20 }}
-                className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-6 border border-slate-700 max-w-3xl w-full max-h-[90vh] overflow-y-auto"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="flex items-center justify-between mb-6">
-                  <div>
-                    <h3 className="text-2xl font-bold text-white">
-                      {selectedDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
-                    </h3>
-                    <p className="text-sm text-slate-400 mt-1">
-                      On-Call Assignments for All Teams
+                <div>
+                    <h1 className="text-4xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 dark:from-white dark:to-slate-200 bg-clip-text text-transparent">
+                        On-Call Schedule
+                    </h1>
+                    <p className="text-slate-700 dark:text-slate-200 mt-2 text-lg">
+                        Manage your team's on-call rotations
                     </p>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={closeModals}
-                    className="text-slate-400 hover:text-white"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
                 </div>
+                <div className="flex gap-2">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={loadData}
+                        className="text-slate-900 dark:text-white border-slate-200 dark:border-slate-700"
+                    >
+                        <RefreshCw className="mr-2 h-4 w-4" />
+                        Refresh
+                    </Button>
+                </div>
+            </motion.div>
 
-                <div className="space-y-6">
-                  {(() => {
-                    const dateKey = formatDateKey(selectedDate);
-                    const teamsToShow = selectedTeam === 'all' ? teams : teams.filter(t => t.teamId === selectedTeam);
-                    
-                    return teamsToShow.map((team, idx) => {
-                      const daySchedule = team.schedule.find(s => s.date === dateKey);
-                      const assignment = daySchedule?.assignment;
-                      
-                      return (
-                        <div key={team.teamId} className="bg-slate-700/30 border border-slate-600 rounded-lg p-4">
-                          <div className="flex items-center justify-between mb-4">
-                            <div className="flex items-center gap-3">
-                              <div className={`w-4 h-4 rounded-full ${getTeamColor(teams.indexOf(team))}`} />
-                              <div>
-                                <h4 className="text-lg font-semibold text-white">{team.teamName}</h4>
-                                <p className="text-xs text-slate-400">{team.timezone}</p>
-                              </div>
+            {/* Team Filter */}
+            <div className="flex gap-2">
+                <Button
+                    variant={selectedTeam === 'my-team' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setSelectedTeam('my-team')}
+                    disabled={!myTeam}
+                    className={selectedTeam === 'my-team'
+                        ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white'
+                        : 'text-slate-900 dark:text-white border-slate-200 dark:border-slate-700'}
+                >
+                    <Users className="mr-2 h-4 w-4" />
+                    My Team
+                </Button>
+                <Button
+                    variant={selectedTeam === 'all' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setSelectedTeam('all')}
+                    className={selectedTeam === 'all'
+                        ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white'
+                        : 'text-slate-900 dark:text-white border-slate-200 dark:border-slate-700'}
+                >
+                    All Teams ({teams.length})
+                </Button>
+            </div>
+
+            {/* Calendar */}
+            <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
+                <CardHeader>
+                    <div className="flex items-center justify-between">
+                        <CardTitle className="flex items-center gap-2 text-slate-900 dark:text-white">
+                            <Calendar className="h-5 w-5" />
+                            {selectedTeam === 'all'
+                                ? 'All Teams Schedule'
+                                : selectedTeam === 'my-team' && myTeam
+                                    ? myTeam.teamName
+                                    : teamToDisplay?.teamName || 'Schedule'}
+                        </CardTitle>
+                        <div className="flex items-center gap-2">
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1))}
+                                className="text-slate-900 dark:text-white"
+                            >
+                                <ChevronLeft className="h-4 w-4" />
+                            </Button>
+                            <span className="text-slate-900 dark:text-white font-medium min-w-[150px] text-center">
+                                {currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                            </span>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1))}
+                                className="text-slate-900 dark:text-white"
+                            >
+                                <ChevronRight className="h-4 w-4" />
+                            </Button>
+                        </div>
+                    </div>
+                </CardHeader>
+                <CardContent>
+                    {/* Week headers */}
+                    <div className="grid grid-cols-7 gap-2 mb-4">
+                        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+                            <div key={day} className="h-10 flex items-center justify-center">
+                                <span className="text-sm font-semibold text-slate-600 dark:text-slate-400">{day}</span>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Calendar grid */}
+                    <div className="grid grid-cols-7 gap-2">{calendarDays}</div>
+
+                    {/* Legend */}
+                    <div className="mt-6 flex items-center justify-center gap-6 text-sm border-t border-slate-200 dark:border-slate-700 pt-6">
+                        <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                            <span className="text-slate-600 dark:text-slate-400">Primary</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+                            <span className="text-slate-600 dark:text-slate-400">Backup</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded-full bg-orange-500"></div>
+                            <span className="text-slate-600 dark:text-slate-400">Escalation</span>
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
+
+            {/* Schedule Detail/Edit Modal */}
+            {isScheduleModalOpen && selectedDate && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={closeModals}>
+                    <motion.div
+                        initial={{ scale: 0.95, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-200 dark:border-slate-700 max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {/* Modal Header */}
+                        <div className="flex items-center justify-between mb-6">
+                            <div>
+                                <h3 className="text-2xl font-bold text-slate-900 dark:text-white">
+                                    {selectedDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                                </h3>
+                                <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
+                                    {selectedTeam === 'all' ? 'All Teams' : filteredTeams[0]?.teamName}
+                                </p>
                             </div>
                             <Button
-                              size="sm"
-                              onClick={() => {
-                                setSelectedTeamId(team.teamId);
-                                setSelectedAssignment(assignment || null);
-                                
-                                if (assignment) {
-                                  setEditData({
-                                    scheduleName: '',
-                                    primaryUser: assignment.primary?.id || '',
-                                    backupUser: assignment.backup?.id || '',
-                                    escalationUsers: assignment.escalation?.map(e => e.id) || []
-                                  });
-                                } else {
-                                  setEditData({
-                                    scheduleName: '',
-                                    primaryUser: '',
-                                    backupUser: '',
-                                    escalationUsers: []
-                                  });
-                                }
-                                
-                                setIsEditMode(true);
-                              }}
-                              className="bg-purple-600 hover:bg-purple-700 text-white"
-                            >
-                              <Edit className="h-3 w-3 mr-1" />
-                              Edit
-                            </Button>
-                          </div>
-
-                          {assignment ? (
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                              {assignment.primary && (
-                                <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-3">
-                                  <Badge className="bg-green-500 text-white text-xs mb-2">Primary</Badge>
-                                  <div className="flex items-start gap-2">
-                                    <Avatar className="h-8 w-8 border-2 border-green-500/50 flex-shrink-0">
-                                      <AvatarFallback className="bg-green-600 text-white text-xs font-semibold">
-                                        {assignment.primary.firstName?.[0]}{assignment.primary.lastName?.[0]}
-                                      </AvatarFallback>
-                                    </Avatar>
-                                    <div className="min-w-0 flex-1">
-                                      <p className="text-sm text-white font-semibold truncate">
-                                        {assignment.primary.firstName} {assignment.primary.lastName}
-                                      </p>
-                                      <p className="text-xs text-slate-400 truncate" title={assignment.primary.email}>
-                                        {assignment.primary.email}
-                                      </p>
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
-
-                              {assignment.backup && (
-                                <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
-                                  <Badge className="bg-yellow-500 text-white text-xs mb-2">Backup</Badge>
-                                  <div className="flex items-start gap-2">
-                                    <Avatar className="h-8 w-8 border-2 border-yellow-500/50 flex-shrink-0">
-                                      <AvatarFallback className="bg-yellow-600 text-white text-xs font-semibold">
-                                        {assignment.backup.firstName?.[0]}{assignment.backup.lastName?.[0]}
-                                      </AvatarFallback>
-                                    </Avatar>
-                                    <div className="min-w-0 flex-1">
-                                      <p className="text-sm text-white font-semibold truncate">
-                                        {assignment.backup.firstName} {assignment.backup.lastName}
-                                      </p>
-                                      <p className="text-xs text-slate-400 truncate" title={assignment.backup.email}>
-                                        {assignment.backup.email}
-                                      </p>
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
-
-                              {assignment.escalation && assignment.escalation.length > 0 && (
-                                <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3">
-                                  <Badge className="bg-blue-500 text-white text-xs mb-2">Escalation</Badge>
-                                  {assignment.escalation.map((person, pidx) => (
-                                    <div key={pidx} className="flex items-start gap-2 mb-2 last:mb-0">
-                                      <Avatar className="h-8 w-8 border-2 border-blue-500/50 flex-shrink-0">
-                                        <AvatarFallback className="bg-blue-600 text-white text-xs font-semibold">
-                                          {person.firstName?.[0]}{person.lastName?.[0]}
-                                        </AvatarFallback>
-                                      </Avatar>
-                                      <div className="min-w-0 flex-1">
-                                        <p className="text-sm text-white font-semibold truncate">
-                                          {person.firstName} {person.lastName}
-                                        </p>
-                                        <p className="text-xs text-slate-400 truncate" title={person.email}>
-                                          {person.email}
-                                        </p>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          ) : (
-                            <div className="text-center py-4">
-                              <p className="text-sm text-slate-500">No assignment for this date</p>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    });
-                  })()}
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Edit Modal - Edit All Roles */}
-        <AnimatePresence>
-          {isEditMode && selectedDate && selectedTeamId && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-              onClick={() => setIsEditMode(false)}
-            >
-              <motion.div
-                initial={{ scale: 0.9, y: 20 }}
-                animate={{ scale: 1, y: 0 }}
-                exit={{ scale: 0.9, y: 20 }}
-                className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-6 border border-slate-700 max-w-2xl w-full max-h-[90vh] overflow-y-auto"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="flex items-center justify-between mb-6">
-                  <div>
-                    <h3 className="text-xl font-bold text-white">
-                      {selectedAssignment ? 'Edit Assignment' : 'Create Assignment'}
-                    </h3>
-                    <p className="text-sm text-slate-400">
-                      {teams.find(t => t.teamId === selectedTeamId)?.teamName} - {selectedDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}
-                    </p>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setIsEditMode(false)}
-                    className="text-slate-400 hover:text-white"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-
-                <div className="space-y-6">
-                  <div>
-                    <Label className="text-white mb-2 block">Schedule Name (Optional)</Label>
-                    <Input
-                      value={editData.scheduleName}
-                      onChange={(e) => setEditData({ ...editData, scheduleName: e.target.value })}
-                      placeholder="e.g., Holiday Coverage Schedule"
-                      className="bg-slate-700 border-slate-600 text-white"
-                    />
-                  </div>
-
-                  {/* Primary User */}
-                  <div className="bg-green-500/5 border border-green-500/20 rounded-lg p-4">
-                    <Label className="text-white mb-2 flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                      Primary On-Call
-                    </Label>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="outline" className="w-full justify-start bg-slate-700 border-slate-600 text-white hover:bg-slate-600">
-                          {editData.primaryUser && getTeamMembers(selectedTeamId).find(m => m.id === editData.primaryUser)
-                            ? `${getTeamMembers(selectedTeamId).find(m => m.id === editData.primaryUser)!.firstName} ${getTeamMembers(selectedTeamId).find(m => m.id === editData.primaryUser)!.lastName}`
-                            : "Select primary (optional)"
-                          }
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent className="bg-slate-800 border-slate-600 max-h-60 overflow-y-auto">
-                        <DropdownMenuItem 
-                          onClick={() => setEditData({...editData, primaryUser: ''})}
-                          className="text-white hover:bg-slate-700"
-                        >
-                          <X className="h-3 w-3 mr-2" />
-                          Clear Primary
-                        </DropdownMenuItem>
-                        {getTeamMembers(selectedTeamId).map((member) => (
-                          <DropdownMenuItem 
-                            key={member.id}
-                            onClick={() => setEditData({...editData, primaryUser: member.id})}
-                            className="text-white hover:bg-slate-700"
-                          >
-                            {member.firstName} {member.lastName}
-                          </DropdownMenuItem>
-                        ))}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-
-                  {/* Backup User */}
-                  <div className="bg-yellow-500/5 border border-yellow-500/20 rounded-lg p-4">
-                    <Label className="text-white mb-2 flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
-                      Backup On-Call
-                    </Label>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="outline" className="w-full justify-start bg-slate-700 border-slate-600 text-white hover:bg-slate-600">
-                          {editData.backupUser && getTeamMembers(selectedTeamId).find(m => m.id === editData.backupUser)
-                            ? `${getTeamMembers(selectedTeamId).find(m => m.id === editData.backupUser)!.firstName} ${getTeamMembers(selectedTeamId).find(m => m.id === editData.backupUser)!.lastName}`
-                            : "Select backup (optional)"
-                          }
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent className="bg-slate-800 border-slate-600 max-h-60 overflow-y-auto">
-                        <DropdownMenuItem 
-                          onClick={() => setEditData({...editData, backupUser: ''})}
-                          className="text-white hover:bg-slate-700"
-                        >
-                          <X className="h-3 w-3 mr-2" />
-                          Clear Backup
-                        </DropdownMenuItem>
-                        {getTeamMembers(selectedTeamId).map((member) => (
-                          <DropdownMenuItem 
-                            key={member.id}
-                            onClick={() => setEditData({...editData, backupUser: member.id})}
-                            className="text-white hover:bg-slate-700"
-                          >
-                            {member.firstName} {member.lastName}
-                          </DropdownMenuItem>
-                        ))}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-
-                  {/* Escalation Users */}
-                  <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-4">
-                    <Label className="text-white mb-2 flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-                      Escalation Contact(s)
-                    </Label>
-                    
-                    {editData.escalationUsers.length > 0 && (
-                      <div className="mb-3 space-y-2">
-                        {editData.escalationUsers.map((userId) => {
-                          const member = getTeamMembers(selectedTeamId).find(m => m.id === userId);
-                          return member ? (
-                            <div key={userId} className="flex items-center justify-between bg-slate-700/50 border border-slate-600 rounded p-2">
-                              <span className="text-sm text-white">
-                                {member.firstName} {member.lastName}
-                              </span>
-                              <Button
-                                size="sm"
                                 variant="ghost"
-                                onClick={() => setEditData({
-                                  ...editData,
-                                  escalationUsers: editData.escalationUsers.filter(id => id !== userId)
-                                })}
-                                className="text-red-400 hover:text-red-300 hover:bg-red-900/20"
-                              >
-                                <X className="h-3 w-3" />
-                              </Button>
-                            </div>
-                          ) : null;
-                        })}
-                      </div>
-                    )}
-                    
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="outline" className="w-full justify-start bg-slate-700 border-slate-600 text-white hover:bg-slate-600">
-                          <Plus className="h-3 w-3 mr-2" />
-                          Add Escalation Contact
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent className="bg-slate-800 border-slate-600 max-h-60 overflow-y-auto">
-                        {getTeamMembers(selectedTeamId)
-                          .filter(member => !editData.escalationUsers.includes(member.id))
-                          .map((member) => (
-                            <DropdownMenuItem 
-                              key={member.id}
-                              onClick={() => setEditData({
-                                ...editData,
-                                escalationUsers: [...editData.escalationUsers, member.id]
-                              })}
-                              className="text-white hover:bg-slate-700"
+                                size="sm"
+                                onClick={closeModals}
+                                className="text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
                             >
-                              {member.firstName} {member.lastName}
-                            </DropdownMenuItem>
-                          ))}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
+                                <X className="h-5 w-5" />
+                            </Button>
+                        </div>
 
-                  <div className="bg-blue-900/20 border border-blue-700/50 rounded-lg p-3">
-                    <div className="flex items-start gap-2">
-                      <Info className="h-4 w-4 text-blue-400 flex-shrink-0 mt-0.5" />
-                      <p className="text-xs text-blue-300">
-                        Update all roles for this date in one go. Leave any role empty to remove that assignment.
-                      </p>
-                    </div>
-                  </div>
+                        {/* View Mode */}
+                        {!isEditMode && (
+                            <div className="space-y-4">
+                                {filteredTeams.map((team) => {
+                                    const selectedDateAssignment = team.schedule.find(s => s.date === formatDateKey(selectedDate))?.assignment;
 
-                  <div className="flex gap-2">
-                    <Button
-                      onClick={() => setIsEditMode(false)}
-                      variant="outline"
-                      className="flex-1 border-slate-600 text-white hover:bg-slate-700"
-                    >
-                      Cancel
-                    </Button>
-                    <Button 
-                      onClick={handleUpdateFromModal}
-                      disabled={!editData.primaryUser && !editData.backupUser && editData.escalationUsers.length === 0}
-                      className="flex-1 bg-gradient-to-r from-purple-500 to-blue-600 hover:from-purple-600 hover:to-blue-700 disabled:opacity-50"
-                    >
-                      <CheckCircle className="h-4 w-4 mr-2" />
-                      Save All Changes
-                    </Button>
-                  </div>
+                                    return (
+                                        <div key={team.teamId} className="border border-slate-200 dark:border-slate-700 rounded-lg p-4 bg-slate-50 dark:bg-slate-900/30">
+                                            <div className="flex items-center justify-between mb-3">
+                                                <h4 className="font-semibold text-slate-900 dark:text-white">{team.teamName}</h4>
+                                                {selectedTeam === 'my-team' && (
+                                                    <Button
+                                                        size="sm"
+                                                        onClick={() => openEditModal(team, selectedDateAssignment)}
+                                                        className="bg-blue-600 hover:bg-blue-700 text-white"
+                                                    >
+                                                        <Edit2 className="h-3 w-3 mr-1" />
+                                                        Edit
+                                                    </Button>
+                                                )}
+                                            </div>
+
+                                            {selectedDateAssignment ? (
+                                                <div className="space-y-3">
+                                                    {/* Primary */}
+                                                    {selectedDateAssignment.primary && (
+                                                        <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3">
+                                                            <Badge className="bg-green-500 text-white mb-2">Primary</Badge>
+                                                            <div className="flex items-center gap-3">
+                                                                <Avatar className="h-10 w-10 border-2 border-green-500">
+                                                                    <AvatarImage src={selectedDateAssignment.primary.avatarUrl} />
+                                                                    <AvatarFallback className="bg-green-500 text-white text-xs">
+                                                                        {selectedDateAssignment.primary.firstName[0]}{selectedDateAssignment.primary.lastName[0]}
+                                                                    </AvatarFallback>
+                                                                </Avatar>
+                                                                <div>
+                                                                    <p className="font-medium text-slate-900 dark:text-white text-sm">
+                                                                        {selectedDateAssignment.primary.firstName} {selectedDateAssignment.primary.lastName}
+                                                                    </p>
+                                                                    <p className="text-xs text-slate-600 dark:text-slate-400">
+                                                                        {selectedDateAssignment.primary.email}
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Backup */}
+                                                    {selectedDateAssignment.backup && (
+                                                        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3">
+                                                            <Badge className="bg-yellow-500 text-white mb-2">Backup</Badge>
+                                                            <div className="flex items-center gap-3">
+                                                                <Avatar className="h-10 w-10 border-2 border-yellow-500">
+                                                                    <AvatarImage src={selectedDateAssignment.backup.avatarUrl} />
+                                                                    <AvatarFallback className="bg-yellow-500 text-white text-xs">
+                                                                        {selectedDateAssignment.backup.firstName[0]}{selectedDateAssignment.backup.lastName[0]}
+                                                                    </AvatarFallback>
+                                                                </Avatar>
+                                                                <div>
+                                                                    <p className="font-medium text-slate-900 dark:text-white text-sm">
+                                                                        {selectedDateAssignment.backup.firstName} {selectedDateAssignment.backup.lastName}
+                                                                    </p>
+                                                                    <p className="text-xs text-slate-600 dark:text-slate-400">
+                                                                        {selectedDateAssignment.backup.email}
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Escalation */}
+                                                    {selectedDateAssignment.escalation && selectedDateAssignment.escalation.length > 0 && (
+                                                        <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-3">
+                                                            <Badge className="bg-orange-500 text-white mb-2">Escalation</Badge>
+                                                            <div className="space-y-2">
+                                                                {selectedDateAssignment.escalation.map((person, idx) => (
+                                                                    <div key={idx} className="flex items-center gap-3">
+                                                                        <Avatar className="h-8 w-8 border-2 border-orange-500">
+                                                                            <AvatarImage src={person.avatarUrl} />
+                                                                            <AvatarFallback className="bg-orange-500 text-white text-xs">
+                                                                                {person.firstName[0]}{person.lastName[0]}
+                                                                            </AvatarFallback>
+                                                                        </Avatar>
+                                                                        <div>
+                                                                            <p className="font-medium text-slate-900 dark:text-white text-sm">
+                                                                                {person.firstName} {person.lastName}
+                                                                            </p>
+                                                                            <p className="text-xs text-slate-600 dark:text-slate-400">
+                                                                                {person.email}
+                                                                            </p>
+                                                                        </div>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <div className="text-center py-6">
+                                                    <p className="text-sm text-slate-600 dark:text-slate-400">No schedule set</p>
+                                                    {selectedTeam === 'my-team' && (
+                                                        <Button
+                                                            size="sm"
+                                                            onClick={() => openEditModal(team, null)}
+                                                            className="bg-blue-600 hover:bg-blue-700 text-white mt-3"
+                                                        >
+                                                            <Plus className="h-3 w-3 mr-1" />
+                                                            Add
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+
+                        {/* Edit Mode */}
+                        {isEditMode && selectedTeamForEdit && (
+                            <div className="space-y-4">
+                                <div className="mb-4">
+                                    <p className="text-sm text-slate-600 dark:text-slate-400">
+                                        Editing: <span className="font-semibold text-slate-900 dark:text-white">{selectedTeamForEdit.teamName}</span>
+                                    </p>
+                                </div>
+
+                                {/* Primary */}
+                                <div className="space-y-2">
+                                    <Label className="text-slate-900 dark:text-white flex items-center gap-2">
+                                        <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                                        Primary On-Call
+                                    </Label>
+                                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                                        {getUsersByRole(selectedTeamForEdit.teamId, 'primary').map(member => {
+                                            const isSelected = editData.primaryUser === member.id;
+                                            return (
+                                                <div
+                                                    key={member.id}
+                                                    onClick={() => {
+                                                        // Toggle selection - allow uncheck
+                                                        setEditData({
+                                                            ...editData,
+                                                            primaryUser: isSelected ? '' : member.id
+                                                        });
+                                                    }}
+                                                    className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer border-2 transition-all ${
+                                                        isSelected
+                                                            ? 'bg-green-50 dark:bg-green-900/30 border-green-500'
+                                                            : 'bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-700 hover:border-green-300'
+                                                    }`}
+                                                >
+                                                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
+                                                        isSelected ? 'bg-green-500 border-green-500' : 'border-slate-300 dark:border-slate-600'
+                                                    }`}>
+                                                        {isSelected && <CheckCircle className="h-4 w-4 text-white" />}
+                                                    </div>
+                                                    <Avatar className="h-8 w-8">
+                                                        <AvatarImage src={member.avatarUrl} />
+                                                        <AvatarFallback className="text-xs bg-green-500 text-white">
+                                                            {member.firstName[0]}{member.lastName[0]}
+                                                        </AvatarFallback>
+                                                    </Avatar>
+                                                    <div className="flex-1">
+                                                        <p className="font-medium text-slate-900 dark:text-white text-sm">
+                                                            {member.firstName} {member.lastName}
+                                                        </p>
+                                                        <p className="text-xs text-slate-600 dark:text-slate-400">{member.email}</p>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                        {getUsersByRole(selectedTeamForEdit.teamId, 'primary').length === 0 && (
+                                            <p className="text-sm text-slate-500 text-center py-4">No primary users available</p>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Backup */}
+                                <div className="space-y-2">
+                                    <Label className="text-slate-900 dark:text-white flex items-center gap-2">
+                                        <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+                                        Backup On-Call
+                                    </Label>
+                                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                                        {getUsersByRole(selectedTeamForEdit.teamId, 'backup').map(member => {
+                                            const isSelected = editData.backupUser === member.id;
+                                            return (
+                                                <div
+                                                    key={member.id}
+                                                    onClick={() => {
+                                                        // Toggle selection - allow uncheck
+                                                        setEditData({
+                                                            ...editData,
+                                                            backupUser: isSelected ? '' : member.id
+                                                        });
+                                                    }}
+                                                    className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer border-2 transition-all ${
+                                                        isSelected
+                                                            ? 'bg-yellow-50 dark:bg-yellow-900/30 border-yellow-500'
+                                                            : 'bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-700 hover:border-yellow-300'
+                                                    }`}
+                                                >
+                                                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
+                                                        isSelected ? 'bg-yellow-500 border-yellow-500' : 'border-slate-300 dark:border-slate-600'
+                                                    }`}>
+                                                        {isSelected && <CheckCircle className="h-4 w-4 text-white" />}
+                                                    </div>
+                                                    <Avatar className="h-8 w-8">
+                                                        <AvatarImage src={member.avatarUrl} />
+                                                        <AvatarFallback className="text-xs bg-yellow-500 text-white">
+                                                            {member.firstName[0]}{member.lastName[0]}
+                                                        </AvatarFallback>
+                                                    </Avatar>
+                                                    <div className="flex-1">
+                                                        <p className="font-medium text-slate-900 dark:text-white text-sm">
+                                                            {member.firstName} {member.lastName}
+                                                        </p>
+                                                        <p className="text-xs text-slate-600 dark:text-slate-400">{member.email}</p>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                        {getUsersByRole(selectedTeamForEdit.teamId, 'backup').length === 0 && (
+                                            <p className="text-sm text-slate-500 text-center py-4">No backup users available</p>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Escalation */}
+                                <div className="space-y-2">
+                                    <Label className="text-slate-900 dark:text-white flex items-center gap-2">
+                                        <div className="w-3 h-3 rounded-full bg-orange-500"></div>
+                                        Escalation Contacts
+                                    </Label>
+                                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                                        {getUsersByRole(selectedTeamForEdit.teamId, 'escalation').map(member => {
+                                            const isSelected = editData.escalationUsers.includes(member.id);
+                                            return (
+                                                <div
+                                                    key={member.id}
+                                                    onClick={() => {
+                                                        if (isSelected) {
+                                                            setEditData({
+                                                                ...editData,
+                                                                escalationUsers: editData.escalationUsers.filter(id => id !== member.id)
+                                                            });
+                                                        } else {
+                                                            setEditData({
+                                                                ...editData,
+                                                                escalationUsers: [...editData.escalationUsers, member.id]
+                                                            });
+                                                        }
+                                                    }}
+                                                    className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer border-2 transition-all ${
+                                                        isSelected
+                                                            ? 'bg-orange-50 dark:bg-orange-900/30 border-orange-500'
+                                                            : 'bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-700 hover:border-orange-300'
+                                                    }`}
+                                                >
+                                                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
+                                                        isSelected ? 'bg-orange-500 border-orange-500' : 'border-slate-300 dark:border-slate-600'
+                                                    }`}>
+                                                        {isSelected && <CheckCircle className="h-4 w-4 text-white" />}
+                                                    </div>
+                                                    <Avatar className="h-8 w-8">
+                                                        <AvatarImage src={member.avatarUrl} />
+                                                        <AvatarFallback className="text-xs bg-orange-500 text-white">
+                                                            {member.firstName[0]}{member.lastName[0]}
+                                                        </AvatarFallback>
+                                                    </Avatar>
+                                                    <div className="flex-1">
+                                                        <p className="font-medium text-slate-900 dark:text-white text-sm">
+                                                            {member.firstName} {member.lastName}
+                                                        </p>
+                                                        <p className="text-xs text-slate-600 dark:text-slate-400">{member.email}</p>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                        {getUsersByRole(selectedTeamForEdit.teamId, 'escalation').length === 0 && (
+                                            <p className="text-sm text-slate-500 text-center py-4">No escalation contacts available</p>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Action Buttons */}
+                                <div className="flex gap-3 mt-6">
+                                    <Button
+                                        onClick={() => setIsEditMode(false)}
+                                        variant="outline"
+                                        className="flex-1 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
+                                    >
+                                        Cancel
+                                    </Button>
+                                    <Button
+                                        onClick={handleSaveSchedule}
+                                        className="flex-1 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white"
+                                    >
+                                        <CheckCircle className="mr-2 h-4 w-4" />
+                                        {!editData.primaryUser && !editData.backupUser && editData.escalationUsers.length === 0
+                                            ? 'Clear Schedule'
+                                            : 'Save Schedule'}
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
+                    </motion.div>
                 </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Success Modal */}
-        <AnimatePresence>
-          {isSuccessModalOpen && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-              onClick={() => setIsSuccessModalOpen(false)}
-            >
-              <motion.div
-                initial={{ scale: 0.9, y: 20 }}
-                animate={{ scale: 1, y: 0 }}
-                exit={{ scale: 0.9, y: 20 }}
-                className="bg-gradient-to-br from-green-800 to-green-900 rounded-2xl p-6 border border-green-700 max-w-md w-full"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="flex flex-col items-center text-center">
-                  <CheckCircle className="h-16 w-16 text-green-400 mb-4" />
-                  <h3 className="text-xl font-bold text-white mb-2">Success!</h3>
-                  <p className="text-green-200 mb-6">{modalMessage}</p>
-                  <Button
-                    onClick={() => setIsSuccessModalOpen(false)}
-                    className="bg-green-600 hover:bg-green-700"
-                  >
-                    Close
-                  </Button>
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Error Modal */}
-        <AnimatePresence>
-          {isErrorModalOpen && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-              onClick={() => setIsErrorModalOpen(false)}
-            >
-              <motion.div
-                initial={{ scale: 0.9, y: 20 }}
-                animate={{ scale: 1, y: 0 }}
-                exit={{ scale: 0.9, y: 20 }}
-                className="bg-gradient-to-br from-red-800 to-red-900 rounded-2xl p-6 border border-red-700 max-w-md w-full"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="flex flex-col items-center text-center">
-                  <AlertCircle className="h-16 w-16 text-red-400 mb-4" />
-                  <h3 className="text-xl font-bold text-white mb-2">Error</h3>
-                  <p className="text-red-200 mb-6">{modalMessage}</p>
-                  <Button
-                    onClick={() => setIsErrorModalOpen(false)}
-                    className="bg-red-600 hover:bg-red-700"
-                  >
-                    Close
-                  </Button>
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-    </div>
-  );
+            )}
+        </div>
+    );
 }
 
 export default OnCallPage;

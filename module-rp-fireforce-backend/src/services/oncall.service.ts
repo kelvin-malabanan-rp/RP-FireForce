@@ -15,7 +15,7 @@ export class OnCallService {
 	private isOnCallToday(datesJson: string): boolean {
 		try {
 			const dates = JSON.parse(datesJson) as string[];
-			const today = new Date().toISOString().split('T')[0]; // Get YYYY-MM-DD
+			const today = new Date().toISOString().split('T')[0];
 			return dates.includes(today);
 		} catch (error) {
 			console.error('[oncall] Error parsing dates JSON:', error);
@@ -27,7 +27,7 @@ export class OnCallService {
 	private isOnCallOnDate(datesJson: string, targetDate: string): boolean {
 		try {
 			const dates = JSON.parse(datesJson) as string[];
-			const dateOnly = targetDate.split('T')[0]; // Get YYYY-MM-DD
+			const dateOnly = targetDate.split('T')[0];
 			return dates.includes(dateOnly);
 		} catch (error) {
 			console.error('[oncall] Error parsing dates JSON:', error);
@@ -35,9 +35,6 @@ export class OnCallService {
 		}
 	}
 
-	// services/oncall.service.ts - KEY METHODS TO UPDATE
-
-// ✅ 1. Update getCurrentOnCallByTeamId to return array format
 	async getCurrentOnCallByTeamId(teamId: string): Promise<{
 		primary: any[];
 		backup: any[];
@@ -50,17 +47,20 @@ export class OnCallService {
 			}
 
 			const sql = `
-				SELECT
-					oa.id, oa.schedule_id, oa.team_id, oa.user_id, oa.role,
-					oa.dates,
-					u.email,
-					u.first_name || ' ' || u.last_name as fullname,
-					t.name as team_name,
-					t.timezone,
-					pt.id as push_token_id,
-					pt.token as push_token,
-					pt.fcm_token as fcm_token,
-					pt.device_type as device_type
+				SELECT oa.id,
+					   oa.schedule_id,
+					   oa.team_id,
+					   oa.user_id,
+					   oa.role,
+					   oa.dates,
+					   u.email,
+					   u.first_name || ' ' || u.last_name as fullname,
+					   t.name                             as team_name,
+					   t.timezone,
+					   pt.id                              as push_token_id,
+					   pt.token                           as push_token,
+					   pt.fcm_token                       as fcm_token,
+					   pt.device_type                     as device_type
 				FROM oncall_assignments oa
 						 JOIN users u ON oa.user_id = u.id
 						 JOIN oncall_teams t ON oa.team_id = t.id
@@ -68,15 +68,14 @@ export class OnCallService {
 						 LEFT JOIN push_tokens pt ON pt.id = ptua.push_token_id AND pt.is_active = 1
 				WHERE oa.is_active = 1
 				  AND oa.team_id = ?
-				ORDER BY
-					CASE oa.role
-						WHEN 'primary' THEN 1
-						WHEN 'backup' THEN 2
-						WHEN 'escalation' THEN 3
-						END
+				ORDER BY CASE oa.role
+							 WHEN 'primary' THEN 1
+							 WHEN 'backup' THEN 2
+							 WHEN 'escalation' THEN 3
+							 END
 			`;
 
-			const { results } = await this.dbService.db
+			const {results} = await this.dbService.db
 				.prepare(sql)
 				.bind(teamId)
 				.all();
@@ -86,7 +85,6 @@ export class OnCallService {
 				return null;
 			}
 
-			// ✅ Filter by checking if today is in their dates array
 			const activeToday = (results as any[]).filter(row =>
 				this.isOnCallToday(row.dates)
 			);
@@ -96,7 +94,6 @@ export class OnCallService {
 				return null;
 			}
 
-			// ✅ Group by role (same format as getAllCurrentOnCall)
 			const groupedByRole = {
 				primary: [] as any[],
 				backup: [] as any[],
@@ -140,13 +137,12 @@ export class OnCallService {
 		}
 	}
 
-// ✅ 2. FIXED escalateIncident - now uses numeric levels
 	async escalateIncident(args: {
 		teamId: string;
 		incidentId: string;
 		reason: string;
 		priority: 'low' | 'medium' | 'high' | 'critical';
-		currentLevel: number;  // ✅ Use numeric level instead of userRole
+		currentLevel: number;
 	}) {
 		try {
 			const now = new Date().toISOString();
@@ -154,10 +150,8 @@ export class OnCallService {
 			console.log(`[oncall] Escalating incident ${args.incidentId} for team ${args.teamId}`);
 			console.log(`[oncall] Current level: ${args.currentLevel}`);
 
-			// ✅ Determine next level (numeric)
 			const nextLevel = args.currentLevel + 1;
 
-			// Map level to role name
 			const levelToRole: Record<number, string> = {
 				1: 'backup',
 				2: 'escalation'
@@ -172,14 +166,12 @@ export class OnCallService {
 
 			console.log(`[oncall] Escalating to level ${nextLevel} (${targetRole})`);
 
-			// Find users with the target role who are on-call today
 			const currentOnCall = await this.getCurrentOnCallByTeamId(args.teamId);
 
 			if (!currentOnCall) {
 				throw new Error(`No on-call schedule found for team ${args.teamId}`);
 			}
 
-			// Get users for the target role
 			let targetUsers: any[] = [];
 
 			if (nextLevel === 1) {
@@ -195,22 +187,21 @@ export class OnCallService {
 
 			console.log(`[oncall] Found ${targetUsers.length} ${targetRole} user(s)`);
 
-			// Record escalation for each user
 			const notifiedUsers = [];
 
 			for (const user of targetUsers) {
 				const escId = crypto.randomUUID();
 				await this.dbService.db.prepare(`
-                INSERT INTO incident_escalations
-                (id, incident_id, team_id, escalated_to_user_id, escalation_level,
-                 reason, priority, status, triggered_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', CURRENT_TIMESTAMP)
-            `).bind(
+					INSERT INTO incident_escalations
+					(id, incident_id, team_id, escalated_to_user_id, escalation_level,
+					 reason, priority, status, triggered_at)
+					VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', CURRENT_TIMESTAMP)
+				`).bind(
 					escId,
 					args.incidentId,
 					args.teamId,
 					user.userId,
-					nextLevel,  // ✅ Use numeric level (1 or 2)
+					nextLevel,
 					args.reason,
 					args.priority
 				).run();
@@ -225,18 +216,17 @@ export class OnCallService {
 				});
 			}
 
-			// ✅ Update incident with NUMERIC escalation level
 			await this.dbService.db.prepare(`
-            UPDATE incidents
-            SET escalation_level = ?,
-                priority = CASE
-                    WHEN ? = 'critical' THEN 'critical'
-                    WHEN priority = 'critical' THEN 'critical'
-                    ELSE ?
-                END,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-        `).bind(nextLevel, args.priority, args.priority, args.incidentId).run();
+				UPDATE incidents
+				SET escalation_level = ?,
+					priority         = CASE
+										   WHEN ? = 'critical' THEN 'critical'
+										   WHEN priority = 'critical' THEN 'critical'
+										   ELSE ?
+						END,
+					updated_at       = CURRENT_TIMESTAMP
+				WHERE id = ?
+			`).bind(nextLevel, args.priority, args.priority, args.incidentId).run();
 
 			const result = {
 				success: true,
@@ -261,41 +251,39 @@ export class OnCallService {
 		}
 	}
 
-	// ✅ UPDATED: Check against dates array
 	async getAllCurrentOnCall(): Promise<any> {
 		try {
 			const sql = `
-				SELECT
-					oa.id, oa.schedule_id, oa.team_id,
-					oa.user_id,
-					oa.role,
-					oa.dates,
-					u.email,
-					u.first_name || ' ' || u.last_name as fullname,
-					t.name as team_name,
-					t.timezone,
-					pt.id as push_token_id,
-					pt.token as push_token,
-					pt.fcm_token as fcm_token,
-					pt.device_type as device_type
+				SELECT oa.id,
+					   oa.schedule_id,
+					   oa.team_id,
+					   oa.user_id,
+					   oa.role,
+					   oa.dates,
+					   u.email,
+					   u.first_name || ' ' || u.last_name as fullname,
+					   t.name                             as team_name,
+					   t.timezone,
+					   pt.id                              as push_token_id,
+					   pt.token                           as push_token,
+					   pt.fcm_token                       as fcm_token,
+					   pt.device_type                     as device_type
 				FROM oncall_assignments oa
 						 JOIN users u ON oa.user_id = u.id
 						 JOIN oncall_teams t ON oa.team_id = t.id
 						 LEFT JOIN push_token_user_assoc ptua ON ptua.user_id = u.id
 						 LEFT JOIN push_tokens pt ON pt.id = ptua.push_token_id AND pt.is_active = 1
 				WHERE oa.is_active = 1
-				ORDER BY
-					CASE oa.role
-						WHEN 'primary' THEN 1
-						WHEN 'backup' THEN 2
-						WHEN 'escalation' THEN 3
-						END,
-					t.name
+				ORDER BY CASE oa.role
+							 WHEN 'primary' THEN 1
+							 WHEN 'backup' THEN 2
+							 WHEN 'escalation' THEN 3
+							 END,
+						 t.name
 			`;
 
-			const { results } = await this.dbService.db.prepare(sql).all();
+			const {results} = await this.dbService.db.prepare(sql).all();
 
-			// ✅ Filter by checking if today is in their dates array
 			const activeToday = (results as any[]).filter(row =>
 				this.isOnCallToday(row.dates)
 			);
@@ -351,39 +339,38 @@ export class OnCallService {
 		}
 	}
 
-	// ✅ NEW: Get all on-call members EXCEPT those active today
 	async getAllOnCallUsers(): Promise<any> {
 		try {
 			const sql = `
-				SELECT
-					oa.id, oa.schedule_id, oa.team_id,
-					oa.user_id,
-					oa.role,
-					oa.dates,
-					u.email,
-					u.first_name || ' ' || u.last_name as fullname,
-					t.name as team_name,
-					t.timezone,
-					pt.id as push_token_id,
-					pt.token as push_token,
-					pt.fcm_token as fcm_token,
-					pt.device_type as device_type
+				SELECT oa.id,
+					   oa.schedule_id,
+					   oa.team_id,
+					   oa.user_id,
+					   oa.role,
+					   oa.dates,
+					   u.email,
+					   u.first_name || ' ' || u.last_name as fullname,
+					   t.name                             as team_name,
+					   t.timezone,
+					   pt.id                              as push_token_id,
+					   pt.token                           as push_token,
+					   pt.fcm_token                       as fcm_token,
+					   pt.device_type                     as device_type
 				FROM oncall_assignments oa
 						 JOIN users u ON oa.user_id = u.id
 						 JOIN oncall_teams t ON oa.team_id = t.id
 						 LEFT JOIN push_token_user_assoc ptua ON ptua.user_id = u.id
 						 LEFT JOIN push_tokens pt ON pt.id = ptua.push_token_id AND pt.is_active = 1
 				WHERE oa.is_active = 1
-				ORDER BY
-					CASE oa.role
-						WHEN 'primary' THEN 1
-						WHEN 'backup' THEN 2
-						WHEN 'escalation' THEN 3
-						END,
-					t.name
+				ORDER BY CASE oa.role
+							 WHEN 'primary' THEN 1
+							 WHEN 'backup' THEN 2
+							 WHEN 'escalation' THEN 3
+							 END,
+						 t.name
 			`;
 
-			const { results } = await this.dbService.db.prepare(sql).all();
+			const {results} = await this.dbService.db.prepare(sql).all();
 
 			const groupedByRole = {
 				primary: [] as any[],
@@ -427,26 +414,25 @@ export class OnCallService {
 			const placeholders = emails.map(() => '?').join(', ');
 
 			const sql = `
-				SELECT
-					u.id,
-					u.email,
-					u.first_name,
-					u.last_name,
-					u.first_name || ' ' || u.last_name as fullname,
-					u.role,
-					pt.id as push_token_id,
-					pt.token as push_token,
-					pt.fcm_token as fcm_token,
-					pt.device_type as device_type
+				SELECT u.id,
+					   u.email,
+					   u.first_name,
+					   u.last_name,
+					   u.first_name || ' ' || u.last_name as fullname,
+					   u.role,
+					   pt.id                              as push_token_id,
+					   pt.token                           as push_token,
+					   pt.fcm_token                       as fcm_token,
+					   pt.device_type                     as device_type
 				FROM users u
-				LEFT JOIN push_token_user_assoc ptua ON ptua.user_id = u.id
-				LEFT JOIN push_tokens pt ON pt.id = ptua.push_token_id AND pt.is_active = 1
+						 LEFT JOIN push_token_user_assoc ptua ON ptua.user_id = u.id
+						 LEFT JOIN push_tokens pt ON pt.id = ptua.push_token_id AND pt.is_active = 1
 				WHERE u.email IN (${placeholders})
 				  AND u.is_active = 1
 				ORDER BY u.first_name, u.last_name
 			`;
 
-			const { results } = await this.dbService.db.prepare(sql).bind(...emails).all();
+			const {results} = await this.dbService.db.prepare(sql).bind(...emails).all();
 
 			const mappedResults = (results || []).map((row: any) => ({
 				id: row.id,
@@ -483,17 +469,15 @@ export class OnCallService {
 			console.log('[oncall] Fetching team for user:', userId);
 
 			const query = `
-				SELECT
-					ot.id,
-					ot.name,
-					ot.description,
-					ot.timezone
+				SELECT ot.id,
+					   ot.name,
+					   ot.description,
+					   ot.timezone
 				FROM oncall_teams ot
-				INNER JOIN oncall_team_members otm ON otm.team_id = ot.id
+						 INNER JOIN oncall_team_members otm ON otm.team_id = ot.id
 				WHERE otm.user_id = ?
 				  AND otm.is_active = 1
-				  AND ot.is_active = 1
-				LIMIT 1
+				  AND ot.is_active = 1 LIMIT 1
 			`;
 
 			const result = await this.dbService.db.prepare(query).bind(userId).first();
@@ -523,8 +507,8 @@ export class OnCallService {
 		const assignment: CurrentOnCall = {
 			scheduleId: rows[0].schedule_id,
 			teamId: rows[0].team_id,
-			startTime: new Date(),  // Current time
-			endTime: new Date(Date.now() + 24 * 60 * 60 * 1000), // +24 hours
+			startTime: new Date(),
+			endTime: new Date(Date.now() + 24 * 60 * 60 * 1000),
 			escalation: []
 		};
 
@@ -548,11 +532,14 @@ export class OnCallService {
 		let sql = `
 			SELECT s.*, t.timezone
 			FROM oncall_schedules s
-			JOIN oncall_teams t ON s.team_id = t.id
+					 JOIN oncall_teams t ON s.team_id = t.id
 			WHERE s.is_active = 1
 		`;
 		const params: any[] = [];
-		if (teamId) { sql += ' AND s.team_id = ?'; params.push(teamId); }
+		if (teamId) {
+			sql += ' AND s.team_id = ?';
+			params.push(teamId);
+		}
 
 		const schedules = await this.dbService.db.prepare(sql).bind(...params).all();
 		if (!schedules.results || schedules.results.length === 0) return null;
@@ -591,14 +578,20 @@ export class OnCallService {
 
 	private async getTeamMembers(teamId: string): Promise<OnCallUser[]> {
 		const sql = `
-			SELECT u.id, u.email, u.first_name, u.last_name, u.phone_number,
-				   tm.role, tm.order_index
+			SELECT u.id,
+				   u.email,
+				   u.first_name,
+				   u.last_name,
+				   u.phone_number,
+				   tm.role,
+				   tm.order_index
 			FROM oncall_team_members tm
-			JOIN users u ON tm.user_id = u.id
-			WHERE tm.team_id = ? AND tm.is_active = 1
+					 JOIN users u ON tm.user_id = u.id
+			WHERE tm.team_id = ?
+			  AND tm.is_active = 1
 			ORDER BY tm.order_index, u.first_name
 		`;
-		const { results } = await this.dbService.db.prepare(sql).bind(teamId).all();
+		const {results} = await this.dbService.db.prepare(sql).bind(teamId).all();
 		return (results as any[]).map(r => ({
 			id: r.id,
 			email: r.email,
@@ -609,12 +602,12 @@ export class OnCallService {
 		}));
 	}
 
-	// ✅ UPDATED: Save assignment with dates array for today
 	private async saveAssignment(a: CurrentOnCall): Promise<void> {
 		const today = new Date().toISOString().split('T')[0];
 
 		const sql = `
-			INSERT OR REPLACE INTO oncall_assignments
+			INSERT
+			OR REPLACE INTO oncall_assignments
 			(id, schedule_id, user_id, team_id, dates, role, is_active)
 			VALUES (?, ?, ?, ?, ?, ?, ?)
 		`;
@@ -624,7 +617,7 @@ export class OnCallService {
 			await this.dbService.db.prepare(sql).bind(
 				assignmentId,
 				a.scheduleId, a.primary.id, a.teamId,
-				JSON.stringify([today]), // Single date for today
+				JSON.stringify([today]),
 				'primary', 1
 			).run();
 		}
@@ -634,22 +627,21 @@ export class OnCallService {
 			await this.dbService.db.prepare(sql).bind(
 				assignmentId,
 				a.scheduleId, a.backup.id, a.teamId,
-				JSON.stringify([today]), // Single date for today
+				JSON.stringify([today]),
 				'backup', 1
 			).run();
 		}
 	}
 
-	// ✅ NEW: Create assignment with array of dates
 	async createAssignmentWithDates(params: {
 		scheduleId: string;
 		teamId: string;
 		userId: string;
 		role: 'primary' | 'backup' | 'escalation';
-		dates: string[];  // Array of date strings: ["2025-10-15","2025-10-16"]
+		dates: string[];
 	}): Promise<string> {
 		try {
-			const { scheduleId, teamId, userId, role, dates } = params;
+			const {scheduleId, teamId, userId, role, dates} = params;
 
 			if (!dates || dates.length === 0) {
 				throw new Error('At least one date is required');
@@ -658,7 +650,7 @@ export class OnCallService {
 			const assignmentId = crypto.randomUUID();
 			await this.dbService.db?.prepare(`
 				INSERT INTO oncall_assignments
-				(id, schedule_id, user_id, team_id, dates, role, is_active, created_at)
+					(id, schedule_id, user_id, team_id, dates, role, is_active, created_at)
 				VALUES (?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
 			`).bind(
 				assignmentId,
@@ -677,17 +669,17 @@ export class OnCallService {
 		}
 	}
 
-	// ✅ NEW: Update assignment dates
 	async updateAssignmentDates(params: {
 		assignmentId: string;
 		dates: string[];
 	}): Promise<void> {
 		try {
-			const { assignmentId, dates } = params;
+			const {assignmentId, dates} = params;
 
 			await this.dbService.db?.prepare(`
 				UPDATE oncall_assignments
-				SET dates = ?, updated_at = CURRENT_TIMESTAMP
+				SET dates      = ?,
+					updated_at = CURRENT_TIMESTAMP
 				WHERE id = ?
 			`).bind(
 				JSON.stringify(dates),
@@ -701,7 +693,6 @@ export class OnCallService {
 		}
 	}
 
-	// ✅ NEW: Get dates for an assignment
 	async getAssignmentDates(assignmentId: string): Promise<string[]> {
 		try {
 			const result = await this.dbService.db?.prepare(`
@@ -731,14 +722,13 @@ export class OnCallService {
 			const assignment = await this.getOnCallForDate(teamId, dateStr);
 			out.push({
 				date: dateStr,
-				dayOfWeek: d.toLocaleDateString('en-US',{weekday:'long'}),
+				dayOfWeek: d.toLocaleDateString('en-US', {weekday: 'long'}),
 				assignment
 			});
 		}
 		return out;
 	}
 
-	// ✅ NEW: Get on-call for a specific date
 	private async getOnCallForDate(teamId: string, date: string): Promise<CurrentOnCall | null> {
 		const sql = `
 			SELECT oa.*, u.email, u.first_name, u.last_name, u.phone_number
@@ -748,11 +738,10 @@ export class OnCallService {
 			  AND oa.is_active = 1
 			ORDER BY oa.role
 		`;
-		const { results } = await this.dbService.db.prepare(sql).bind(teamId).all();
+		const {results} = await this.dbService.db.prepare(sql).bind(teamId).all();
 
 		if (!results || results.length === 0) return null;
 
-		// Filter by checking if the specific date is in their dates array
 		const activeOnDate = (results as any[]).filter(row =>
 			this.isOnCallOnDate(row.dates, date)
 		);
@@ -778,11 +767,10 @@ export class OnCallService {
 			  AND oa.is_active = 1
 		`;
 
-		const { results } = await this.dbService.db.prepare(sql).bind(teamId, role).all();
+		const {results} = await this.dbService.db.prepare(sql).bind(teamId, role).all();
 
 		if (!results || results.length === 0) return null;
 
-		// Find first assignment that includes the start date
 		for (const row of results as any[]) {
 			if (this.isOnCallOnDate(row.dates, startDate)) {
 				return {
@@ -831,36 +819,46 @@ export class OnCallService {
 
 	async getEscalationPolicy(teamId: string): Promise<any> {
 		const row = await this.dbService.db
-			.prepare(`SELECT * FROM escalation_policies WHERE team_id = ? AND is_active = 1 ORDER BY created_at DESC LIMIT 1`)
+			.prepare(`SELECT *
+					  FROM escalation_policies
+					  WHERE team_id = ?
+						AND is_active = 1
+					  ORDER BY created_at DESC LIMIT 1`)
 			.bind(teamId)
 			.first();
-		return row ? { ...(row as any), steps: JSON.parse((row as any).steps) } : null;
+		return row ? {...(row as any), steps: JSON.parse((row as any).steps)} : null;
 	}
 
 	async getOnCallTeams(): Promise<OnCallTeam[]> {
 		const sql = `
-			SELECT
-				t.id,
-				t.name,
-				t.timezone,
-				u.id as user_id,
-				u.email,
-				u.first_name,
-				u.last_name,
-				u.phone_number,
-				tm.role,
-				tm.order_index,
-				oa.dates as assignment_dates,
-				oa.schedule_id
+			SELECT t.id,
+				   t.name,
+				   t.timezone,
+				   u.id     as user_id,
+				   u.email,
+				   u.first_name,
+				   u.last_name,
+				   u.phone_number,
+				   tm.role,
+				   tm.order_index,
+				   oa.dates as assignment_dates,
+				   oa.schedule_id
 			FROM oncall_teams t
 					 LEFT JOIN oncall_team_members tm ON t.id = tm.team_id AND tm.is_active = 1
 					 LEFT JOIN users u ON tm.user_id = u.id
 					 LEFT JOIN oncall_assignments oa ON oa.team_id = t.id AND oa.user_id = u.id AND oa.is_active = 1
 			WHERE t.is_active = 1
-			ORDER BY t.name, tm.order_index
+			ORDER BY t.name,
+					 CASE tm.role
+						 WHEN 'primary' THEN 1
+						 WHEN 'backup' THEN 2
+						 WHEN 'escalation' THEN 3
+						 ELSE 4
+						 END,
+					 tm.order_index
 		`;
 
-		const { results } = await this.dbService.db.prepare(sql).all();
+		const {results} = await this.dbService.db.prepare(sql).all();
 
 		const map = new Map<string, OnCallTeam>();
 
@@ -875,7 +873,6 @@ export class OnCallService {
 			}
 
 			if (r.user_id) {
-				// Parse dates from JSON string
 				let dates: string[] = [];
 				if (r.assignment_dates) {
 					try {
@@ -894,7 +891,7 @@ export class OnCallService {
 					phoneNumber: r.phone_number,
 					role: r.role,
 					scheduleId: r.schedule_id,
-					assignedDates: dates  // ✅ Array of dates like ["2025-10-15", "2025-10-16"]
+					assignedDates: dates
 				});
 			}
 		}
@@ -902,33 +899,33 @@ export class OnCallService {
 		return Array.from(map.values());
 	}
 
-	// ✅ NEW: Create schedule with individual dates
 	async createScheduleWithDates(params: {
 		teamId: string;
 		name: string;
 		assignments: Array<{
 			userId: string;
 			role: 'primary' | 'backup' | 'escalation';
-			dates: string[];  // ["2025-10-15","2025-10-16","2025-10-17"]
+			dates: string[];
 		}>;
 	}): Promise<{ scheduleId: string; assignmentCount: number }> {
 		try {
-			const { teamId, name, assignments } = params;
+			const {teamId, name, assignments} = params;
 
-			// Create schedule
 			const scheduleId = crypto.randomUUID();
 			await this.dbService.db?.prepare(`
 				INSERT INTO oncall_schedules
-				(id, team_id, name, rotation_type, rotation_start, rotation_length_hours, is_active, created_at, updated_at)
+				(id, team_id, name, rotation_type, rotation_start, rotation_length_hours, is_active, created_at,
+				 updated_at)
 				VALUES (?, ?, ?, 'manual', CURRENT_TIMESTAMP, 0, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 			`).bind(scheduleId, teamId, name).run();
 
-			// Deactivate other schedules
 			await this.dbService.db?.prepare(`
-				UPDATE oncall_schedules SET is_active = 0 WHERE team_id = ? AND id != ?
+				UPDATE oncall_schedules
+				SET is_active = 0
+				WHERE team_id = ?
+				  AND id != ?
 			`).bind(teamId, scheduleId).run();
 
-			// Create assignments with dates
 			for (const assignment of assignments) {
 				await this.createAssignmentWithDates({
 					scheduleId,
@@ -958,24 +955,38 @@ export class OnCallService {
 			rotationLengthHours: number;
 			rotationStartISO: string;
 		} | null;
-		members: Array<{ userId: string; firstName: string; lastName: string; role: string; orderIndex: number; isActive: boolean }>;
+		members: Array<{
+			userId: string;
+			firstName: string;
+			lastName: string;
+			role: string;
+			orderIndex: number;
+			isActive: boolean
+		}>;
 	}> {
 		const scheduleRow = await this.dbService.db
 			.prepare(
 				`SELECT id, rotation_type, rotation_length_hours, rotation_start
 				 FROM oncall_schedules
-				 WHERE team_id = ? AND is_active = 1
-				 ORDER BY created_at DESC
-				 LIMIT 1`
+				 WHERE team_id = ?
+				   AND is_active = 1
+				 ORDER BY created_at DESC LIMIT 1`
 			)
 			.bind(teamId)
 			.first();
 
-		const { results: memberRows } = await this.dbService.db
+		const {results: memberRows} = await this.dbService.db
 			.prepare(
-				`SELECT
-					 otm.id, otm.team_id, otm.user_id, otm.role, otm.order_index, otm.is_active,
-					 u.username, u.email, u.first_name, u.last_name
+				`SELECT otm.id,
+						otm.team_id,
+						otm.user_id,
+						otm.role,
+						otm.order_index,
+						otm.is_active,
+						u.username,
+						u.email,
+						u.first_name,
+						u.last_name
 				 FROM oncall_team_members otm
 						  LEFT JOIN users u ON otm.user_id = u.id
 				 WHERE otm.team_id = ?
@@ -1012,13 +1023,14 @@ export class OnCallService {
 		rotationStartISO: string;
 		members: Array<{ userId: string; role: string; orderIndex: number; isActive: boolean }>;
 	}): Promise<void> {
-		const { teamId, rotationType, rotationLengthHours, rotationStartISO, members } = args;
+		const {teamId, rotationType, rotationLengthHours, rotationStartISO, members} = args;
 
 		const scheduleId = crypto.randomUUID();
 		await this.dbService.db
 			.prepare(
 				`INSERT INTO oncall_schedules
-				 (id, team_id, name, rotation_type, rotation_start, rotation_length_hours, is_active, created_at, updated_at)
+				 (id, team_id, name, rotation_type, rotation_start, rotation_length_hours, is_active, created_at,
+				  updated_at)
 				 VALUES (?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
 			)
 			.bind(
@@ -1032,12 +1044,17 @@ export class OnCallService {
 			.run();
 
 		await this.dbService.db
-			.prepare(`UPDATE oncall_schedules SET is_active = 0 WHERE team_id = ? AND id != ?`)
+			.prepare(`UPDATE oncall_schedules
+					  SET is_active = 0
+					  WHERE team_id = ?
+						AND id != ?`)
 			.bind(teamId, scheduleId)
 			.run();
 
 		await this.dbService.db
-			.prepare(`DELETE FROM oncall_team_members WHERE team_id = ?`)
+			.prepare(`DELETE
+					  FROM oncall_team_members
+					  WHERE team_id = ?`)
 			.bind(teamId)
 			.run();
 
@@ -1061,14 +1078,19 @@ export class OnCallService {
 		`).bind(id, incidentId, userId, notificationType).run();
 	}
 
-	async getNotifiedUsers(incidentId: string): Promise<Array<{ userId: string; email: string; firstName: string; lastName: string }>> {
+	async getNotifiedUsers(incidentId: string): Promise<Array<{
+		userId: string;
+		email: string;
+		firstName: string;
+		lastName: string
+	}>> {
 		const sql = `
 			SELECT DISTINCT u.id as userId, u.email, u.first_name as firstName, u.last_name as lastName
 			FROM incident_notifications n
 					 JOIN users u ON n.user_id = u.id
 			WHERE n.incident_id = ?
 		`;
-		const { results } = await this.dbService.db.prepare(sql).bind(incidentId).all();
+		const {results} = await this.dbService.db.prepare(sql).bind(incidentId).all();
 		return results as any[];
 	}
 
@@ -1140,7 +1162,8 @@ export class OnCallService {
 		try {
 			await this.dbService.db.prepare(`
 				UPDATE oncall_schedules
-				SET is_active = 0, updated_at = CURRENT_TIMESTAMP
+				SET is_active  = 0,
+					updated_at = CURRENT_TIMESTAMP
 				WHERE id = ?
 			`).bind(scheduleId).run();
 
@@ -1157,12 +1180,14 @@ export class OnCallService {
 	}): Promise<any[]> {
 		try {
 			let sql = `
-				SELECT s.*, t.name as team_name, t.timezone,
+				SELECT s.*,
+					   t.name                as team_name,
+					   t.timezone,
 					   COUNT(DISTINCT tm.id) as member_count
 				FROM oncall_schedules s
 						 JOIN oncall_teams t ON s.team_id = t.id
 						 LEFT JOIN oncall_team_members tm ON tm.team_id = s.team_id
-				WHERE 1=1
+				WHERE 1 = 1
 			`;
 
 			const queryParams: any[] = [];
@@ -1178,7 +1203,7 @@ export class OnCallService {
 
 			sql += ' GROUP BY s.id, t.name, t.timezone ORDER BY s.created_at DESC';
 
-			const { results } = await this.dbService.db.prepare(sql).bind(...queryParams).all();
+			const {results} = await this.dbService.db.prepare(sql).bind(...queryParams).all();
 			return results as any[];
 		} catch (error) {
 			console.error('[oncall] Error getting all schedules:', error);
@@ -1212,91 +1237,241 @@ export class OnCallService {
 		}
 	}
 
-async updateScheduleName(scheduleId: string, name: string): Promise<void> {
-  try {
-    await this.dbService.db.prepare(`
-      UPDATE oncall_schedules
-      SET name = ?
-      WHERE id = ?
-    `).bind(name, scheduleId).run();
+	async updateScheduleName(scheduleId: string, name: string): Promise<void> {
+		try {
+			await this.dbService.db.prepare(`
+				UPDATE oncall_schedules
+				SET name = ?
+				WHERE id = ?
+			`).bind(name, scheduleId).run();
 
-    console.log('[oncall] ✅ Schedule name updated:', scheduleId);
-  } catch (error) {
-    console.error('[oncall] Error updating schedule name:', error);
-    throw error;
-  }
+			console.log('[oncall] ✅ Schedule name updated:', scheduleId);
+		} catch (error) {
+			console.error('[oncall] Error updating schedule name:', error);
+			throw error;
+		}
+	}
+
+	/**
+	 * Clear all assignments for a specific date - WITH DEBUGGING
+	 * Replace this in your services/oncall.service.ts
+	 */
+	async clearAssignmentsForDate(params: {
+		scheduleId: string;
+		teamId: string;
+		date: string;
+	}): Promise<void> {
+		try {
+			const {scheduleId, teamId, date} = params;
+
+			console.log(`[oncall] 🗑️ CLEARING ASSIGNMENTS`);
+			console.log(`[oncall] - Schedule ID: ${scheduleId}`);
+			console.log(`[oncall] - Team ID: ${teamId}`);
+			console.log(`[oncall] - Date to remove: ${date}`);
+
+			// Get all assignments for this schedule
+			const {results} = await this.dbService.db.prepare(`
+				SELECT id, user_id, role, dates, schedule_id, team_id
+				FROM oncall_assignments
+				WHERE schedule_id = ?
+				  AND team_id = ?
+				  AND is_active = 1
+			`).bind(scheduleId, teamId).all();
+
+			console.log(`[oncall] 📋 Found ${results.length} active assignments to check`);
+
+			if (results.length === 0) {
+				console.warn(`[oncall] ⚠️ No active assignments found for schedule ${scheduleId}`);
+
+				// Try without schedule_id filter to see if assignments exist
+				const allResults = await this.dbService.db.prepare(`
+					SELECT id, schedule_id, team_id, dates, is_active
+					FROM oncall_assignments
+					WHERE team_id = ?
+				`).bind(teamId).all();
+
+				console.log(`[oncall] 🔍 Total assignments in team (any schedule): ${allResults.results.length}`);
+				if (allResults.results.length > 0) {
+					console.log(`[oncall] 🔍 Sample assignment:`, allResults.results[0]);
+				}
+				return;
+			}
+
+			let removedCount = 0;
+			let deactivatedCount = 0;
+
+			for (const assignment of results as any[]) {
+				console.log(`[oncall] 📝 Checking assignment ${assignment.id} (${assignment.role})`);
+				console.log(`[oncall]    Current dates JSON: ${assignment.dates}`);
+
+				const currentDates = JSON.parse(assignment.dates || '[]') as string[];
+				console.log(`[oncall]    Parsed dates:`, currentDates);
+				console.log(`[oncall]    Looking for date: ${date}`);
+				console.log(`[oncall]    Date exists: ${currentDates.includes(date)}`);
+
+				if (currentDates.includes(date)) {
+					const updatedDates = currentDates.filter(d => d !== date);
+					console.log(`[oncall]    Dates after removal:`, updatedDates);
+
+					if (updatedDates.length === 0) {
+						// Deactivate if no dates left
+						await this.dbService.db.prepare(`
+							UPDATE oncall_assignments
+							SET is_active = 0
+							WHERE id = ?
+						`).bind(assignment.id).run();
+
+						deactivatedCount++;
+						console.log(`[oncall] ✅ Deactivated assignment ${assignment.id} (no dates remaining)`);
+					} else {
+						// Update with remaining dates
+						await this.dbService.db.prepare(`
+							UPDATE oncall_assignments
+							SET dates = ?
+							WHERE id = ?
+						`).bind(JSON.stringify(updatedDates), assignment.id).run();
+
+						removedCount++;
+						console.log(`[oncall] ✅ Removed date ${date} from assignment ${assignment.id}`);
+					}
+				} else {
+					console.log(`[oncall] ⏭️  Date ${date} not in this assignment, skipping`);
+				}
+			}
+
+			console.log(`[oncall] ✅ SUMMARY: Cleared ${removedCount} assignments, deactivated ${deactivatedCount} assignments`);
+		} catch (error) {
+			console.error('[oncall] ❌ Error clearing assignments for date:', error);
+			throw error;
+		}
+	}
+
+	/**
+	 * FIXED: Update schedule assignments - REPLACES assignments for the specific date
+	 * Replace this method in services/oncall.service.ts
+	 */
+	async updateScheduleAssignments(params: {
+		scheduleId: string;
+		teamId: string;
+		assignments: Array<{
+			userId: string;
+			role: 'primary' | 'backup' | 'escalation';
+			dates: string[];
+		}>;
+		clearDate?: string;
+	}): Promise<void> {
+		try {
+			const {scheduleId, teamId, assignments, clearDate} = params;
+
+			// Get the date we're working with
+			const targetDate = clearDate || (assignments.length > 0 ? assignments[0].dates[0] : null);
+
+			if (!targetDate) {
+				throw new Error('No date specified for update');
+			}
+
+			console.log(`[oncall] 🔄 Updating schedule for date: ${targetDate}`);
+			console.log(`[oncall] 📥 Received ${assignments.length} assignment(s)`);
+
+			// STEP 1: Remove this specific date from ALL existing assignments for this schedule
+			console.log(`[oncall] 🗑️ STEP 1: Removing date ${targetDate} from all existing assignments...`);
+
+			const {results: existingAssignments} = await this.dbService.db.prepare(`
+				SELECT id, user_id, role, dates
+				FROM oncall_assignments
+				WHERE schedule_id = ?
+				  AND team_id = ?
+				  AND is_active = 1
+			`).bind(scheduleId, teamId).all();
+
+			console.log(`[oncall] 📋 Found ${existingAssignments.length} existing assignments to process`);
+
+			for (const assignment of existingAssignments as any[]) {
+				const currentDates = JSON.parse(assignment.dates || '[]') as string[];
+
+				if (currentDates.includes(targetDate)) {
+					const updatedDates = currentDates.filter(d => d !== targetDate);
+
+					if (updatedDates.length === 0) {
+						// Deactivate if no dates left
+						await this.dbService.db.prepare(`
+							UPDATE oncall_assignments
+							SET is_active = 0
+							WHERE id = ?
+						`).bind(assignment.id).run();
+						console.log(`[oncall]    ✅ Deactivated ${assignment.role} assignment ${assignment.id} (no dates left)`);
+					} else {
+						// Update with remaining dates
+						await this.dbService.db.prepare(`
+							UPDATE oncall_assignments
+							SET dates = ?
+							WHERE id = ?
+						`).bind(JSON.stringify(updatedDates), assignment.id).run();
+						console.log(`[oncall]    ✅ Removed date from ${assignment.role} assignment ${assignment.id}`);
+					}
+				}
+			}
+
+			// STEP 2: If assignments were provided, add them back
+			if (assignments.length > 0) {
+				console.log(`[oncall] ➕ STEP 2: Adding new assignments for date ${targetDate}...`);
+
+				for (const assignment of assignments) {
+					const {userId, role, dates} = assignment;
+
+					// Check if this user/role already has an active assignment
+					const existing = await this.dbService.db.prepare(`
+						SELECT id, dates
+						FROM oncall_assignments
+						WHERE schedule_id = ?
+						  AND user_id = ?
+						  AND role = ?
+						  AND team_id = ?
+						  AND is_active = 1
+					`).bind(scheduleId, userId, role, teamId).first();
+
+					if (existing) {
+						// Add this date to their existing dates
+						const existingDates = JSON.parse((existing as any).dates || '[]') as string[];
+						const mergedDates = Array.from(new Set([...existingDates, ...dates]));
+
+						await this.dbService.db.prepare(`
+							UPDATE oncall_assignments
+							SET dates = ?
+							WHERE id = ?
+						`).bind(
+							JSON.stringify(mergedDates),
+							(existing as any).id
+						).run();
+
+						console.log(`[oncall]    ✅ Added date to existing ${role} assignment for user ${userId}`);
+					} else {
+						// Create new assignment
+						const assignmentId = crypto.randomUUID();
+						await this.dbService.db.prepare(`
+							INSERT INTO oncall_assignments
+								(id, schedule_id, user_id, team_id, dates, role, is_active, created_at)
+							VALUES (?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
+						`).bind(
+							assignmentId,
+							scheduleId,
+							userId,
+							teamId,
+							JSON.stringify(dates),
+							role
+						).run();
+
+						console.log(`[oncall]    ✅ Created new ${role} assignment for user ${userId}`);
+					}
+				}
+			} else {
+				console.log(`[oncall] ✅ STEP 2: No assignments to add (date cleared)`);
+			}
+
+			console.log(`[oncall] ✅✅ Schedule update complete for date ${targetDate}`);
+		} catch (error) {
+			console.error('[oncall] ❌ Error updating schedule assignments:', error);
+			throw error;
+		}
+	}
 }
-
-async updateScheduleAssignments(params: {
-  scheduleId: string;
-  teamId: string;
-  assignments: Array<{
-    userId: string;
-    role: 'primary' | 'backup' | 'escalation';
-    dates: string[];
-  }>;
-}): Promise<void> {
-  try {
-    const { scheduleId, teamId, assignments } = params;
-
-    console.log('[oncall] Updating assignments for dates:', assignments.map(a => a.dates).flat());
-
-    // For each assignment, update or create the assignment for those specific dates
-    for (const assignment of assignments) {
-      const { userId, role, dates } = assignment;
-
-      // Check if assignment already exists for this user/role/schedule
-      const existing = await this.dbService.db.prepare(`
-        SELECT id, dates
-        FROM oncall_assignments
-        WHERE schedule_id = ?
-          AND user_id = ?
-          AND role = ?
-          AND team_id = ?
-          AND is_active = 1
-      `).bind(scheduleId, userId, role, teamId).first();
-
-      if (existing) {
-        // Merge dates: get existing dates and add new ones
-        const existingDates = JSON.parse((existing as any).dates || '[]') as string[];
-        const mergedDates = Array.from(new Set([...existingDates, ...dates]));
-
-        await this.dbService.db.prepare(`
-          UPDATE oncall_assignments
-          SET dates = ?
-          WHERE id = ?
-        `).bind(
-          JSON.stringify(mergedDates),
-          (existing as any).id
-        ).run();
-
-        console.log(`[oncall] ✅ Updated assignment ${(existing as any).id} with merged dates`);
-      } else {
-        // Create new assignment
-        const assignmentId = crypto.randomUUID();
-        await this.dbService.db.prepare(`
-          INSERT INTO oncall_assignments
-          (id, schedule_id, user_id, team_id, dates, role, is_active)
-          VALUES (?, ?, ?, ?, ?, ?, 1)
-        `).bind(
-          assignmentId,
-          scheduleId,
-          userId,
-          teamId,
-          JSON.stringify(dates),
-          role
-        ).run();
-
-        console.log(`[oncall] ✅ Created new assignment for ${role}: ${userId} on ${dates.length} date(s)`);
-      }
-    }
-
-    console.log('[oncall] ✅ All assignments updated successfully');
-  } catch (error) {
-    console.error('[oncall] Error updating schedule assignments:', error);
-    throw error;
-  }
-}
-
-}
-
