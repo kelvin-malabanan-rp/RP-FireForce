@@ -929,26 +929,26 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
                               className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white hover:from-green-600 hover:to-emerald-700 shadow-md hover:shadow-lg transition-all"
                           >
                               <Brain className="h-4 w-4 mr-2" />
-                              Add Documentation
+                              Add data of this incident to our AI.
                           </Button>
                       </motion.div>
                   )}
 
-                {incident.status === 'resolved' && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.4 }}
-                  >
-                    <Button
-                      onClick={() => setShowSaveResolutionModal(true)}
-                      className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white hover:from-green-600 hover:to-emerald-700 shadow-md hover:shadow-lg transition-all"
-                    >
-                      <Brain className="h-4 w-4 mr-2" />
-                      Add Documentation
-                    </Button>
-                  </motion.div>
-                )}
+                {/*{incident.status === 'resolved' && (*/}
+                {/*  <motion.div*/}
+                {/*    initial={{ opacity: 0, y: 10 }}*/}
+                {/*    animate={{ opacity: 1, y: 0 }}*/}
+                {/*    transition={{ delay: 0.4 }}*/}
+                {/*  >*/}
+                {/*    <Button*/}
+                {/*      onClick={() => setShowSaveResolutionModal(true)}*/}
+                {/*      className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white hover:from-green-600 hover:to-emerald-700 shadow-md hover:shadow-lg transition-all"*/}
+                {/*    >*/}
+                {/*      <Brain className="h-4 w-4 mr-2" />*/}
+                {/*      Add Documentation*/}
+                {/*    </Button>*/}
+                {/*  </motion.div>*/}
+                {/*)}*/}
 
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}

@@ -216,7 +216,7 @@ export class DatabaseService {
 	// User authentication methods by id
 	async getUserById(userId: string): Promise<User | null> {
 		const query = `
-			SELECT id, email, password_hash as passwordHash, role,
+			SELECT id, email, password_hash as passwordHash,
 				   first_name as firstName, last_name as lastName,
 				   is_active as isActive, created_at as createdAt,
 				   updated_at as updatedAt, last_login as lastLogin
