@@ -1,5 +1,6 @@
 import { Env, User } from "../types";
 import { DatabaseService } from "./database.service";
+import bcrypt from 'bcryptjs'; // ✅ Add this import
 
 export class UserServices {
 	private env: Env;
@@ -22,7 +23,7 @@ export class UserServices {
 					first_name,
 					last_name,
 					phone_number,
-					role,
+					user_role,
 					is_active,
 					is_verified,
 					last_login,
@@ -48,7 +49,7 @@ export class UserServices {
 				firstName: row.first_name,
 				lastName: row.last_name,
 				phoneNumber: row.phone_number,
-				role: row.role,
+				role: row.user_role,
 				isActive: !!row.is_active,
 				isVerified: !!row.is_verified,
 				lastLogin: row.last_login,
@@ -76,7 +77,7 @@ export class UserServices {
                 first_name,
                 last_name,
                 phone_number,
-                role,
+				user_role,
                 is_active,
                 is_verified,
                 last_login,
@@ -101,7 +102,7 @@ export class UserServices {
 				firstName: result.first_name as string,
 				lastName: result.last_name as string,
 				phoneNumber: result.phone_number as string,
-				role: result.role as "admin" | "operator" | "viewer",
+				role: result.user_role as "admin" | "operator" | "viewer",
 				isActive: !!result.is_active,
 				isVerified: !!result.is_verified,
 				lastLogin: result.last_login as string,
@@ -113,6 +114,193 @@ export class UserServices {
 			return user;
 		} catch (error) {
 			console.error('Error fetching user by ID:', error);
+			throw error;
+		}
+	}
+
+	/**
+	 * Get user profile with additional fields
+	 */
+	async getUserProfile(userId: string): Promise<any | null> {
+		try {
+			console.log('Fetching user profile:', userId);
+
+			const query = `
+             SELECT
+                id,
+                email,
+                username,
+                first_name as firstName,
+                last_name as lastName,
+                display_name as displayName,
+                phone_number as phoneNumber,
+                avatar_url as avatarUrl,
+                oauth_provider as oauthProvider,
+                oauth_id as oauthId,
+                user_role as userRole,
+                is_active as isActive,
+                is_verified as isVerified,
+                last_login as lastLogin,
+                created_at as createdAt,
+                updated_at as updatedAt
+             FROM users
+             WHERE id = ? AND is_active = 1
+             LIMIT 1
+          `;
+
+			const result = await this.dbService.db.prepare(query).bind(userId).first();
+
+			if (!result) {
+				console.log('User not found:', userId);
+				return null;
+			}
+
+			return {
+				...result,
+				isActive: !!result.isActive,
+				isVerified: !!result.isVerified,
+			};
+		} catch (error) {
+			console.error('Error fetching user profile:', error);
+			throw error;
+		}
+	}
+
+	/**
+	 * Update user profile
+	 */
+	async updateUserProfile(
+		userId: string,
+		updates: {
+			firstName?: string;
+			lastName?: string;
+			phoneNumber?: string;
+			displayName?: string;
+		}
+	): Promise<any> {
+		try {
+			console.log('Updating user profile:', userId, updates);
+
+			const updateQuery = `
+             UPDATE users
+             SET
+                first_name = COALESCE(?, first_name),
+                last_name = COALESCE(?, last_name),
+                phone_number = COALESCE(?, phone_number),
+                display_name = COALESCE(?, display_name),
+                updated_at = CURRENT_TIMESTAMP
+             WHERE id = ? AND is_active = 1
+          `;
+
+			await this.dbService.db.prepare(updateQuery).bind(
+				updates.firstName || null,
+				updates.lastName || null,
+				updates.phoneNumber || null,
+				updates.displayName || null,
+				userId
+			).run();
+
+			// Get updated user
+			const updatedUser = await this.dbService.db.prepare(`
+             SELECT
+                id,
+                email,
+                first_name as firstName,
+                last_name as lastName,
+                phone_number as phoneNumber,
+                display_name as displayName,
+                updated_at as updatedAt
+             FROM users
+             WHERE id = ?
+          `).bind(userId).first();
+
+			console.log('Profile updated successfully');
+			return updatedUser;
+		} catch (error) {
+			console.error('Error updating user profile:', error);
+			throw error;
+		}
+	}
+
+	/**
+	 * Change user password
+	 */
+	async changePassword(
+		userId: string,
+		currentPassword: string,
+		newPassword: string
+	): Promise<{ success: boolean; message: string }> {
+		try {
+			console.log('Attempting password change for user:', userId);
+
+			// Check if user is OAuth user
+			const user = await this.dbService.db.prepare(`
+             SELECT oauth_provider, password_hash
+             FROM users
+             WHERE id = ? AND is_active = 1
+          `).bind(userId).first();
+
+			if (!user) {
+				return { success: false, message: 'User not found' };
+			}
+
+			if (user.oauth_provider) {
+				return {
+					success: false,
+					message: 'Cannot change password for OAuth users'
+				};
+			}
+
+			// Verify current password
+			const isValid = await bcrypt.compare(currentPassword, user.password_hash as string);
+			if (!isValid) {
+				return {
+					success: false,
+					message: 'Current password is incorrect'
+				};
+			}
+
+			// Hash new password
+			const newPasswordHash = await bcrypt.hash(newPassword, 10);
+
+			// Update password
+			await this.dbService.db.prepare(`
+             UPDATE users
+             SET
+                password_hash = ?,
+                updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?
+          `).bind(newPasswordHash, userId).run();
+
+			console.log('Password changed successfully');
+			return {
+				success: true,
+				message: 'Password changed successfully'
+			};
+		} catch (error) {
+			console.error('Error changing password:', error);
+			throw error;
+		}
+	}
+
+	/**
+	 * Update user avatar URL
+	 */
+	async updateAvatar(userId: string, avatarUrl: string): Promise<any> {
+		try {
+			console.log('Updating avatar for user:', userId);
+
+			await this.dbService.db.prepare(`
+             UPDATE users
+             SET
+                avatar_url = ?,
+                updated_at = CURRENT_TIMESTAMP
+             WHERE id = ? AND is_active = 1
+          `).bind(avatarUrl, userId).run();
+
+			return { avatarUrl };
+		} catch (error) {
+			console.error('Error updating avatar:', error);
 			throw error;
 		}
 	}

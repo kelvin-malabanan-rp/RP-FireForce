@@ -3,6 +3,17 @@
 // ========================================
 // ENVIRONMENT & CONFIGURATION
 // ========================================
+export interface UpdateProfileRequest {
+	firstName?: string;
+	lastName?: string;
+	phoneNumber?: string;
+	displayName?: string;
+}
+
+export interface ChangePasswordRequest {
+	currentPassword: string;
+	newPassword: string;
+}
 
 export interface Env {
 	FIREBASE_PROJECT_ID: string;

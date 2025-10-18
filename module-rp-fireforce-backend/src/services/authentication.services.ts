@@ -459,4 +459,107 @@ export class AuthenticationServices {
 		const hashArray = Array.from(new Uint8Array(hashBuffer));
 		return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 	}
+	/**
+	 * Verify JWT token and extract payload
+	 */
+	async verifyJWT(token: string): Promise<{ userId: string; email: string } | null> {
+		try {
+			console.log('🔐 Verifying JWT token...');
+
+			// Split token into parts
+			const parts = token.split('.');
+			if (parts.length !== 3) {
+				console.error('❌ Invalid token format');
+				return null;
+			}
+
+			const [headerB64, payloadB64, signatureB64] = parts;
+
+			// Decode payload
+			const payloadJson = atob(payloadB64);
+			const payload = JSON.parse(payloadJson);
+
+			// Check expiration
+			const now = Math.floor(Date.now() / 1000);
+			if (payload.exp && payload.exp < now) {
+				console.error('❌ Token has expired');
+				return null;
+			}
+
+			// Verify signature
+			const data = `${headerB64}.${payloadB64}`;
+			const encoder = new TextEncoder();
+			const keyData = encoder.encode(this.env.JWT_SECRET);
+			const dataToSign = encoder.encode(data);
+
+			// Import key
+			const key = await crypto.subtle.importKey(
+				'raw',
+				keyData,
+				{ name: 'HMAC', hash: 'SHA-256' },
+				false,
+				['verify']
+			);
+
+			// Decode the signature from base64url
+			const signatureBytes = Uint8Array.from(
+				atob(signatureB64.replace(/-/g, '+').replace(/_/g, '/')),
+				c => c.charCodeAt(0)
+			);
+
+			// Verify signature
+			const isValid = await crypto.subtle.verify(
+				'HMAC',
+				key,
+				signatureBytes,
+				dataToSign
+			);
+
+			if (!isValid) {
+				console.error('❌ Invalid token signature');
+				return null;
+			}
+
+			// Validate required fields
+			if (!payload.userId || !payload.email) {
+				console.error('❌ Invalid token payload - missing userId or email');
+				return null;
+			}
+
+			console.log('✅ Token verified for user:', payload.email);
+
+			return {
+				userId: payload.userId,
+				email: payload.email
+			};
+
+		} catch (error: any) {
+			console.error('❌ JWT verification error:', error.message);
+			return null;
+		}
+	}
+
+	/**
+	 * Extract and verify JWT from Authorization header
+	 */
+	async verifyAuthHeader(authHeader: string | null): Promise<{ userId: string; email: string } | null> {
+		if (!authHeader) {
+			console.log('❌ No Authorization header');
+			return null;
+		}
+
+		if (!authHeader.startsWith('Bearer ')) {
+			console.log('❌ Invalid Authorization header format');
+			return null;
+		}
+
+		const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+
+		if (!token || token.trim() === '') {
+			console.log('❌ Empty token');
+			return null;
+		}
+
+		return this.verifyJWT(token);
+	}
 }

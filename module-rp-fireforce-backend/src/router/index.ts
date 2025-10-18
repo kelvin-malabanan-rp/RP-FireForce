@@ -44,7 +44,13 @@ import {
 	handleUpdateScheduleConfig,
 	handleGetAllOnCallUsers
 } from "../handlers/oncall.handler";
-import {handleGetAllUsers, handleGetUserById} from "../handlers/user-handlers";
+import {
+	handleChangePassword,
+	handleGetAllUsers,
+	handleGetUserById,
+	handleGetUserProfile,
+	handleUpdateUserProfile, handleUploadAvatar
+} from "../handlers/user-handlers";
 import {
 	handleCreateAuditLog,
 	handleGetAuditLogs,
@@ -141,6 +147,23 @@ export class Router {
 
 			if (path === '/api/users/emergency-override' && method === 'POST') {
 				return handleGetUsersForEmergencyOverride(request, this.env, CORS_HEADERS);
+			}
+
+			// Protected routes (auth handled in handlers)
+			if (path === '/api/users/profile' && method === 'GET') {
+				return handleGetUserProfile(request, this.env, CORS_HEADERS);
+			}
+
+			if (path === '/api/users/profile' && method === 'PUT') {
+				return handleUpdateUserProfile(request, this.env, CORS_HEADERS);
+			}
+
+			if (path === '/api/users/password' && method === 'PUT') {
+				return handleChangePassword(request, this.env, CORS_HEADERS);
+			}
+
+			if (path === '/api/users/avatar' && method === 'POST') {
+				return handleUploadAvatar(request, this.env, CORS_HEADERS);
 			}
 
 			// ============================================
