@@ -850,94 +850,89 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-6 space-y-6">
-                {/* Quick Actions */}
-                {incident.status !== 'resolved' && incident.status !== 'closed' && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.35 }}
-                    className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-lg border border-blue-200 dark:border-blue-800"
-                  >
-                    <div className="flex items-center gap-2 mb-3">
-                      <Zap className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                      <h3 className="text-sm font-semibold text-white">
-                        Quick Actions
-                      </h3>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {incident.status === 'open' && (
-                        <Button
-                          onClick={handleAcknowledge}
-                          disabled={isUpdatingStatus}
-                          className="bg-gradient-to-r from-green-500 to-emerald-600 text-white hover:from-green-600 hover:to-emerald-700 shadow-md hover:shadow-lg transition-all"
-                        >
-                          {isUpdatingStatus ? (
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          ) : (
-                            <CheckCircle className="h-4 w-4 mr-2" />
-                          )}
-                          Acknowledge Incident
-                        </Button>
-                      )}
-                      <Button
-                        onClick={handleEscalate}
-                        disabled={isUpdatingStatus}
-                        variant="outline"
-                        className="border-orange-500 text-orange-600 hover:bg-orange-50 dark:border-orange-600 dark:text-orange-400 dark:hover:bg-orange-900/20"
-                      >
-                        {isUpdatingStatus ? (
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        ) : (
-                          <ArrowUpRight className="h-4 w-4 mr-2" />
-                        )}
-                        Escalate Incident
-                      </Button>
-                      {(incident.status === 'acknowledged' || incident.status === 'open') && (
-                        <Button
-                          onClick={() => setShowResolveModal(true)}
-                          disabled={isUpdatingStatus}
-                          className="bg-gradient-to-r from-purple-500 to-blue-600 text-white hover:from-purple-600 hover:to-blue-700 shadow-md hover:shadow-lg transition-all md:col-span-2"
-                        >
-                          <CheckCircle className="h-4 w-4 mr-2" />
-                          Mark as Resolved
-                        </Button>
-                      )}
-                    </div>
-                  </motion.div>
-                )}
 
-                {/* Status Update Section */}
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.35 }}
-                  className="p-4 bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 rounded-lg border border-purple-200 dark:border-purple-800"
-                >
-                  <h3 className="text-sm font-semibold text-white mb-3">Update Status</h3>
-                  <div className="flex gap-2">
-                    <select
-                      value={newStatus}
-                      onChange={(e) => setNewStatus(e.target.value)}
-                      className="flex-1 px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    >
-                      <option value="">Select status...</option>
-                      <option value="open">Open</option>
-                      <option value="investigating">Investigating</option>
-                      <option value="resolved">Resolved</option>
-                    </select>
-                    <Button
-                      onClick={handleUpdateStatus}
-                      disabled={!newStatus || isUpdatingStatus}
-                      className="bg-gradient-to-r from-purple-500 to-blue-600 text-white hover:from-purple-600 hover:to-blue-700 shadow-md hover:shadow-lg transition-all"
-                    >
-                      {isUpdatingStatus ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        'Update'
-                      )}
-                    </Button>
-                  </div>
-                </motion.div>
+                  {/* Quick Actions - Smart Button Display Based on Status */}
+                  {incident.status !== 'resolved' && incident.status !== 'closed' && (
+                      <motion.div
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: 0.35 }}
+                          className="p-5 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-xl border border-blue-200 dark:border-blue-800 shadow-sm"
+                      >
+                          <div className="flex items-center gap-2 mb-4">
+                              <Zap className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                              <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
+                                  Quick Actions
+                              </h3>
+                          </div>
+
+                          {/* OPEN STATUS - Show Acknowledge and Escalate buttons */}
+                          {incident.status === 'open' && (
+                              <div className="flex gap-3">
+                                  <Button
+                                      onClick={handleAcknowledge}
+                                      disabled={isUpdatingStatus}
+                                      className="flex-1 bg-gradient-to-r from-green-500 to-emerald-600 text-white hover:from-green-600 hover:to-emerald-700 shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                  >
+                                      {isUpdatingStatus ? (
+                                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                      ) : (
+                                          <CheckCircle className="h-4 w-4 mr-2" />
+                                      )}
+                                      Acknowledge
+                                  </Button>
+                                  <Button
+                                      onClick={handleEscalate}
+                                      disabled={isUpdatingStatus}
+                                      className="flex-1 bg-gradient-to-r from-orange-500 to-red-600 text-white hover:from-orange-600 hover:to-red-700 shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                  >
+                                      {isUpdatingStatus ? (
+                                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                      ) : (
+                                          <ArrowUpRight className="h-4 w-4 mr-2" />
+                                      )}
+                                      Escalate
+                                  </Button>
+                              </div>
+                          )}
+
+                          {/* INVESTIGATING/ACKNOWLEDGED STATUS - Show only Resolve button */}
+                          {(incident.status === 'investigating' || incident.status === 'acknowledged') && (
+                              <Button
+                                  onClick={() => setShowResolveModal(true)}
+                                  disabled={isUpdatingStatus}
+                                  className="w-full bg-gradient-to-r from-purple-500 to-blue-600 text-white hover:from-purple-600 hover:to-blue-700 shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                  <CheckCircle className="h-4 w-4 mr-2" />
+                                  Mark as Resolved
+                              </Button>
+                          )}
+                      </motion.div>
+                  )}
+
+                  {/* RESOLVED STATUS - Show Add Documentation button */}
+                  {incident.status === 'resolved' && (
+                      <motion.div
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: 0.35 }}
+                          className="p-5 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-xl border border-green-200 dark:border-green-800 shadow-sm"
+                      >
+                          <div className="flex items-center gap-2 mb-4">
+                              <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
+                              <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
+                                  Incident Resolved
+                              </h3>
+                          </div>
+                          <Button
+                              onClick={() => setShowSaveResolutionModal(true)}
+                              className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white hover:from-green-600 hover:to-emerald-700 shadow-md hover:shadow-lg transition-all"
+                          >
+                              <Brain className="h-4 w-4 mr-2" />
+                              Add Documentation
+                          </Button>
+                      </motion.div>
+                  )}
 
                 {incident.status === 'resolved' && (
                   <motion.div
