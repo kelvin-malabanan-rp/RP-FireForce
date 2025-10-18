@@ -126,9 +126,9 @@ export function useNotifications(options: UseNotificationsOptions = {}) {
         const incidentDate = getIncidentTimestamp(incident);
         const notSeen = !seenIdsRef.current.has(`incident-${incident.id}`);
         
-        // Consider incident new if unseen and recent (last 30 minutes)
-        const THIRTY_MIN = 30 * 60 * 1000;
-        const isRecent = Date.now() - incidentDate.getTime() <= THIRTY_MIN;
+        // ✅ FIXED: Show incidents from last 24 hours instead of 30 minutes
+        const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+        const isRecent = Date.now() - incidentDate.getTime() <= TWENTY_FOUR_HOURS;
         
         return notSeen && isRecent;
       });
@@ -210,10 +210,18 @@ export function useNotifications(options: UseNotificationsOptions = {}) {
           if (onCallResponse?.httpStatus === 'OK' && onCallResponse.data) {
             const onCallAssignment = onCallResponse.data;
             
-            // Check if current user is primary, backup, or escalation
-            const isPrimary = onCallAssignment.primary?.id === currentUserId;
-            const isBackup = onCallAssignment.backup?.id === currentUserId;
-            const isEscalation = onCallAssignment.escalation?.some(e => e.id === currentUserId);
+            // ✅ FIXED: Handle arrays correctly (backend returns arrays, not objects)
+            const isPrimary = Array.isArray(onCallAssignment.primary) 
+              ? onCallAssignment.primary.some((p: any) => p.id === currentUserId || p.userId === currentUserId)
+              : onCallAssignment.primary?.id === currentUserId;
+
+            const isBackup = Array.isArray(onCallAssignment.backup)
+              ? onCallAssignment.backup.some((b: any) => b.id === currentUserId || b.userId === currentUserId)
+              : onCallAssignment.backup?.id === currentUserId;
+
+            const isEscalation = Array.isArray(onCallAssignment.escalation)
+              ? onCallAssignment.escalation.some((e: any) => e.id === currentUserId || e.userId === currentUserId)
+              : false;
             
             const isOnCall = isPrimary || isBackup || isEscalation;
             
@@ -447,4 +455,4 @@ export function useNotifications(options: UseNotificationsOptions = {}) {
     markAllAsRead,
     refresh
   };
-}
+} 

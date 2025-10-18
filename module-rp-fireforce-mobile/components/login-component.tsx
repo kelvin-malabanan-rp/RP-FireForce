@@ -395,45 +395,6 @@ export const LoginComponent = ({ onLogin }: LoginComponentProps) => {
                                 </LinearGradient>
                             </TouchableOpacity>
 
-                            {/* ✅ OAuth Divider */}
-                            <View style={styles.divider}>
-                                <View style={styles.dividerLine} />
-                                <Text style={styles.dividerText}>or continue with</Text>
-                                <View style={styles.dividerLine} />
-                            </View>
-
-                            {/* ✅ OAuth Buttons */}
-                            <View style={styles.oauthButtonsContainer}>
-                                {/* Google OAuth Button */}
-                                <TouchableOpacity
-                                    style={styles.oauthButton}
-                                    onPress={handleGoogleLogin}
-                                    disabled={isAnyLoading || !googleRequest}
-                                    activeOpacity={0.8}
-                                >
-                                    {isOAuthLoading ? (
-                                        <ActivityIndicator color="#FFFFFF" size="small" />
-                                    ) : (
-                                        <>
-                                            <Ionicons name="logo-google" size={20} color="#FFFFFF" />
-                                            <Text style={styles.oauthButtonText}>Google</Text>
-                                        </>
-                                    )}
-                                </TouchableOpacity>
-
-                                {/* GitHub OAuth Button - Optional */}
-                                {/* Uncomment if you want GitHub login
-                                <TouchableOpacity
-                                    style={styles.oauthButton}
-                                    onPress={handleGithubLogin}
-                                    disabled={isAnyLoading}
-                                    activeOpacity={0.8}
-                                >
-                                    <Ionicons name="logo-github" size={20} color="#FFFFFF" />
-                                    <Text style={styles.oauthButtonText}>GitHub</Text>
-                                </TouchableOpacity>
-                                */}
-                            </View>
                         </View>
 
                         <View style={styles.footer}>
