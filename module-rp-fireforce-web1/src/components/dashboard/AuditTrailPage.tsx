@@ -1,7 +1,9 @@
+// src/components/dashboard/AuditTrailPage.tsx - UPDATED WITH WORKING EXPORT
+
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { auditService } from '../../services/auditService';
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://incident-webhook-api.rapidresponse.workers.dev';
+import { exportService } from '../../services/exportService'; // ✅ NEW IMPORT
 import {
     FileText,
     Search,
@@ -16,7 +18,11 @@ import {
     Download,
     RefreshCw,
     ChevronLeft,
-    ChevronRight, PlusCircle, ArrowRightCircle, AlertTriangle,
+    ChevronRight,
+    PlusCircle,
+    ArrowRightCircle,
+    AlertTriangle,
+    FileSpreadsheet, // ✅ NEW ICON
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Input } from "../ui/input";
@@ -87,6 +93,7 @@ export function AuditTrailPage() {
   const [exportActionFilter, setExportActionFilter] = useState<string>("all");
   const [exportUserFilter, setExportUserFilter] = useState<string>("all");
   const [exportIncidentFilter, setExportIncidentFilter] = useState<string>("");
+  const [exportFormat, setExportFormat] = useState<'csv' | 'excel'>('csv'); // ✅ NEW STATE
   const [isExporting, setIsExporting] = useState(false);
 
   useEffect(() => {
@@ -102,11 +109,9 @@ export function AuditTrailPage() {
   const loadAuditLogs = async () => {
     setIsLoading(true);
     try {
-      // Fetch all logs from API (no limit/offset since backend returns all)
       const result = await auditService.getAuditLogs({});
       setAllAuditLogs(result.logs || []);
       
-      // Extract unique actions
       if (result.logs && result.logs.length > 0) {
         const actions = Array.from(new Set(result.logs.map(log => log.action)));
         setUniqueActions(actions);
@@ -144,7 +149,6 @@ export function AuditTrailPage() {
   const getFilteredLogs = () => {
     let filtered = [...allAuditLogs];
 
-    // Search filter
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(log =>
@@ -157,24 +161,20 @@ export function AuditTrailPage() {
       );
     }
 
-    // Action filter
     if (actionFilter && actionFilter !== 'all') {
       filtered = filtered.filter(log => log.action === actionFilter);
     }
 
-    // User filter
     if (userFilter && userFilter !== 'all') {
       filtered = filtered.filter(log => log.user_id === userFilter);
     }
 
-    // Incident filter
     if (incidentFilter) {
       filtered = filtered.filter(log => 
         log.incident_id?.toLowerCase().includes(incidentFilter.toLowerCase())
       );
     }
 
-    // Date range filter
     if (startDate) {
       const start = new Date(startDate);
       start.setHours(0, 0, 0, 0);
@@ -196,7 +196,6 @@ export function AuditTrailPage() {
     return filtered;
   };
 
-  // Get paginated logs for current page
   const getPaginatedLogs = () => {
     const filtered = getFilteredLogs();
     const startIndex = (currentPage - 1) * itemsPerPage;
@@ -208,104 +207,117 @@ export function AuditTrailPage() {
   const displayedLogs = getPaginatedLogs();
   const totalPages = Math.ceil(filteredLogs.length / itemsPerPage);
 
+  // ✅ UPDATED: Client-side CSV/Excel export
   const handleExportCSV = async () => {
     setIsExporting(true);
     try {
-      let queryParams = [];
-      if (exportIncidentFilter) queryParams.push(`incidentId=${exportIncidentFilter}`);
-      if (exportUserFilter && exportUserFilter !== 'all') queryParams.push(`userId=${exportUserFilter}`);
-      if (exportActionFilter && exportActionFilter !== 'all') queryParams.push(`action=${exportActionFilter}`);
-      if (exportStartDate) queryParams.push(`startDate=${exportStartDate}`);
-      if (exportEndDate) queryParams.push(`endDate=${exportEndDate}`);
-      const queryString = queryParams.length > 0 ? `?${queryParams.join('&')}` : '';
-      const url = `/api/audit/logs/export/csv${queryString}`;
-      
-      const token = localStorage.getItem('authToken');
-      const headers = new Headers();
-      if (token) headers.append('Authorization', `Bearer ${token}`);
-      const response = await fetch(`${API_BASE_URL}${url}`, {
-        method: 'GET',
-        headers
+      console.log('📊 Starting export...');
+      console.log('📋 Export filters:', {
+        startDate: exportStartDate,
+        endDate: exportEndDate,
+        action: exportActionFilter,
+        userId: exportUserFilter,
+        incidentId: exportIncidentFilter,
+        format: exportFormat
       });
+
+      // Apply export filters to all logs
+      const filters = {
+        startDate: exportStartDate,
+        endDate: exportEndDate,
+        action: exportActionFilter,
+        userId: exportUserFilter,
+        incidentId: exportIncidentFilter,
+      };
+
+      // Use the export service to filter and download
+      exportService.applyFiltersAndExport(allAuditLogs, filters, exportFormat);
+
+      console.log('✅ Export successful!');
       
-      if (!response.ok) {
-        alert("Failed to export CSV. The endpoint may not be available yet.");
-        setIsExporting(false);
-        return;
-      }
-      
-      const blob = await response.blob();
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = downloadUrl;
-      
-      const filters = [];
-      if (exportStartDate) filters.push(`from-${exportStartDate}`);
-      if (exportEndDate) filters.push(`to-${exportEndDate}`);
-      if (exportActionFilter !== 'all') filters.push(exportActionFilter);
-      const filterString = filters.length > 0 ? `-${filters.join('-')}` : '';
-      a.download = `audit-trail${filterString}-${new Date().toISOString().split('T')[0]}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(downloadUrl);
+      // Close modal and reset
       setIsExportModalOpen(false);
-      alert("CSV export completed successfully!");
-    } catch (error) {
-      console.error("Error exporting CSV:", error);
-      alert("Failed to export CSV. Please try again later.");
+      setExportStartDate('');
+      setExportEndDate('');
+      setExportActionFilter('all');
+      setExportUserFilter('all');
+      setExportIncidentFilter('');
+      
+    } catch (error: any) {
+      console.error("❌ Export error:", error);
+      alert(`Export failed: ${error.message}`);
     } finally {
       setIsExporting(false);
     }
   };
 
-    const getActionIcon = (action: string) => {
-        const lowerAction = action.toLowerCase();
+  // ✅ NEW: Quick export current view
+  const handleQuickExport = () => {
+    try {
+      const filters = {
+        startDate,
+        endDate,
+        action: actionFilter,
+        userId: userFilter,
+        incidentId: incidentFilter,
+      };
 
-        if (lowerAction.includes("create"))
-            return <PlusCircle className="h-5 w-5 text-green-500" />;
+      exportService.applyFiltersAndExport(filteredLogs, filters, 'csv');
+      
+      console.log('✅ Quick export successful!');
+    } catch (error: any) {
+      console.error("❌ Quick export error:", error);
+      alert(`Export failed: ${error.message}`);
+    }
+  };
 
-        if (lowerAction.includes("resolve"))
-            return <CheckCircle className="h-5 w-5 text-emerald-400" />; // ✅ distinct color for RESOLVE
+  const getActionIcon = (action: string) => {
+    const lowerAction = action.toLowerCase();
 
-        if (lowerAction.includes("accept") || lowerAction.includes("acknowledge"))
-            return <ArrowRightCircle className="h-5 w-5 text-blue-400" />; // ↪️ clearer for ACCEPT
+    if (lowerAction.includes("create"))
+      return <PlusCircle className="h-5 w-5 text-green-500" />;
 
-        if (lowerAction.includes("update") || lowerAction.includes("change"))
-            return <RefreshCw className="h-5 w-5 text-yellow-400" />;
+    if (lowerAction.includes("resolve"))
+      return <CheckCircle className="h-5 w-5 text-emerald-400" />;
 
-        if (lowerAction.includes("escalate"))
-            return <AlertTriangle className="h-5 w-5 text-orange-500" />;
+    if (lowerAction.includes("accept") || lowerAction.includes("acknowledge"))
+      return <ArrowRightCircle className="h-5 w-5 text-blue-400" />;
 
-        if (lowerAction.includes("delete") || lowerAction.includes("remove"))
-            return <XCircle className="h-5 w-5 text-red-500" />;
+    if (lowerAction.includes("update") || lowerAction.includes("change"))
+      return <RefreshCw className="h-5 w-5 text-yellow-400" />;
 
-        return <Info className="h-5 w-5 text-slate-400" />;
-    };
+    if (lowerAction.includes("escalate"))
+      return <AlertTriangle className="h-5 w-5 text-orange-500" />;
 
-    const getActionBadgeColor = (action: string) => {
-        const lowerAction = action.toLowerCase();
+    if (lowerAction.includes("delete") || lowerAction.includes("remove"))
+      return <XCircle className="h-5 w-5 text-red-500" />;
 
-        if (lowerAction.includes("create"))
-            return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400";
+    return <Info className="h-5 w-5 text-slate-400" />;
+  };
 
-        if (lowerAction.includes("resolve"))
-            return "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400";
+  const getActionBadgeColor = (action: string) => {
+    const lowerAction = action.toLowerCase();
 
-        if (lowerAction.includes("accept") || lowerAction.includes("acknowledge"))
-            return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400";
+    if (lowerAction.includes("create"))
+      return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400";
 
-        if (lowerAction.includes("update") || lowerAction.includes("change"))
-            return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400";
+    if (lowerAction.includes("resolve"))
+      return "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400";
 
-        if (lowerAction.includes("escalate"))
-            return "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400";
+    if (lowerAction.includes("accept") || lowerAction.includes("acknowledge"))
+      return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400";
 
-        if (lowerAction.includes("delete") || lowerAction.includes("remove"))
-            return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400";
+    if (lowerAction.includes("update") || lowerAction.includes("change"))
+      return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400";
 
-        return "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300";
-    };
+    if (lowerAction.includes("escalate"))
+      return "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400";
+
+    if (lowerAction.includes("delete") || lowerAction.includes("remove"))
+      return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400";
+
+    return "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300";
+  };
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -378,14 +390,27 @@ export function AuditTrailPage() {
           </div>
         </div>
         <div className="flex items-center gap-3">
+          {/* ✅ UPDATED: Quick Export Button */}
+          <Button
+            variant="outline"
+            onClick={handleQuickExport}
+            disabled={filteredLogs.length === 0}
+            className="flex items-center gap-2 text-white border-slate-600 hover:bg-slate-800"
+          >
+            <Download className="h-4 w-4" />
+            Quick Export ({filteredLogs.length})
+          </Button>
+          
+          {/* Advanced Export Button */}
           <Button
             variant="outline"
             onClick={() => setIsExportModalOpen(true)}
             className="flex items-center gap-2 text-white border-slate-600 hover:bg-slate-800"
           >
-            <Download className="h-4 w-4" />
-            Export CSV
+            <FileSpreadsheet className="h-4 w-4" />
+            Export Options
           </Button>
+          
           <Button
             onClick={loadAuditLogs}
             disabled={isLoading}
@@ -428,10 +453,7 @@ export function AuditTrailPage() {
                 </div>
                 <div>
                   <Label className="text-sm text-slate-400 mb-1">Action</Label>
-                  <Select
-                    value={actionFilter}
-                    onValueChange={setActionFilter}
-                  >
+                  <Select value={actionFilter} onValueChange={setActionFilter}>
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder="All Actions" />
                     </SelectTrigger>
@@ -447,10 +469,7 @@ export function AuditTrailPage() {
                 </div>
                 <div>
                   <Label className="text-sm text-slate-400 mb-1">User</Label>
-                  <Select
-                    value={userFilter}
-                    onValueChange={setUserFilter}
-                  >
+                  <Select value={userFilter} onValueChange={setUserFilter}>
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder="All Users" />
                     </SelectTrigger>
@@ -658,20 +677,78 @@ export function AuditTrailPage() {
         </motion.div>
       )}
 
-      {/* Export CSV Modal */}
+      {/* ✅ UPDATED: Export Modal with Format Selection */}
       <Dialog open={isExportModalOpen} onOpenChange={setIsExportModalOpen}>
         <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-2xl">
           <DialogHeader>
             <DialogTitle className="text-2xl font-bold flex items-center gap-2">
               <Download className="h-6 w-6 text-purple-500" />
-              Export Audit Logs to CSV
+              Export Audit Logs
             </DialogTitle>
             <DialogDescription className="text-slate-400">
-              Configure filters to export specific audit logs. Leave filters empty to export all logs.
+              Configure filters and format to export specific audit logs.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
+            {/* ✅ NEW: Format Selection */}
+            <div className="space-y-2">
+              <Label className="text-sm text-slate-300">Export Format</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setExportFormat('csv')}
+                  className={`p-4 rounded-lg border-2 transition-all ${
+                    exportFormat === 'csv'
+                      ? 'border-purple-500 bg-purple-500/20'
+                      : 'border-slate-600 hover:border-slate-500'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Download className={`h-5 w-5 ${
+                      exportFormat === 'csv' ? 'text-purple-400' : 'text-slate-400'
+                    }`} />
+                    <div className="text-left">
+                      <p className={`font-medium ${
+                        exportFormat === 'csv' ? 'text-white' : 'text-slate-300'
+                      }`}>
+                        CSV
+                      </p>
+                      <p className="text-xs text-slate-400">
+                        Excel, Sheets compatible
+                      </p>
+                    </div>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setExportFormat('excel')}
+                  className={`p-4 rounded-lg border-2 transition-all ${
+                    exportFormat === 'excel'
+                      ? 'border-green-500 bg-green-500/20'
+                      : 'border-slate-600 hover:border-slate-500'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <FileSpreadsheet className={`h-5 w-5 ${
+                      exportFormat === 'excel' ? 'text-green-400' : 'text-slate-400'
+                    }`} />
+                    <div className="text-left">
+                      <p className={`font-medium ${
+                        exportFormat === 'excel' ? 'text-white' : 'text-slate-300'
+                      }`}>
+                        Excel
+                      </p>
+                      <p className="text-xs text-slate-400">
+                        Native .xlsx format
+                      </p>
+                    </div>
+                  </div>
+                </button>
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label className="text-sm text-slate-300">Start Date</Label>
@@ -695,10 +772,7 @@ export function AuditTrailPage() {
 
             <div className="space-y-2">
               <Label className="text-sm text-slate-300">Filter by Action</Label>
-              <Select
-                value={exportActionFilter}
-                onValueChange={setExportActionFilter}
-              >
+              <Select value={exportActionFilter} onValueChange={setExportActionFilter}>
                 <SelectTrigger className="bg-slate-800 border-slate-600 text-white">
                   <SelectValue placeholder="All Actions" />
                 </SelectTrigger>
@@ -715,10 +789,7 @@ export function AuditTrailPage() {
 
             <div className="space-y-2">
               <Label className="text-sm text-slate-300">Filter by User</Label>
-              <Select
-                value={exportUserFilter}
-                onValueChange={setExportUserFilter}
-              >
+              <Select value={exportUserFilter} onValueChange={setExportUserFilter}>
                 <SelectTrigger className="bg-slate-800 border-slate-600 text-white">
                   <SelectValue placeholder="All Users" />
                 </SelectTrigger>
@@ -749,10 +820,11 @@ export function AuditTrailPage() {
                 <div className="text-sm text-blue-300">
                   <p className="font-semibold mb-1">Export Information</p>
                   <ul className="list-disc list-inside space-y-1 text-xs">
-                    <li>The CSV will include all matching audit logs based on your filters</li>
+                    <li>The file will include all matching audit logs based on your filters</li>
                     <li>Date range is optional - leave empty to export all dates</li>
-                    <li>Large exports may take a few moments to process</li>
-                    <li>The file will be downloaded automatically when ready</li>
+                    <li>{exportFormat === 'excel' ? 'Excel format (.xlsx) works with Microsoft Excel' : 'CSV format (.csv) works with Excel, Google Sheets, etc.'}</li>
+                    <li>The file will download automatically when ready</li>
+                    <li>Total logs to export: <strong className="text-blue-200">{allAuditLogs.length}</strong></li>
                   </ul>
                 </div>
               </div>
@@ -777,7 +849,11 @@ export function AuditTrailPage() {
             <Button
               onClick={handleExportCSV}
               disabled={isExporting}
-              className="bg-gradient-to-r from-purple-500 to-blue-600 text-white hover:from-purple-600 hover:to-blue-700"
+              className={`${
+                exportFormat === 'excel'
+                  ? 'bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700'
+                  : 'bg-gradient-to-r from-purple-500 to-blue-600 hover:from-purple-600 hover:to-blue-700'
+              } text-white`}
             >
               {isExporting ? (
                 <>
@@ -786,8 +862,12 @@ export function AuditTrailPage() {
                 </>
               ) : (
                 <>
-                  <Download className="h-4 w-4 mr-2" />
-                  Export CSV
+                  {exportFormat === 'excel' ? (
+                    <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  ) : (
+                    <Download className="h-4 w-4 mr-2" />
+                  )}
+                  Export {exportFormat === 'excel' ? 'Excel' : 'CSV'}
                 </>
               )}
             </Button>
