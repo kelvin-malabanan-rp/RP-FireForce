@@ -517,15 +517,14 @@ export function SettingsPage() {
                     Last sync: {systemStatus.lastSync}
                   </div>
                 </div>
-
-                <Button
-                    variant="outline"
-                    className="w-full border-slate-600 text-white hover:bg-slate-700"
-                    onClick={() => toast.info('Testing connection...', { description: 'Feature coming soon' })}
-                >
-                  <Server className="h-4 w-4 mr-2" />
-                  Test Connection
-                </Button>
+                {/*<Button*/}
+                {/*    variant="outline"*/}
+                {/*    className="w-full border-slate-600 text-white hover:bg-slate-700"*/}
+                {/*    onClick={() => toast.info('Testing connection...', { description: 'Feature coming soon' })}*/}
+                {/*>*/}
+                {/*  <Server className="h-4 w-4 mr-2" />*/}
+                {/*  Test Connection*/}
+                {/*</Button>*/}
               </CardContent>
             </Card>
           </motion.div>
@@ -628,139 +627,139 @@ export function SettingsPage() {
               </motion.div>
           )}
 
-          {/* Notification Settings */}
-          <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.4 }}
-              className="lg:col-span-2"
-          >
-            <Card className="bg-slate-800/50 border-slate-700">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-white">
-                  <Bell className="h-5 w-5" />
-                  Notification Settings
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {/* Alert Settings */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <div className="flex items-center justify-between p-4 bg-slate-700/30 rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <AlertTriangle className="h-5 w-5 text-orange-400" />
-                      <div>
-                        <h4 className="text-white font-medium">Enable Alerts</h4>
-                        <p className="text-sm text-slate-400">Receive incident alerts</p>
-                      </div>
-                    </div>
-                    <Switch
-                        checked={notificationSettings.enableAlerts}
-                        onCheckedChange={(checked) =>
-                            setNotificationSettings({...notificationSettings, enableAlerts: checked})
-                        }
-                    />
-                  </div>
+          {/*/!* Notification Settings *!/*/}
+          {/*<motion.div*/}
+          {/*    initial={{ opacity: 0, y: 20 }}*/}
+          {/*    animate={{ opacity: 1, y: 0 }}*/}
+          {/*    transition={{ delay: 0.4 }}*/}
+          {/*    className="lg:col-span-2"*/}
+          {/*>*/}
+          {/*  <Card className="bg-slate-800/50 border-slate-700">*/}
+          {/*    <CardHeader>*/}
+          {/*      <CardTitle className="flex items-center gap-2 text-white">*/}
+          {/*        <Bell className="h-5 w-5" />*/}
+          {/*        Notification Settings*/}
+          {/*      </CardTitle>*/}
+          {/*    </CardHeader>*/}
+          {/*    <CardContent className="space-y-6">*/}
+          {/*      /!* Alert Settings *!/*/}
+          {/*      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">*/}
+          {/*        <div className="flex items-center justify-between p-4 bg-slate-700/30 rounded-lg">*/}
+          {/*          <div className="flex items-center gap-3">*/}
+          {/*            <AlertTriangle className="h-5 w-5 text-orange-400" />*/}
+          {/*            <div>*/}
+          {/*              <h4 className="text-white font-medium">Enable Alerts</h4>*/}
+          {/*              <p className="text-sm text-slate-400">Receive incident alerts</p>*/}
+          {/*            </div>*/}
+          {/*          </div>*/}
+          {/*          <Switch*/}
+          {/*              checked={notificationSettings.enableAlerts}*/}
+          {/*              onCheckedChange={(checked) =>*/}
+          {/*                  setNotificationSettings({...notificationSettings, enableAlerts: checked})*/}
+          {/*              }*/}
+          {/*          />*/}
+          {/*        </div>*/}
 
-                  <div className="flex items-center justify-between p-4 bg-slate-700/30 rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <Shield className="h-5 w-5 text-red-400" />
-                      <div>
-                        <h4 className="text-white font-medium">Critical Only</h4>
-                        <p className="text-sm text-slate-400">Critical alerts only</p>
-                      </div>
-                    </div>
-                    <Switch
-                        checked={notificationSettings.criticalOnly}
-                        onCheckedChange={(checked) =>
-                            setNotificationSettings({...notificationSettings, criticalOnly: checked})
-                        }
-                        disabled={!notificationSettings.enableAlerts}
-                    />
-                  </div>
+          {/*        <div className="flex items-center justify-between p-4 bg-slate-700/30 rounded-lg">*/}
+          {/*          <div className="flex items-center gap-3">*/}
+          {/*            <Shield className="h-5 w-5 text-red-400" />*/}
+          {/*            <div>*/}
+          {/*              <h4 className="text-white font-medium">Critical Only</h4>*/}
+          {/*              <p className="text-sm text-slate-400">Critical alerts only</p>*/}
+          {/*            </div>*/}
+          {/*          </div>*/}
+          {/*          <Switch*/}
+          {/*              checked={notificationSettings.criticalOnly}*/}
+          {/*              onCheckedChange={(checked) =>*/}
+          {/*                  setNotificationSettings({...notificationSettings, criticalOnly: checked})*/}
+          {/*              }*/}
+          {/*              disabled={!notificationSettings.enableAlerts}*/}
+          {/*          />*/}
+          {/*        </div>*/}
 
-                  <div className="flex items-center justify-between p-4 bg-slate-700/30 rounded-lg">
-                    <div className="flex items-center gap-3">
-                      {notificationSettings.soundEnabled ?
-                          <Volume2 className="h-5 w-5 text-blue-400" /> :
-                          <VolumeX className="h-5 w-5 text-slate-400" />
-                      }
-                      <div>
-                        <h4 className="text-white font-medium">Sound</h4>
-                        <p className="text-sm text-slate-400">Play alert sounds</p>
-                      </div>
-                    </div>
-                    <Switch
-                        checked={notificationSettings.soundEnabled}
-                        onCheckedChange={(checked) =>
-                            setNotificationSettings({...notificationSettings, soundEnabled: checked})
-                        }
-                        disabled={!notificationSettings.enableAlerts}
-                    />
-                  </div>
+          {/*        <div className="flex items-center justify-between p-4 bg-slate-700/30 rounded-lg">*/}
+          {/*          <div className="flex items-center gap-3">*/}
+          {/*            {notificationSettings.soundEnabled ?*/}
+          {/*                <Volume2 className="h-5 w-5 text-blue-400" /> :*/}
+          {/*                <VolumeX className="h-5 w-5 text-slate-400" />*/}
+          {/*            }*/}
+          {/*            <div>*/}
+          {/*              <h4 className="text-white font-medium">Sound</h4>*/}
+          {/*              <p className="text-sm text-slate-400">Play alert sounds</p>*/}
+          {/*            </div>*/}
+          {/*          </div>*/}
+          {/*          <Switch*/}
+          {/*              checked={notificationSettings.soundEnabled}*/}
+          {/*              onCheckedChange={(checked) =>*/}
+          {/*                  setNotificationSettings({...notificationSettings, soundEnabled: checked})*/}
+          {/*              }*/}
+          {/*              disabled={!notificationSettings.enableAlerts}*/}
+          {/*          />*/}
+          {/*        </div>*/}
 
-                  <div className="flex items-center justify-between p-4 bg-slate-700/30 rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <Mail className="h-5 w-5 text-green-400" />
-                      <div>
-                        <h4 className="text-white font-medium">Email</h4>
-                        <p className="text-sm text-slate-400">Email alerts</p>
-                      </div>
-                    </div>
-                    <Switch
-                        checked={notificationSettings.emailNotifications}
-                        onCheckedChange={(checked) =>
-                            setNotificationSettings({...notificationSettings, emailNotifications: checked})
-                        }
-                        disabled={!notificationSettings.enableAlerts}
-                    />
-                  </div>
+          {/*        <div className="flex items-center justify-between p-4 bg-slate-700/30 rounded-lg">*/}
+          {/*          <div className="flex items-center gap-3">*/}
+          {/*            <Mail className="h-5 w-5 text-green-400" />*/}
+          {/*            <div>*/}
+          {/*              <h4 className="text-white font-medium">Email</h4>*/}
+          {/*              <p className="text-sm text-slate-400">Email alerts</p>*/}
+          {/*            </div>*/}
+          {/*          </div>*/}
+          {/*          <Switch*/}
+          {/*              checked={notificationSettings.emailNotifications}*/}
+          {/*              onCheckedChange={(checked) =>*/}
+          {/*                  setNotificationSettings({...notificationSettings, emailNotifications: checked})*/}
+          {/*              }*/}
+          {/*              disabled={!notificationSettings.enableAlerts}*/}
+          {/*          />*/}
+          {/*        </div>*/}
 
-                  <div className="flex items-center justify-between p-4 bg-slate-700/30 rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <Phone className="h-5 w-5 text-yellow-400" />
-                      <div>
-                        <h4 className="text-white font-medium">SMS</h4>
-                        <p className="text-sm text-slate-400">SMS alerts</p>
-                      </div>
-                    </div>
-                    <Switch
-                        checked={notificationSettings.smsNotifications}
-                        onCheckedChange={(checked) =>
-                            setNotificationSettings({...notificationSettings, smsNotifications: checked})
-                        }
-                        disabled={!notificationSettings.enableAlerts}
-                    />
-                  </div>
+          {/*        <div className="flex items-center justify-between p-4 bg-slate-700/30 rounded-lg">*/}
+          {/*          <div className="flex items-center gap-3">*/}
+          {/*            <Phone className="h-5 w-5 text-yellow-400" />*/}
+          {/*            <div>*/}
+          {/*              <h4 className="text-white font-medium">SMS</h4>*/}
+          {/*              <p className="text-sm text-slate-400">SMS alerts</p>*/}
+          {/*            </div>*/}
+          {/*          </div>*/}
+          {/*          <Switch*/}
+          {/*              checked={notificationSettings.smsNotifications}*/}
+          {/*              onCheckedChange={(checked) =>*/}
+          {/*                  setNotificationSettings({...notificationSettings, smsNotifications: checked})*/}
+          {/*              }*/}
+          {/*              disabled={!notificationSettings.enableAlerts}*/}
+          {/*          />*/}
+          {/*        </div>*/}
 
-                  <div className="flex items-center justify-between p-4 bg-slate-700/30 rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <Smartphone className="h-5 w-5 text-purple-400" />
-                      <div>
-                        <h4 className="text-white font-medium">Push</h4>
-                        <p className="text-sm text-slate-400">Push notifications</p>
-                      </div>
-                    </div>
-                    <Switch
-                        checked={notificationSettings.pushNotifications}
-                        onCheckedChange={(checked) =>
-                            setNotificationSettings({...notificationSettings, pushNotifications: checked})
-                        }
-                        disabled={!notificationSettings.enableAlerts}
-                    />
-                  </div>
-                </div>
+          {/*        <div className="flex items-center justify-between p-4 bg-slate-700/30 rounded-lg">*/}
+          {/*          <div className="flex items-center gap-3">*/}
+          {/*            <Smartphone className="h-5 w-5 text-purple-400" />*/}
+          {/*            <div>*/}
+          {/*              <h4 className="text-white font-medium">Push</h4>*/}
+          {/*              <p className="text-sm text-slate-400">Push notifications</p>*/}
+          {/*            </div>*/}
+          {/*          </div>*/}
+          {/*          <Switch*/}
+          {/*              checked={notificationSettings.pushNotifications}*/}
+          {/*              onCheckedChange={(checked) =>*/}
+          {/*                  setNotificationSettings({...notificationSettings, pushNotifications: checked})*/}
+          {/*              }*/}
+          {/*              disabled={!notificationSettings.enableAlerts}*/}
+          {/*          />*/}
+          {/*        </div>*/}
+          {/*      </div>*/}
 
-                <Button
-                    variant="outline"
-                    className="w-full border-slate-600 text-white hover:bg-slate-700"
-                    onClick={() => toast.info('Sending test notification...', { description: 'Feature coming soon' })}
-                >
-                  <Bell className="h-4 w-4 mr-2" />
-                  Test Notifications
-                </Button>
-              </CardContent>
-            </Card>
-          </motion.div>
+          {/*      <Button*/}
+          {/*          variant="outline"*/}
+          {/*          className="w-full border-slate-600 text-white hover:bg-slate-700"*/}
+          {/*          onClick={() => toast.info('Sending test notification...', { description: 'Feature coming soon' })}*/}
+          {/*      >*/}
+          {/*        <Bell className="h-4 w-4 mr-2" />*/}
+          {/*        Test Notifications*/}
+          {/*      </Button>*/}
+          {/*    </CardContent>*/}
+          {/*  </Card>*/}
+          {/*</motion.div>*/}
         </div>
       </div>
   );
