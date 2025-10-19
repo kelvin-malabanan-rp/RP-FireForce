@@ -733,7 +733,7 @@ export class OnCallService {
 		const sql = `
 			SELECT oa.*, u.email, u.first_name, u.last_name, u.phone_number
 			FROM oncall_assignments oa
-					 JOIN users u ON oa.user_id = u.id
+				 JOIN users u ON oa.user_id = u.id
 			WHERE oa.team_id = ?
 			  AND oa.is_active = 1
 			ORDER BY oa.role
@@ -742,11 +742,86 @@ export class OnCallService {
 
 		if (!results || results.length === 0) return null;
 
+		// Filter assignments that are active for the requested date
 		const activeOnDate = (results as any[]).filter(row =>
 			this.isOnCallOnDate(row.dates, date)
 		);
 
 		if (activeOnDate.length === 0) return null;
+
+		// Check for any active overrides that cover the given date for this team
+		// Order by created_at DESC so the newest overrides are processed first
+		const overrideSql = `
+			SELECT * FROM oncall_overrides
+			WHERE team_id = ?
+			  AND status = 'active'
+			  AND date(start_time) <= ?
+			  AND date(end_time) >= ?
+			ORDER BY created_at DESC
+		`;
+		const {results: overrides = []} = await this.dbService.db.prepare(overrideSql).bind(teamId, date, date).all();
+
+		if (overrides && overrides.length > 0) {
+			// For each override, attempt to replace the matching assignment(s)
+			// Since overrides are ordered newest-first, we apply the newest one and skip further
+			for (const ov of overrides as any[]) {
+				try {
+					for (const row of activeOnDate) {
+						// If this row was already overridden by a newer override, skip it
+						if (row.__overridden) continue;
+
+						// If override specifies a schedule, ensure it matches this assignment's schedule
+						if (ov.schedule_id && ov.schedule_id !== '' && ov.schedule_id !== row.schedule_id) continue;
+
+						// Match by role first
+						const roleMatches = ov.role ? ov.role === row.role : true;
+
+						// Match original user if provided; use loose string comparison to avoid type mismatches
+						let originalMatches = true;
+						if (ov.original_user_id && ov.original_user_id !== '') {
+							originalMatches = String(ov.original_user_id) === String(row.user_id);
+						}
+
+						// If an original_user_id was provided but does not match, we still allow the override
+						// to apply when the intent is to replace the role for that date. To be explicit,
+						// if original_user_id exists and does not match, we log it for debugging but still
+						// allow role-only application only when schedule matches or original_user_id is null.
+						if (ov.original_user_id && !originalMatches) {
+							console.log(`[oncall] Override ${ov.id} original_user_id (${ov.original_user_id}) does not match assignment user (${row.user_id}). Applying override by role because schedule/role matched.`);
+							// keep originalMatches = true to allow application by role
+							originalMatches = true;
+						}
+
+						if (roleMatches && originalMatches) {
+							// Fetch replacement user details
+							const replacementId = ov.replacement_user_id;
+							if (!replacementId) continue;
+
+							const replacement = await this.dbService.db.prepare(
+								`SELECT id, email, first_name, last_name, phone_number FROM users WHERE id = ?`
+							).bind(replacementId).first();
+
+							if (!replacement) {
+								console.warn(`[oncall] Override replacement user not found: ${replacementId}`);
+								continue;
+							}
+
+							// Replace row's user fields with replacement user info and mark overridden
+							row.user_id = replacement.id;
+							row.email = replacement.email;
+							row.first_name = replacement.first_name;
+							row.last_name = replacement.last_name;
+							row.phone_number = replacement.phone_number;
+							row.__overridden = true; // internal flag for debugging/logging
+							row.__override_id = ov.id;
+							console.log(`[oncall] Applied override ${ov.id} on ${date} for team ${teamId} -> replaced user with ${replacementId}`);
+						}
+					}
+				} catch (err) {
+					console.error('[oncall] Error applying override:', err);
+				}
+			}
+		}
 
 		return this.parseOnCallResults(activeOnDate);
 	}
@@ -796,19 +871,41 @@ export class OnCallService {
 	): Promise<string> {
 		const id = crypto.randomUUID();
 
+		// Normalize ISO datetimes for comparisons
+		const newStartISO = start.toISOString();
+		const newEndISO = end.toISOString();
+
+		// NOTE: We intentionally disregard scheduleId for overrides and always treat overrides as team-scoped.
+		// Deactivate any existing active overrides that conflict for the same team and role
+		// Only set inactive if there is an override for the exact same start and end date
+		try {
+			await this.dbService.db.prepare(`
+				UPDATE oncall_overrides
+				SET status = 'inactive'
+				WHERE team_id = ?
+				  AND role = ?
+				  AND status = 'active'
+				  AND date(start_time) = date(?)
+				  AND date(end_time) = date(?)
+			`).bind(teamId, role, newStartISO, newEndISO).run();
+		} catch (err) {
+			console.error('[oncall] Error deactivating conflicting overrides:', err);
+			// don't throw — continue to create the new override, but log the issue
+		}
+
+		// Insert the new override as active, explicitly setting schedule_id = NULL
 		await this.dbService.db.prepare(`
 			INSERT INTO oncall_overrides
 			(id, team_id, schedule_id, original_user_id, replacement_user_id,
 			 start_time, end_time, role, reason, status, created_by, created_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, CURRENT_TIMESTAMP)
+			VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, 'active', ?, CURRENT_TIMESTAMP)
 		`).bind(
 			id,
 			teamId,
-			scheduleId,
 			originalUserId ?? null,
 			overrideUserId,
-			start.toISOString(),
-			end.toISOString(),
+			newStartISO,
+			newEndISO,
 			role,
 			reason ?? '',
 			createdBy ?? 'system'

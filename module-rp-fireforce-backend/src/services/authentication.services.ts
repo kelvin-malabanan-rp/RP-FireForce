@@ -1,6 +1,5 @@
 import { DatabaseService } from "./database.service";
 import { Env, User } from "../types";
-import bcrypt from 'bcryptjs';
 
 interface OAuthUserInfo {
 	sub?: string; // Google
@@ -359,7 +358,7 @@ export class AuthenticationServices {
 
 			// ✅ Hash default password 'password123'
 			const defaultPassword = 'password123';
-			const passwordHash = await bcrypt.hash(defaultPassword, 10);
+			const passwordHash = await this.hashPassword(defaultPassword);
 			console.log('Default password set for OAuth user');
 
 			await this.env.DB.prepare(`
@@ -455,10 +454,10 @@ export class AuthenticationServices {
 	 * Verify password against hash
 	 */
 	private async verifyPassword(password: string, hash: string): Promise<boolean> {
-		// Use bcrypt.compare() which properly verifies bcrypt hashes
-		const isValid = await bcrypt.compare(password, hash);
-		return isValid; // ✅ Works for ALL bcrypt hashes!
+		const hashedInput = await this.hashPassword(password);
+		return hashedInput === hash;
 	}
+
 	/**
 	 * Hash password using Web Crypto API
 	 */
