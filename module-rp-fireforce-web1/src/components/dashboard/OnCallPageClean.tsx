@@ -4,14 +4,17 @@ import React from "react";
 import { motion } from "framer-motion";
 import {
     Calendar, ChevronLeft, ChevronRight, Loader2, RefreshCw,
-    AlertCircle, Plus, Users, CheckCircle, X, Edit2
+    AlertCircle, Plus, Users, CheckCircle, X, Edit2, UserCheck // Added UserCheck
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { Label } from "../ui/label";
-import { onCallService, Team, Assignment, TeamMember } from "../../services/on-call-service";
+import { onCallService, Team, Assignment, TeamMember } from "@/services/oncallService.ts";
+import { BulkSchedulerModal } from "../modals/BulkSchedulerModal";
+import { OverrideModal } from "../modals/OverrideModal";
+import {teamManagementServiceV2} from "@/services/team-management-service.ts";
 
 interface ConsecutiveEvent {
     startDay: number;
@@ -33,6 +36,12 @@ export function OnCallPage() {
     const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
     const [isEditMode, setIsEditMode] = useState(false);
 
+    // NEW: State for bulk scheduler and override modals
+    const [isSchedulerOpen, setIsSchedulerOpen] = useState(false);
+    const [isOverrideOpen, setIsOverrideOpen] = useState(false);
+    const [overrideDate, setOverrideDate] = useState<Date | null>(null);
+    const [overrideAssignment, setOverrideAssignment] = useState<Assignment | null>(null);
+
     const [editData, setEditData] = useState({
         primaryUser: '',
         backupUser: '',
@@ -42,24 +51,83 @@ export function OnCallPage() {
     const lastLoadRef = useRef<number>(0);
 
     useEffect(() => { loadData(); }, []);
+    useEffect(() => {
+        if (myTeam && myTeam.schedule.length > 0) {
+            console.log('📊 Schedule loaded:', {
+                teamName: myTeam.teamName,
+                totalDays: myTeam.schedule.length,
+                dateRange: `${myTeam.schedule[0].date} to ${myTeam.schedule[myTeam.schedule.length - 1].date}`,
+                assignedDays: myTeam.schedule.filter(s => s.assignment !== null).length,
+                assignedDates: myTeam.schedule
+                    .filter(s => s.assignment !== null)
+                    .map(s => s.date)
+                    .slice(0, 10) // First 10 assigned dates
+            });
+        }
+    }, [myTeam]);
 
     const loadData = useCallback(async () => {
         setIsLoading(true);
         setError(null);
         try {
-            const calendarResponse = await onCallService.getCalendarData(30);
+            // Fetch 60 days to cover past and future months
+            const calendarResponse = await onCallService.getCalendarData(60);
+            console.log("📅 Calendar data received:", calendarResponse);
+
             if (!calendarResponse.success || !calendarResponse.data) {
                 throw new Error('Failed to load calendar data');
             }
             setTeams(calendarResponse.data);
+
+            // Get current user
             const userStr = localStorage.getItem('user');
             const currentUserId = userStr ? JSON.parse(userStr).id : null;
+            console.log('👤 Current user ID:', currentUserId);
+
             if (currentUserId) {
-                const userTeam = calendarResponse.data.find((team: Team) =>
-                    team.members?.some(m => m.id === currentUserId)
-                );
-                setMyTeam(userTeam || null);
+                try {
+                    // Use team management service to get user's team
+                    const userTeamResponse = await teamManagementServiceV2.getUserTeam(currentUserId);
+                    console.log('🔍 User team response:', userTeamResponse);
+
+                    if (userTeamResponse.success && userTeamResponse.data?.data) {
+                        const userTeamId = userTeamResponse.data.data.id;
+                        console.log('🎯 User team ID:', userTeamId);
+
+                        // Find the team in calendar data
+                        const userTeam = calendarResponse.data.find((team: Team) =>
+                            team.teamId === userTeamId
+                        );
+
+                        if (userTeam) {
+                            console.log('✅ User team found:', userTeam);
+                            console.log('📊 Team has', userTeam.members.length, 'members');
+                            console.log('📅 Team has', userTeam.schedule.length, 'schedule days');
+                            setMyTeam(userTeam);
+                        } else {
+                            console.warn('⚠️ User team not in calendar, using first available team');
+                            const fallbackTeam = calendarResponse.data[0] || null;
+                            console.log('🔄 Fallback team:', fallbackTeam?.teamName);
+                            setMyTeam(fallbackTeam);
+                        }
+                    } else {
+                        console.warn('⚠️ User not assigned to any team, using first available');
+                        const fallbackTeam = calendarResponse.data[0] || null;
+                        console.log('🔄 Fallback team:', fallbackTeam?.teamName);
+                        setMyTeam(fallbackTeam);
+                    }
+                } catch (teamError) {
+                    console.error('❌ Error fetching user team:', teamError);
+                    const fallbackTeam = calendarResponse.data[0] || null;
+                    console.log('🔄 Error fallback team:', fallbackTeam?.teamName);
+                    setMyTeam(fallbackTeam);
+                }
+            } else {
+                const fallbackTeam = calendarResponse.data[0] || null;
+                console.log('⚠️ No user ID found, using first team:', fallbackTeam?.teamName);
+                setMyTeam(fallbackTeam);
             }
+
             lastLoadRef.current = Date.now();
         } catch (error: any) {
             console.error('❌ Error loading on-call data:', error);
@@ -68,6 +136,10 @@ export function OnCallPage() {
             setIsLoading(false);
         }
     }, []);
+
+    useEffect(() => {
+        console.log('🔄 myTeam state updated:', myTeam);
+    }, [myTeam]);
 
     const getTeamMembers = useCallback((teamId: string): TeamMember[] => {
         const team = teams.find(t => t.teamId === teamId);
@@ -115,14 +187,16 @@ export function OnCallPage() {
         setSelectedTeamForEdit(null);
         setEditData({ primaryUser: '', backupUser: '', escalationUsers: [] });
     }, []);
-
+// 3. UPDATE: handleSaveSchedule (single day edit) with loading state
     const handleSaveSchedule = async () => {
         if (!selectedDate || !selectedTeamForEdit) return;
         try {
             const scheduleId = selectedTeamForEdit.schedule.find(d => d.assignment?.scheduleId)?.assignment?.scheduleId;
             if (!scheduleId) throw new Error('Schedule ID not found');
+
             const dateKey = formatDateKey(selectedDate);
             const assignments = [];
+
             if (editData.primaryUser) {
                 assignments.push({ userId: editData.primaryUser, role: 'primary' as const, dates: [dateKey] });
             }
@@ -132,22 +206,131 @@ export function OnCallPage() {
             editData.escalationUsers.forEach(userId => {
                 assignments.push({ userId, role: 'escalation' as const, dates: [dateKey] });
             });
+
             const payload: any = { scheduleId, teamId: selectedTeamForEdit.teamId, assignments };
             if (assignments.length === 0) {
                 payload.clearDate = dateKey;
             }
+
             const result = await onCallService.updateSchedule(payload);
+
             if (result.success) {
                 closeModals();
-                setTimeout(() => loadData(), 300);
+
+                // ✅ Show loading and force reload
+                setIsLoading(true);
+                await new Promise(resolve => setTimeout(resolve, 500)); // Wait for DB to settle
+                await loadData();
+                setIsLoading(false);
             } else {
                 throw new Error(result.message || 'Failed to update schedule');
             }
         } catch (error: any) {
             console.error('Error updating schedule:', error);
+            setIsLoading(false);
             alert(error.message || 'Failed to update schedule');
         }
     };
+
+    const handleSaveBulkSchedule = useCallback(async (data: {
+        scheduleId: string;
+        teamId: string;
+        assignments: Array<{
+            userId: string;
+            role: 'primary' | 'backup' | 'escalation';
+            dates: string[];
+        }>;
+    }) => {
+        try {
+            console.log('📝 Saving bulk schedule:', data);
+
+            const result = await onCallService.updateSchedule({
+                scheduleId: data.scheduleId,
+                teamId: data.teamId,
+                assignments: data.assignments,
+            });
+
+            if (result.success) {
+                console.log('✅ Schedule saved successfully');
+                setIsSchedulerOpen(false);
+
+                // ✅ AUTO-NAVIGATE: Jump to first scheduled date
+                if (data.assignments.length > 0 && data.assignments[0].dates.length > 0) {
+                    const firstScheduledDate = new Date(data.assignments[0].dates[0]);
+                    console.log('📅 Navigating to:', firstScheduledDate.toLocaleDateString());
+                    setCurrentDate(firstScheduledDate);
+                }
+
+                // ✅ Force reload with extended date range
+                setIsLoading(true);
+                await new Promise(resolve => setTimeout(resolve, 500));
+                await loadData();
+                setIsLoading(false);
+
+                alert(`✅ Schedule created for ${data.assignments[0].dates.length} day(s)!`);
+            } else {
+                throw new Error(result.message || 'Failed to save schedule');
+            }
+        } catch (error: any) {
+            console.error('❌ Error saving schedule:', error);
+            setIsLoading(false);
+            alert(error.message || 'Failed to save schedule');
+        }
+    }, [loadData]);
+
+    // 2. UPDATE: handleSaveOverride with loading state
+    const handleSaveOverride = useCallback(async (data: {
+        teamId: string;
+        scheduleId?: string;
+        startTime: string;
+        endTime: string;
+        userId: string;
+        role: 'primary' | 'backup' | 'escalation';
+        reason: string;
+        originalUserId?: string;
+    }) => {
+        try {
+            console.log('🔄 Creating override:', data);
+
+            const result = await onCallService.createOverride(data);
+
+            if (result.success) {
+                console.log('✅ Override created successfully');
+                setIsOverrideOpen(false);
+
+                // ✅ Show loading and force reload
+                setIsLoading(true);
+                await new Promise(resolve => setTimeout(resolve, 500)); // Wait for DB to settle
+                await loadData();
+                setIsLoading(false);
+
+                alert('✅ Override created successfully!');
+            } else {
+                throw new Error(result.message || 'Failed to create override');
+            }
+        } catch (error: any) {
+            console.error('❌ Error creating override:', error);
+            setIsLoading(false);
+            alert(error.message || 'Failed to create override');
+        }
+    }, [loadData]);
+
+    // NEW: Open override modal for a specific date
+    const handleOpenOverride = useCallback((date: Date, team: Team, assignment: Assignment | null) => {
+        setOverrideDate(date);
+        setOverrideAssignment(assignment);
+        setSelectedTeamForEdit(team);
+        setIsOverrideOpen(true);
+    }, []);
+
+    // NEW: Open bulk scheduler modal
+    const handleOpenScheduler = useCallback(() => {
+        if (!myTeam) {
+            alert('Please select your team first');
+            return;
+        }
+        setIsSchedulerOpen(true);
+    }, [myTeam]);
 
     const consecutiveEvents = useMemo(() => {
         if (!filteredTeams || filteredTeams.length === 0) return [];
@@ -162,8 +345,16 @@ export function OnCallPage() {
                     const dateKey = formatDateKey(date);
                     const daySchedule = team.schedule.find(s => s.date === dateKey);
                     const hasAssignment = !!daySchedule?.assignment;
+
+                    // Check if this is the start of a new week (Sunday)
+                    const isStartOfWeek = date.getDay() === 0 && currentEvent !== null;
+
                     if (hasAssignment) {
-                        if (!currentEvent) {
+                        // ✅ FIXED: Split at week boundaries
+                        if (!currentEvent || isStartOfWeek) {
+                            if (currentEvent && isStartOfWeek) {
+                                events.push(currentEvent);
+                            }
                             currentEvent = { startDay: day, endDay: day, person: { id: team.teamId, firstName: team.teamName }, role: 'primary', rowIndex: teamIndex };
                         } else {
                             currentEvent.endDay = day;
@@ -189,6 +380,10 @@ export function OnCallPage() {
                     const dateKey = formatDateKey(date);
                     const daySchedule = team.schedule.find(s => s.date === dateKey);
                     const assignment = daySchedule?.assignment;
+
+                    // Check if this is the start of a new week (Sunday)
+                    const isStartOfWeek = date.getDay() === 0 && currentEvent !== null;
+
                     let personForRole: any = null;
                     if (role === 'primary' && assignment?.primary) {
                         personForRole = assignment.primary;
@@ -197,8 +392,10 @@ export function OnCallPage() {
                     } else if (role === 'escalation' && assignment?.escalation && assignment.escalation.length > 0) {
                         personForRole = { id: assignment.escalation.map(e => e.id).join(','), firstName: assignment.escalation[0].firstName, count: assignment.escalation.length };
                     }
+
                     if (personForRole) {
-                        if (!currentEvent || currentEvent.person.id !== personForRole.id) {
+                        // ✅ FIXED: Split at week boundaries OR when person changes
+                        if (!currentEvent || currentEvent.person.id !== personForRole.id || isStartOfWeek) {
                             if (currentEvent) {
                                 events.push(currentEvent);
                             }
@@ -254,6 +451,13 @@ export function OnCallPage() {
                                 : 'bg-white dark:bg-slate-800/20 border-slate-200 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-600'
                     }`}
                     onClick={() => handleDateClick(day)}
+                    onContextMenu={(e) => {
+                        e.preventDefault();
+                        if (selectedTeam === 'my-team' && myTeam) {
+                            const dayAssignment = myTeam.schedule.find(s => s.date === dateKey)?.assignment || null;
+                            handleOpenOverride(date, myTeam, dayAssignment);
+                        }
+                    }}
                 >
                     <div className="flex items-center justify-between p-2">
                     <span className={`text-sm font-semibold ${
@@ -280,7 +484,6 @@ export function OnCallPage() {
                         if (selectedTeam === 'all') {
                             const teamColors = ['bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-orange-500', 'bg-pink-500'];
                             bgColor = teamColors[event.rowIndex % teamColors.length];
-                            // In "All Teams" view, stack teams vertically but use index from filtered events
                             topPosition = 30 + index * 19;
                         } else {
                             const roleColors = {
@@ -289,7 +492,6 @@ export function OnCallPage() {
                                 escalation: 'bg-orange-500'
                             };
                             bgColor = roleColors[event.role];
-                            // In single team view, stack by role
                             topPosition = 30 + event.rowIndex * 19;
                         }
 
@@ -320,7 +522,7 @@ export function OnCallPage() {
         }
 
         return days;
-    }, [currentDate, filteredTeams, formatDateKey, handleDateClick, selectedTeam, consecutiveEvents]);
+    }, [currentDate, filteredTeams, formatDateKey, handleDateClick, selectedTeam, consecutiveEvents, myTeam, handleOpenOverride]);
 
     if (isLoading) {
         return (<div className="flex flex-col items-center justify-center h-screen"><Loader2 className="h-12 w-12 animate-spin text-blue-500 mb-4" /><p className="text-slate-400">Loading schedules...</p></div>);
@@ -333,11 +535,58 @@ export function OnCallPage() {
         <div className="space-y-6">
             <motion.div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4" initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
                 <div><h1 className="text-4xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 dark:from-white dark:to-slate-200 bg-clip-text text-transparent">On-Call Schedule</h1><p className="text-slate-700 dark:text-slate-200 mt-2 text-lg">Manage your team's on-call rotations</p></div>
-                <div className="flex gap-2"><Button variant="outline" size="sm" onClick={loadData} className="text-slate-900 dark:text-white border-slate-200 dark:border-slate-700"><RefreshCw className="mr-2 h-4 w-4" />Refresh</Button></div>
+                <div className="flex flex-wrap gap-2">
+                    <Button variant="outline" size="sm" onClick={loadData} className="text-slate-900 dark:text-white border-slate-200 dark:border-slate-700"><RefreshCw className="mr-2 h-4 w-4" />Refresh</Button>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleOpenScheduler}
+                        disabled={!myTeam}
+                        className="text-slate-900 dark:text-white border-slate-200 dark:border-slate-700 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                    >
+                        <Plus className="mr-2 h-4 w-4" />
+                        Bulk Scheduler
+                    </Button>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                            if (!myTeam) {
+                                alert('Please select your team first');
+                                return;
+                            }
+                            const today = new Date();
+                            const todayStr = formatDateKey(today);
+                            const todayAssignment = myTeam.schedule.find(s => s.date === todayStr)?.assignment || null;
+                            handleOpenOverride(today, myTeam, todayAssignment);
+                        }}
+                        disabled={!myTeam}
+                        className="text-slate-900 dark:text-white border-slate-200 dark:border-slate-700 hover:bg-orange-50 dark:hover:bg-orange-900/20"
+                    >
+                        <UserCheck className="mr-2 h-4 w-4" />
+                        Create Override
+                    </Button>
+                </div>
             </motion.div>
             <div className="flex gap-2">
-                <Button variant={selectedTeam === 'my-team' ? 'default' : 'outline'} size="sm" onClick={() => setSelectedTeam('my-team')} disabled={!myTeam} className={selectedTeam === 'my-team' ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white' : 'text-slate-900 dark:text-white border-slate-200 dark:border-slate-700'}><Users className="mr-2 h-4 w-4" />My Team</Button>
-                <Button variant={selectedTeam === 'all' ? 'default' : 'outline'} size="sm" onClick={() => setSelectedTeam('all')} className={selectedTeam === 'all' ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white' : 'text-slate-900 dark:text-white border-slate-200 dark:border-slate-700'}>All Teams ({teams.length})</Button>
+                <Button
+                    variant={selectedTeam === 'my-team' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setSelectedTeam('my-team')}
+                    disabled={!myTeam}  // Keep this - it's correct now
+                    className={selectedTeam === 'my-team' ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white' : 'text-slate-900 dark:text-white border-slate-200 dark:border-slate-700'}
+                >
+                    <Users className="mr-2 h-4 w-4" />
+                    My Team
+                </Button>
+                <Button
+                    variant={selectedTeam === 'all' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setSelectedTeam('all')}
+                    className={selectedTeam === 'all' ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white' : 'text-slate-900 dark:text-white border-slate-200 dark:border-slate-700'}
+                >
+                    All Teams ({teams.length})
+                </Button>
             </div>
             <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
                 <CardHeader>
@@ -372,6 +621,24 @@ export function OnCallPage() {
                     </motion.div>
                 </div>
             )}
+
+            {/* NEW: Bulk Scheduler Modal */}
+            <BulkSchedulerModal
+                isOpen={isSchedulerOpen}
+                onClose={() => setIsSchedulerOpen(false)}
+                team={myTeam}
+                onSave={handleSaveBulkSchedule}
+            />
+
+            {/* NEW: Override Modal */}
+            <OverrideModal
+                isOpen={isOverrideOpen}
+                onClose={() => setIsOverrideOpen(false)}
+                team={selectedTeamForEdit}
+                selectedDate={overrideDate}
+                currentAssignment={overrideAssignment}
+                onSave={handleSaveOverride}
+            />
         </div>
     );
 }

@@ -13,6 +13,7 @@ export interface TeamMember {
   lastName: string;
   phoneNumber: string | null;
   role: 'primary' | 'backup' | 'escalation';
+  avatarUrl?: string;
 }
 
 export interface Assignment {
@@ -115,17 +116,14 @@ export interface CreateSchedulePayload {
 
 export interface UpdateSchedulePayload {
   scheduleId: string;
+  teamId: string;
   name?: string;
-  rotationType?: 'daily' | 'weekly' | 'custom';
-  rotationLengthHours?: number;
-  rotationStartISO?: string;
-  isActive?: boolean;
-  members?: {
+  assignments: Array<{
     userId: string;
     role: 'primary' | 'backup' | 'escalation';
-    orderIndex: number;
-    isActive: boolean;
-  }[];
+    dates: string[];
+  }>;
+  clearDate?: string;
 }
 
 export interface Schedule {
@@ -243,7 +241,7 @@ export interface CreateOverridePayload {
   userId: string;  // This is the replacement user
   role: 'primary' | 'backup' | 'escalation';
   reason: string;
-  originalUserId?: string;  // Made optional to match mobile
+  originalUserId?: string;
   status?: string;
   createdBy?: string;
 }
@@ -302,8 +300,14 @@ export interface UserTeamResponse {
   };
 }
 
+export interface UpdateScheduleResponse {
+  success: boolean;
+  httpStatus: string;
+  message: string;
+}
+
 // ============================================================================
-// ONCALL SERVICE (UPDATED TO MATCH MOBILE)
+// ONCALL SERVICE
 // ============================================================================
 
 class OnCallService {
@@ -314,7 +318,7 @@ class OnCallService {
   /**
    * GET: All Teams (Simple list with members)
    * API: /api/oncall/teams
-   * ✅ SAME AS MOBILE
+   * Backend: getOnCallTeams()
    */
   async getAllTeams(): Promise<AllTeamsResponse> {
     try {
@@ -334,8 +338,8 @@ class OnCallService {
   /**
    * GET: Current On-Call Users (All Teams)
    * API: /api/oncall/current
+   * Backend: getAllCurrentOnCall()
    * Returns all current on-call people grouped by role
-   * ✅ SAME AS MOBILE
    */
   async getCurrentOnCall(): Promise<CurrentOnCallResponse> {
     try {
@@ -351,8 +355,8 @@ class OnCallService {
   /**
    * GET: Current On-Call by Team
    * API: /api/oncall/team?teamId={teamId}
+   * Backend: getCurrentOnCallByTeamId()
    * Returns who's currently on-call for a specific team
-   * ✅ UPDATED TO MATCH MOBILE - Uses /team instead of /team/details
    */
   async getCurrentOnCallByTeam(teamId: string): Promise<CurrentOnCallByTeamResponse> {
     try {
@@ -368,8 +372,8 @@ class OnCallService {
   /**
    * GET: On-Call Team by User ID
    * API: /api/oncall/user/team?userId={userId}
+   * Backend: getUserTeam()
    * Find which team a user belongs to
-   * ✅ SAME AS MOBILE
    */
   async getUserTeam(userId: string): Promise<UserTeamResponse> {
     try {
@@ -383,14 +387,36 @@ class OnCallService {
   }
 
   // ========================================
-  // SCHEDULE QUERIES
+  // CALENDAR & SCHEDULE QUERIES
   // ========================================
+
+  /**
+   * GET: Calendar Data (All Teams or Specific Team)
+   * API: /api/oncall/calendar?days={days}&teamId={teamId}
+   * Backend: getCalendarData(days, teamId?)
+   * Returns calendar data with team schedules
+   */
+  async getCalendarData(days: number = 30, teamId?: string): Promise<CalendarResponse> {
+    try {
+      let url = `${BASE_URL}/api/oncall/calendar?days=${days}`;
+      if (teamId) {
+        url += `&teamId=${teamId}`;
+      }
+
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`Failed to fetch calendar: ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching calendar:', error);
+      throw error;
+    }
+  }
 
   /**
    * GET: On-Call Schedule for Team
    * API: /api/oncall/schedule?teamId={teamId}&days={days}
+   * Backend: getOnCallSchedule()
    * Get schedule for specific team and date range
-   * ✅ SAME AS MOBILE
    */
   async getTeamSchedule(teamId: string, days: number = 30): Promise<TeamScheduleResponse> {
     try {
@@ -406,8 +432,8 @@ class OnCallService {
   /**
    * GET: Schedule Configuration
    * API: /api/oncall/schedule/config?teamId={teamId}
+   * Backend: getScheduleConfig()
    * Get rotation configuration (type, length, members order)
-   * ✅ SAME AS MOBILE
    */
   async getScheduleConfig(teamId: string): Promise<ScheduleConfigResponse> {
     try {
@@ -423,8 +449,8 @@ class OnCallService {
   /**
    * PUT: Update Schedule Configuration
    * API: /api/oncall/schedule/config
+   * Backend: updateScheduleConfig()
    * Update rotation settings and member order
-   * ✅ SAME AS MOBILE
    */
   async updateScheduleConfig(payload: UpdateScheduleConfigPayload): Promise<any> {
     try {
@@ -442,25 +468,132 @@ class OnCallService {
   }
 
   // ========================================
+  // SCHEDULE MANAGEMENT (BULK OPERATIONS)
+  // ========================================
+
+  /**
+   * PUT: Update Schedule (Bulk Assignments with Dates Array)
+   * API: /api/oncall/schedule
+   * Backend: updateScheduleAssignments()
+   *
+   * This handles BOTH:
+   * - Adding/updating assignments (pass assignments array with dates)
+   * - Clearing a specific date (pass clearDate with empty assignments)
+   */
+  async updateSchedule(payload: UpdateSchedulePayload): Promise<UpdateScheduleResponse> {
+    try {
+      console.log('📝 Updating schedule:', payload);
+
+      const response = await fetch(`${BASE_URL}/api/oncall/schedule`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+      }
+
+      const result: UpdateScheduleResponse = await response.json();
+      console.log('✅ Schedule updated successfully:', result.message);
+
+      return result;
+    } catch (error) {
+      console.error('❌ Error updating schedule:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * POST: Create Schedule with Dates
+   * API: /api/oncall/schedule
+   * Backend: createScheduleWithDates()
+   * Create a new schedule with initial assignments
+   */
+  async createSchedule(payload: {
+    teamId: string;
+    name: string;
+    assignments: Array<{
+      userId: string;
+      role: 'primary' | 'backup' | 'escalation';
+      dates: string[];
+    }>;
+  }): Promise<any> {
+    try {
+      const response = await fetch(`${BASE_URL}/api/oncall/schedule`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) throw new Error(`Failed to create schedule: ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      console.error('Error creating schedule:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * DELETE: Delete Schedule
+   * API: /api/oncall/schedule?scheduleId={scheduleId}
+   * Backend: deleteSchedule()
+   * Deactivates a schedule (soft delete)
+   */
+  async deleteSchedule(scheduleId: string): Promise<any> {
+    try {
+      const response = await fetch(`${BASE_URL}/api/oncall/schedule?scheduleId=${scheduleId}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) throw new Error(`Failed to delete schedule: ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      console.error('Error deleting schedule:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * GET: All Schedules
+   * API: /api/oncall/schedules/all?includeInactive=false
+   * Backend: getAllSchedules()
+   * Get all schedules, optionally including inactive ones
+   */
+  async getAllSchedules(includeInactive: boolean = false): Promise<AllSchedulesResponse> {
+    try {
+      const response = await fetch(
+          `${BASE_URL}/api/oncall/schedules/all?includeInactive=${includeInactive}`
+      );
+      if (!response.ok) throw new Error(`Failed to fetch schedules: ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching schedules:', error);
+      throw error;
+    }
+  }
+
+  // ========================================
   // OVERRIDE MANAGEMENT
   // ========================================
 
   /**
    * POST: Create Override
    * API: /api/oncall/override
+   * Backend: createOverride()
    * Temporarily replace someone in the schedule (vacation, sick leave, etc.)
-   * ✅ SAME AS MOBILE
    */
   async createOverride(payload: CreateOverridePayload): Promise<OverrideResponse> {
     try {
+      console.log('🔄 Creating override:', payload);
+
       const response = await fetch(`${BASE_URL}/api/oncall/override`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      
+
       const responseText = await response.text();
-      
+
       if (!response.ok) {
         try {
           const errorData = JSON.parse(responseText);
@@ -469,11 +602,12 @@ class OnCallService {
           throw new Error(`Failed to create override: ${response.status} - ${responseText}`);
         }
       }
-      
+
       const result = JSON.parse(responseText);
+      console.log('✅ Override created:', result);
       return result;
     } catch (error) {
-      console.error('Error creating override:', error);
+      console.error('❌ Error creating override:', error);
       throw error;
     }
   }
@@ -485,7 +619,7 @@ class OnCallService {
   /**
    * GET: Escalation Policy
    * API: /api/oncall/escalation-policy?teamId={teamId}
-   * ✅ SAME AS MOBILE
+   * Backend: getEscalationPolicy()
    */
   async getEscalationPolicy(teamId: string): Promise<EscalationPolicyResponse> {
     try {
@@ -501,8 +635,8 @@ class OnCallService {
   /**
    * POST: Escalate Incident
    * API: /api/oncall/escalate
+   * Backend: escalateIncident()
    * Escalate an unresolved incident to the next level
-   * ✅ SAME AS MOBILE
    */
   async escalateIncident(payload: EscalateIncidentPayload): Promise<EscalateIncidentResponse> {
     try {
@@ -520,7 +654,7 @@ class OnCallService {
   }
 
   // ========================================
-  // LEGACY/DEPRECATED - Keeping for backward compatibility
+  // LEGACY/DEPRECATED
   // ========================================
 
   /**
@@ -535,98 +669,6 @@ class OnCallService {
       return await response.json();
     } catch (error) {
       console.error('Error fetching team details:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * @deprecated
-   * GET: Calendar Data (All Teams) - 30 days
-   * API: /api/oncall/calendar?days=30
-   */
-  async getCalendarData(days: number = 30): Promise<CalendarResponse> {
-    try {
-      const response = await fetch(`${BASE_URL}/api/oncall/calendar?days=${days}`);
-      if (!response.ok) throw new Error(`Failed to fetch calendar: ${response.status}`);
-      return await response.json();
-    } catch (error) {
-      console.error('Error fetching calendar:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * @deprecated
-   * POST: Create Schedule
-   * API: /api/oncall/schedule
-   */
-  async createSchedule(payload: CreateSchedulePayload): Promise<any> {
-    try {
-      const response = await fetch(`${BASE_URL}/api/oncall/schedule`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      if (!response.ok) throw new Error(`Failed to create schedule: ${response.status}`);
-      return await response.json();
-    } catch (error) {
-      console.error('Error creating schedule:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * @deprecated
-   * PUT: Update Schedule
-   * API: /api/oncall/schedule
-   */
-  async updateSchedule(payload: UpdateSchedulePayload): Promise<any> {
-    try {
-      const response = await fetch(`${BASE_URL}/api/oncall/schedule`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      if (!response.ok) throw new Error(`Failed to update schedule: ${response.status}`);
-      return await response.json();
-    } catch (error) {
-      console.error('Error updating schedule:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * @deprecated
-   * DELETE: Delete Schedule
-   * API: /api/oncall/schedule?scheduleId={scheduleId}
-   */
-  async deleteSchedule(scheduleId: string): Promise<any> {
-    try {
-      const response = await fetch(`${BASE_URL}/api/oncall/schedule?scheduleId=${scheduleId}`, {
-        method: 'DELETE',
-      });
-      if (!response.ok) throw new Error(`Failed to delete schedule: ${response.status}`);
-      return await response.json();
-    } catch (error) {
-      console.error('Error deleting schedule:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * @deprecated
-   * GET: All Schedules
-   * API: /api/oncall/schedules/all?includeInactive=false
-   */
-  async getAllSchedules(includeInactive: boolean = false): Promise<AllSchedulesResponse> {
-    try {
-      const response = await fetch(
-        `${BASE_URL}/api/oncall/schedules/all?includeInactive=${includeInactive}`
-      );
-      if (!response.ok) throw new Error(`Failed to fetch schedules: ${response.status}`);
-      return await response.json();
-    } catch (error) {
-      console.error('Error fetching schedules:', error);
       throw error;
     }
   }

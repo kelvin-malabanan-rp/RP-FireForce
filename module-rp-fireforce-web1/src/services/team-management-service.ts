@@ -107,6 +107,32 @@ class TeamManagementServiceV2 {
     }
 
     /**
+     * Get the team that a user belongs to
+     */
+    async getUserTeam(userId: string): Promise<ApiResponse<{
+        id: string;
+        name: string;
+        timezone: string;
+        fullname: string;
+        email: string;
+    }>> {
+        console.log('🔍 Fetching team for user:', userId);
+
+        try {
+            const response = await apiService.get(`/api/oncall/user/team?userId=${userId}`);
+
+            if (response.success) {
+                console.log('✅ Found user team:', response.data?.data?.name);
+            }
+
+            return response;
+        } catch (error: any) {
+            console.error('❌ Failed to fetch user team:', error.message);
+            throw error;
+        }
+    }
+
+    /**
      * Get a specific team by ID
      */
     async getTeamById(teamId: string): Promise<ApiResponse<Team>> {

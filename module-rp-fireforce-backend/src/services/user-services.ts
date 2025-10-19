@@ -1,6 +1,5 @@
 import { Env, User } from "../types";
 import { DatabaseService } from "./database.service";
-import bcrypt from 'bcryptjs'; // ✅ Add this import
 
 export class UserServices {
 	private env: Env;
@@ -251,17 +250,17 @@ export class UserServices {
 				};
 			}
 
-			// Verify current password
-			const isValid = await bcrypt.compare(currentPassword, user.password_hash as string);
-			if (!isValid) {
+			// Verify current password using hashPassword
+			const currentHash = await this.hashPassword(currentPassword);
+			if (currentHash !== user.password_hash) {
 				return {
 					success: false,
 					message: 'Current password is incorrect'
 				};
 			}
 
-			// Hash new password
-			const newPasswordHash = await bcrypt.hash(newPassword, 10);
+			// Hash new password using hashPassword
+			const newPasswordHash = await this.hashPassword(newPassword);
 
 			// Update password
 			await this.dbService.db.prepare(`
@@ -303,5 +302,17 @@ export class UserServices {
 			console.error('Error updating avatar:', error);
 			throw error;
 		}
+	}
+
+	/**
+	 * Hash password using Web Crypto API
+	 */
+	private async hashPassword(password: string): Promise<string> {
+		const encoder = new TextEncoder();
+		// Using a simple salt for now - replace with proper bcrypt in production
+		const data = encoder.encode(password + 'rp-fire-force-salt');
+		const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+		const hashArray = Array.from(new Uint8Array(hashBuffer));
+		return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 	}
 }

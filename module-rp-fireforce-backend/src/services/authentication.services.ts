@@ -289,7 +289,10 @@ export class AuthenticationServices {
 
 			// Step 1: Try to find user by provider + oauth_id first
 			let user = await this.env.DB.prepare(
-				`SELECT * FROM users WHERE oauth_provider = ? AND oauth_id = ?`
+				`SELECT *
+				 FROM users
+				 WHERE oauth_provider = ?
+				   AND oauth_id = ?`
 			).bind(provider, oauthId).first();
 
 			if (user) {
@@ -300,7 +303,9 @@ export class AuthenticationServices {
 
 			// Step 2: If not found, check by email
 			const existingByEmail = await this.env.DB.prepare(
-				`SELECT * FROM users WHERE email = ?`
+				`SELECT *
+				 FROM users
+				 WHERE email = ?`
 			).bind(userInfo.email).first();
 
 			if (existingByEmail) {
@@ -308,9 +313,11 @@ export class AuthenticationServices {
 
 				await this.env.DB.prepare(`
 					UPDATE users
-					SET oauth_provider = ?, oauth_id = ?,
-					    display_name = ?, avatar_url = ?,
-					    updated_at = CURRENT_TIMESTAMP
+					SET oauth_provider = ?,
+						oauth_id       = ?,
+						display_name   = ?,
+						avatar_url     = ?,
+						updated_at     = CURRENT_TIMESTAMP
 					WHERE email = ?
 				`).bind(
 					provider,
@@ -324,13 +331,15 @@ export class AuthenticationServices {
 
 				// Re-fetch updated user
 				user = await this.env.DB.prepare(
-					`SELECT * FROM users WHERE email = ?`
+					`SELECT *
+					 FROM users
+					 WHERE email = ?`
 				).bind(userInfo.email).first();
 
 				return user;
 			}
 
-			// Step 3: Create new user
+			// Step 3: Create new user with password and username
 			console.log('📝 Creating new user...');
 			const userId = crypto.randomUUID();
 			const nameParts = userInfo.name?.split(' ') || [];
@@ -343,16 +352,25 @@ export class AuthenticationServices {
 			const displayName = userInfo.name || userInfo.login || userInfo.email;
 			const avatarUrl = provider === 'google' ? userInfo.picture : userInfo.avatar_url;
 
+			// ✅ Generate username (first letter of first name + last name)
+			const username = this.generateUsername(firstName || 'user', lastName || 'name');
+			console.log('Generated username:', username);
+
+			// ✅ Hash default password 'password123'
+			const defaultPassword = 'password123';
+			const passwordHash = await this.hashPassword(defaultPassword);
+			console.log('Default password set for OAuth user');
+
 			await this.env.DB.prepare(`
-				INSERT INTO users (
-					id, email, first_name, last_name, display_name,
-					avatar_url, oauth_provider, oauth_id, is_verified, is_active,
-					created_at, updated_at, last_login
-				)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+				INSERT INTO users (id, email, username, password_hash, first_name, last_name, display_name,
+								   avatar_url, oauth_provider, oauth_id, is_verified, is_active,
+								   created_at, updated_at, last_login)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 			`).bind(
 				userId,
 				userInfo.email,
+				username,           // ✅ Generated username
+				passwordHash,       // ✅ Hashed password
 				firstName,
 				lastName,
 				displayName,
@@ -362,10 +380,13 @@ export class AuthenticationServices {
 			).run();
 
 			user = await this.env.DB.prepare(
-				`SELECT * FROM users WHERE id = ?`
+				`SELECT *
+				 FROM users
+				 WHERE id = ?`
 			).bind(userId).first();
 
 			console.log(`✅ Created new ${provider} user:`, userInfo.email);
+			console.log(`✅ Username: ${username}, Default password: ${defaultPassword}`);
 			return user;
 
 		} catch (error) {
@@ -433,19 +454,8 @@ export class AuthenticationServices {
 	 * Verify password against hash
 	 */
 	private async verifyPassword(password: string, hash: string): Promise<boolean> {
-		console.log('Verifying password...');
-
-		// For testing with sample data
-		if (hash === '$2a$10$XQqJQ8M7HJ9Dc0kRgJwKs.VUEDFLjH5e5Gz4NWpc/7YaHgR4t6COe') {
-			const isValid = password === 'password123';
-			console.log('Using test validation, result:', isValid);
-			return isValid;
-		}
-
-		// Simple hash comparison for now
-		const passwordHash = await this.hashPassword(password);
-		console.log('Generated hash:', passwordHash);
-		return passwordHash === hash;
+		const hashedInput = await this.hashPassword(password);
+		return hashedInput === hash;
 	}
 
 	/**
@@ -561,5 +571,14 @@ export class AuthenticationServices {
 		}
 
 		return this.verifyJWT(token);
+	}
+
+	/**
+	 * Generate username from name (first letter of first name + last name)
+	 */
+	private generateUsername(firstName: string, lastName: string): string {
+		const firstInitial = firstName.charAt(0).toLowerCase();
+		const cleanLastName = lastName.toLowerCase().replace(/\s+/g, '');
+		return `${firstInitial}${cleanLastName}`;
 	}
 }
