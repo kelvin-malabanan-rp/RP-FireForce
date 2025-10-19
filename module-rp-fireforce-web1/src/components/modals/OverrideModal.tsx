@@ -5,7 +5,28 @@ import { Calendar, ChevronRight, RefreshCw, CheckCircle, X, UserCheck } from 'lu
 import { Button } from '../ui/button';
 import { Label } from '../ui/label';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
+
 import type { Team, Assignment } from '../../services/oncallService';
+
+// Helper: safely extract display name and initials from various user shapes
+function getDisplayName(user: any): string {
+    if (!user) return '';
+    return (
+        user.firstName || user.first_name || user.given_name || user.name || ''
+    ).toString().trim() + (user.lastName || user.last_name ? ' ' + (user.lastName || user.last_name).toString().trim() : '');
+}
+
+function getInitials(user: any): string {
+    if (!user) return '';
+    const first = (user.firstName || user.first_name || user.given_name || '').toString().trim();
+    const last = (user.lastName || user.last_name || '').toString().trim();
+    const initials = ((first[0] || '') + (last[0] || '')).toUpperCase();
+    if (initials) return initials;
+    // fallback to derive from email
+    const email = (user.email || '').toString();
+    if (email) return email[0].toUpperCase();
+    return '';
+}
 
 interface OverrideModalProps {
     isOpen: boolean;
@@ -57,7 +78,44 @@ export function OverrideModal({ isOpen, onClose, team, selectedDate, currentAssi
     }, [selectedDate]);
 
     const availableUsers = team?.members || [];
-    const originalUser = currentAssignment?.[role];
+
+    // Resolves the "original user" for a given role/assignment, handling arrays, ids, and user objects
+    const resolveOriginalUser = () => {
+        const val = currentAssignment?.[role];
+        if (!val) return null;
+
+        // If the assignment stored multiple users (e.g., escalation array), handle arrays
+        if (Array.isArray(val)) {
+            if (val.length === 0) return null;
+            // Prefer an element that already looks like a full user object
+            const byUserShape = val.find((v: any) => v && (v.id || v.email || v.firstName || v.first_name));
+            if (byUserShape) return byUserShape;
+            // Otherwise if array contains ids, try to resolve by id using team members
+            const asId = val.find((v: any) => typeof v === 'string');
+            if (asId) return team?.members?.find((m: any) => String(m.id) === String(asId)) || null;
+            // fallback to first element
+            return val[0] || null;
+        }
+
+        // If it's already a user-like object (contains id or name/email), return it
+        if (typeof val === 'object') {
+            if (val.id || val.email || val.firstName || val.first_name || val.user_id) {
+                // If it has user_id, prefer finding the real user object from team members
+                if (val.user_id) {
+                    return team?.members?.find((m: any) => String(m.id) === String(val.user_id)) || null;
+                }
+                return val;
+            }
+        }
+
+        // If it's a string (likely a user id), look up in team members
+        if (typeof val === 'string') {
+            return team?.members?.find((m: any) => String(m.id) === String(val)) || null;
+        }
+
+        return null;
+    };
+    const originalUser = resolveOriginalUser();
 
     const handleSave = async () => {
         if (!team || !startDate || !endDate) return;
@@ -75,22 +133,24 @@ export function OverrideModal({ isOpen, onClose, team, selectedDate, currentAssi
         setIsSaving(true);
 
         try {
-            // Calculate start and end times (midnight to midnight)
-            const start = new Date(startDate);
-            start.setHours(0, 0, 0, 0);
+            const startIsoUtc = `${startDate}T00:00:00.000Z`;
+            const endIsoUtc = `${endDate}T23:59:59.999Z`;
 
-            const end = new Date(endDate);
-            end.setHours(23, 59, 59, 999);
+            if (isNaN(new Date(startIsoUtc).getTime()) || isNaN(new Date(endIsoUtc).getTime())) {
+                alert('Invalid date selected');
+                setIsSaving(false);
+                return;
+            }
 
             const payload = {
                 teamId: team.teamId,
-                scheduleId: currentAssignment?.scheduleId,
-                startTime: start.toISOString(),
-                endTime: end.toISOString(),
+                scheduleId: currentAssignment?.scheduleId ?? null,
+                startTime: startIsoUtc,
+                endTime: endIsoUtc,
                 userId: replacementUserId,
                 role,
                 reason,
-                originalUserId: originalUser?.id,
+                originalUserId: originalUser?.id ?? null,
             };
 
             await onSave(payload);
@@ -214,6 +274,7 @@ export function OverrideModal({ isOpen, onClose, team, selectedDate, currentAssi
                     >
                         <option value="primary">Primary</option>
                         <option value="backup">Backup</option>
+                        <option value="escalation">Escalation</option>
                     </select>
                 </div>
 
@@ -223,16 +284,16 @@ export function OverrideModal({ isOpen, onClose, team, selectedDate, currentAssi
                         <p className="text-sm text-slate-600 dark:text-slate-400 mb-2">Currently Assigned:</p>
                         <div className="flex items-center gap-3">
                             <Avatar className="h-10 w-10">
-                                <AvatarImage src={originalUser.avatarUrl} />
+                                <AvatarImage src={originalUser?.avatarUrl ?? originalUser?.avatar_url ?? undefined} />
                                 <AvatarFallback className="bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
-                                    {originalUser.firstName[0]}{originalUser.lastName[0]}
+                                    {getInitials(originalUser)}
                                 </AvatarFallback>
                             </Avatar>
                             <div>
                                 <p className="font-medium text-slate-900 dark:text-white">
-                                    {originalUser.firstName} {originalUser.lastName}
+                                    {getDisplayName(originalUser) || originalUser?.email || 'Unknown'}
                                 </p>
-                                <p className="text-xs text-slate-600 dark:text-slate-400">{originalUser.email}</p>
+                                <p className="text-xs text-slate-600 dark:text-slate-400">{originalUser?.email ?? ''}</p>
                             </div>
                         </div>
                     </div>
