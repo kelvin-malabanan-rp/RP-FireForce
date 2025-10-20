@@ -1050,6 +1050,31 @@ export function IncidentDetailsPage({ incidentId, onBack }: IncidentDetailsPageP
             </Card>
           </motion.div>
 
+          {/* AWS Console Link */}
+          {incident.aws_console_url && (
+              <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.56 }}
+                  className="col-span-2"
+              >
+                <Button
+                    onClick={() => window.open(incident.aws_console_url, '_blank')}
+                    className="w-full bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white shadow-md hover:shadow-lg transition-all group"
+                >
+                  <svg
+                      className="h-5 w-5 mr-2 group-hover:scale-110 transition-transform"
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                  >
+                    <path d="M14.4,6H20V16H18V9.7L8.4,19.3L7,17.9L16.6,8.3H10V6.3H14.4V6M16,2H4A2,2 0 0,0 2,4V16A2,2 0 0,0 4,18H6V20A2,2 0 0,0 8,22H20A2,2 0 0,0 22,20V8A2,2 0 0,0 20,6H18V4A2,2 0 0,0 16,2M4,16V4H16V6H8A2,2 0 0,0 6,8V16H4M20,20H8V8H20V20Z" />
+                  </svg>
+                  View in AWS CloudWatch Console
+                  <ArrowUpRight className="h-4 w-4 ml-2 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                </Button>
+              </motion.div>
+          )}
+
           {/* Comments Section */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}

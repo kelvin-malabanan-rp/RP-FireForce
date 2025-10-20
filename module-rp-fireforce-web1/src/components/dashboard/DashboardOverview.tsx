@@ -718,14 +718,6 @@ export function DashboardOverview({ onNavigateToIncident }: DashboardOverviewPro
                                   })()}
                                 </div>
                               </div>
-                              <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="text-slate-900 dark:text-white border-slate-200 dark:border-white/20 hover:bg-slate-100 dark:hover:bg-slate-800"
-                                  onClick={() => handleViewIncidentDetails(incident.id)}
-                              >
-                                View Details
-                              </Button>
                             </motion.div>
                         );
                       })
