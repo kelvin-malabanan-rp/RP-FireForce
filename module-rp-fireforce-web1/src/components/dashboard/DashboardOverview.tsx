@@ -306,17 +306,58 @@ export function DashboardOverview({ onNavigateToIncident }: DashboardOverviewPro
   }, [incidents]);
 
   const getDisplayStats = () => {
-    if (stats) {
-      const activeIncidents = (stats.open || 0) + (stats.investigating || 0) + (stats.acknowledged || 0);
-      // Count total members across all teams (members is an array)
+    // Calculate stats from actual incidents data as fallback
+    const calculateFromIncidents = () => {
+      const openCount = incidents.filter(i => i.status === 'open').length;
+      const investigatingCount = incidents.filter(i => i.status === 'investigating').length;
+      const acknowledgedCount = incidents.filter(i => i.status === 'acknowledged').length;
+      const resolvedCount = incidents.filter(i => i.status === 'resolved').length;
+      const criticalCount = incidents.filter(i => i.severity === 'critical').length;
+      const highCount = incidents.filter(i => i.severity === 'high').length;
+
+      return {
+        open: openCount,
+        investigating: investigatingCount,
+        acknowledged: acknowledgedCount,
+        resolved: resolvedCount,
+        critical: criticalCount,
+        high: highCount,
+        total: incidents.length
+      };
+    };
+
+    // If stats API returned data, use it; otherwise calculate from incidents
+    const effectiveStats = (!stats ||
+        (stats.total === 0 && incidents.length > 0) ||
+        (stats.open === 0 && stats.investigating === 0 && stats.acknowledged === 0 && incidents.length > 0))
+        ? calculateFromIncidents()
+        : stats;
+
+    if (effectiveStats) {
+      const activeIncidents = (effectiveStats.open || 0) +
+          (effectiveStats.investigating || 0) +
+          (effectiveStats.acknowledged || 0);
+
+      // Count total members across all teams
       const totalOnCall = onCallData.teams.reduce((sum: number, team: any) => {
         return sum + (Array.isArray(team.members) ? team.members.length : 0);
       }, 0);
 
+      console.log('📊 Calculated Stats:', {
+        active: activeIncidents,
+        resolved: effectiveStats.resolved || 0,
+        critical: effectiveStats.critical || 0,
+        high: effectiveStats.high || 0,
+        total: effectiveStats.total || 0,
+        source: effectiveStats === stats ? 'API' : 'Calculated from incidents'
+      });
+
       return {
         active: activeIncidents,
-        resolved: stats.resolved || 0,
-        total: stats.total || 0,
+        resolved: effectiveStats.resolved || 0,
+        total: effectiveStats.total || 0,
+        critical: effectiveStats.critical || 0,
+        high: effectiveStats.high || 0,
         onCall: totalOnCall,
       };
     }
@@ -325,6 +366,8 @@ export function DashboardOverview({ onNavigateToIncident }: DashboardOverviewPro
       active: 0,
       resolved: 0,
       total: 0,
+      critical: 0,
+      high: 0,
       onCall: 0,
     };
   };
@@ -362,7 +405,7 @@ export function DashboardOverview({ onNavigateToIncident }: DashboardOverviewPro
     {
       title: "Active Incidents",
       value: displayStats.active.toString(),
-      change: stats ? `${stats.open || 0} open, ${stats.investigating || 0} investigating` : "Loading...",
+      change: `${displayStats.active} requiring attention`,
       icon: Flame,
       color: "text-red-600",
       bgColor: "bg-red-100",
@@ -371,7 +414,7 @@ export function DashboardOverview({ onNavigateToIncident }: DashboardOverviewPro
     {
       title: "Resolved Today",
       value: displayStats.resolved.toString(),
-      change: stats ? `${displayStats.total} total incidents` : "Loading...",
+      change: `${displayStats.total} total incidents`,
       icon: CheckCircle2,
       color: "text-green-600",
       bgColor: "bg-green-100",
@@ -379,8 +422,8 @@ export function DashboardOverview({ onNavigateToIncident }: DashboardOverviewPro
     },
     {
       title: "Critical Incidents",
-      value: stats?.critical?.toString() || "0",
-      change: stats ? `${stats.high || 0} high priority` : "Loading...",
+      value: (displayStats.critical || 0).toString(),
+      change: `${displayStats.high || 0} high priority`,
       icon: AlertCircle,
       color: "text-orange-600",
       bgColor: "bg-orange-100",
