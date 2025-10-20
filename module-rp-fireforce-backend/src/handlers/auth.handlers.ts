@@ -7,7 +7,6 @@ export async function handleLogin(
 	corsHeaders: Record<string, string>
 ): Promise<Response> {
 	try {
-		// Parse request body
 		let body: LoginRequest;
 		try {
 			body = await request.json() as LoginRequest;
@@ -22,7 +21,6 @@ export async function handleLogin(
 			});
 		}
 
-		// Validate request body
 		if (!body.email || !body.password) {
 			return new Response(JSON.stringify({
 				httpStatus: "BAD_REQUEST",
@@ -34,7 +32,6 @@ export async function handleLogin(
 			});
 		}
 
-		// Validate email format
 		const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 		if (!emailRegex.test(body.email)) {
 			return new Response(JSON.stringify({
@@ -47,7 +44,6 @@ export async function handleLogin(
 			});
 		}
 
-		// Restrict to @rocketpartners.io domain
 		if (!body.email.endsWith('@rocketpartners.io')) {
 			return new Response(JSON.stringify({
 				httpStatus: "FORBIDDEN",
@@ -59,10 +55,7 @@ export async function handleLogin(
 			});
 		}
 
-		// Initialize auth service
 		const authService = new AuthenticationServices(env);
-
-		// Validate credentials
 		const user = await authService.validateCredentials(body.email, body.password);
 
 		if (!user) {
@@ -77,10 +70,8 @@ export async function handleLogin(
 			});
 		}
 
-		// Generate JWT token
 		const token = await authService.generateJWT(user);
 
-		// Prepare login response with team info
 		const loginResponse: LoginResponse = {
 			id: user.id,
 			email: user.email,
@@ -89,7 +80,8 @@ export async function handleLogin(
 			lastName: user.lastName || "",
 			teamId: user.teamId || null,
 			teamRole: user.teamRole || null,
-			token: token
+			token: token,
+			role: user.role || "user",
 		};
 
 		const response: ApiResponse<LoginResponse> = {
@@ -118,7 +110,9 @@ export async function handleLogin(
 	}
 }
 
-// --- WEB OAUTH HANDLERS (For web app with redirects) ---
+// ============================================================================
+// WEB OAUTH HANDLERS (For web app with redirects)
+// ============================================================================
 
 export async function handleGoogleCallback(
 	request: Request,
@@ -128,39 +122,34 @@ export async function handleGoogleCallback(
 		const url = new URL(request.url);
 		const code = url.searchParams.get("code");
 		const error = url.searchParams.get("error");
-
-		// Determine frontend URL based on environment
 		const frontendUrl = env.FRONTEND_URL || 'http://localhost:5173';
 
 		if (error) {
-			return Response.redirect(
-				`${frontendUrl}/auth/error?error=${encodeURIComponent(error)}`
-			);
+			return Response.redirect(`${frontendUrl}/auth/error?error=${encodeURIComponent(error)}`);
 		}
 
 		if (!code) {
-			return Response.redirect(
-				`${frontendUrl}/auth/error?error=no_code`
-			);
+			return Response.redirect(`${frontendUrl}/auth/error?error=no_code`);
 		}
 
 		const authService = new AuthenticationServices(env);
-		// Uses web redirect URI internally
 		const result = await authService.handleGoogleOAuth(code);
 
 		if (!result) {
-			return Response.redirect(
-				`${frontendUrl}/auth/error?error=authentication_failed`
-			);
+			return Response.redirect(`${frontendUrl}/auth/error?error=authentication_failed`);
 		}
 
-		// Redirect to web success page with token in URL fragment (more secure)
+		// ✅ FIXED: result.user is already enriched by the service
 		const params = new URLSearchParams({
 			token: result.token,
 			userId: result.user.id,
 			email: result.user.email,
 			displayName: result.user.display_name || result.user.email || "",
 			avatarUrl: result.user.avatar_url || "",
+			firstName: result.user.first_name || "",
+			lastName: result.user.last_name || "",
+			teamId: result.user.team_id || "",
+			teamRole: result.user.team_role || ""
 		}).toString();
 
 		return Response.redirect(`${frontendUrl}/auth/success#${params}`);
@@ -180,55 +169,49 @@ export async function handleGithubCallback(
 		const url = new URL(request.url);
 		const code = url.searchParams.get("code");
 		const error = url.searchParams.get("error");
-
-		// Determine frontend URL based on environment
 		const frontendUrl = env.FRONTEND_URL || 'http://localhost:5173';
 
 		if (error) {
-			return Response.redirect(
-				`${frontendUrl}/auth/error?error=${encodeURIComponent(error)}`
-			);
+			return Response.redirect(`${frontendUrl}/auth/error?error=${encodeURIComponent(error)}`);
 		}
 
 		if (!code) {
-			return Response.redirect(
-				`${frontendUrl}/auth/error?error=no_code`
-			);
+			return Response.redirect(`${frontendUrl}/auth/error?error=no_code`);
 		}
 
 		const authService = new AuthenticationServices(env);
-		// Uses web redirect URI internally
 		const result = await authService.handleGithubOAuth(code);
 
 		if (!result) {
-			return Response.redirect(
-				`${frontendUrl}/auth/error?error=authentication_failed`
-			);
+			return Response.redirect(`${frontendUrl}/auth/error?error=authentication_failed`);
 		}
 
-		// Redirect to web success page with token in URL fragment
+		// ✅ FIXED: result.user is already enriched by the service
 		const params = new URLSearchParams({
 			token: result.token,
 			userId: result.user.id,
 			email: result.user.email,
 			displayName: result.user.display_name || result.user.email || "",
 			avatarUrl: result.user.avatar_url || "",
+			firstName: result.user.first_name || "",
+			lastName: result.user.last_name || "",
+			teamId: result.user.team_id || "",
+			teamRole: result.user.team_role || ""
 		}).toString();
 
 		return Response.redirect(`${frontendUrl}/auth/success#${params}`);
 	} catch (error) {
 		console.error("GitHub OAuth error:", error);
 		return Response.redirect(
-			`${frontendUrl}/auth/error?error=server_error`
+			`${env.FRONTEND_URL || 'http://localhost:5173'}/auth/error?error=server_error`
 		);
 	}
 }
 
-// --- MOBILE OAUTH HANDLERS (For mobile app with JSON responses) ---
+// ============================================================================
+// MOBILE OAUTH HANDLERS (For mobile app with JSON responses)
+// ============================================================================
 
-/**
- * ✅ Mobile Google OAuth - Returns JSON instead of redirect
- */
 export async function handleMobileGoogleAuth(
 	request: Request,
 	env: Env,
@@ -263,8 +246,6 @@ export async function handleMobileGoogleAuth(
 		}
 
 		const authService = new AuthenticationServices(env);
-
-		// ✅ Use mobile OAuth method with dynamic redirect URI
 		const result = await authService.handleGoogleOAuthMobile(body.code, body.redirectUri);
 
 		if (!result) {
@@ -279,7 +260,7 @@ export async function handleMobileGoogleAuth(
 			});
 		}
 
-		// ✅ Return complete user data matching mobile app's storeUserSession format
+		// ✅ FIXED: result.user is already enriched by the service
 		const response = {
 			httpStatus: "OK",
 			message: "Login successful",
@@ -288,6 +269,8 @@ export async function handleMobileGoogleAuth(
 				email: result.user.email,
 				firstName: result.user.first_name || "",
 				lastName: result.user.last_name || "",
+				displayName: result.user.display_name || "",
+				avatarUrl: result.user.avatar_url || "",
 				role: result.user.user_role || "user",
 				teamId: result.user.team_id || null,
 				teamRole: result.user.team_role || null,
@@ -296,6 +279,7 @@ export async function handleMobileGoogleAuth(
 		};
 
 		console.log('✅ Mobile Google OAuth login successful for:', result.user.email);
+		console.log('👥 Team:', result.user.team_id, '| Role:', result.user.team_role);
 
 		return new Response(JSON.stringify(response), {
 			status: 200,
@@ -315,9 +299,6 @@ export async function handleMobileGoogleAuth(
 	}
 }
 
-/**
- * ✅ Mobile GitHub OAuth - Returns JSON instead of redirect
- */
 export async function handleMobileGithubAuth(
 	request: Request,
 	env: Env,
@@ -352,8 +333,6 @@ export async function handleMobileGithubAuth(
 		}
 
 		const authService = new AuthenticationServices(env);
-
-		// ✅ Use mobile OAuth method with dynamic redirect URI
 		const result = await authService.handleGithubOAuthMobile(body.code, body.redirectUri);
 
 		if (!result) {
@@ -368,7 +347,7 @@ export async function handleMobileGithubAuth(
 			});
 		}
 
-		// ✅ Return complete user data matching mobile app's format
+		// ✅ FIXED: result.user is already enriched by the service
 		const response = {
 			httpStatus: "OK",
 			message: "Login successful",
@@ -377,6 +356,8 @@ export async function handleMobileGithubAuth(
 				email: result.user.email,
 				firstName: result.user.first_name || "",
 				lastName: result.user.last_name || "",
+				displayName: result.user.display_name || "",
+				avatarUrl: result.user.avatar_url || "",
 				role: result.user.user_role || "user",
 				teamId: result.user.team_id || null,
 				teamRole: result.user.team_role || null,
@@ -385,6 +366,7 @@ export async function handleMobileGithubAuth(
 		};
 
 		console.log('✅ Mobile GitHub OAuth login successful for:', result.user.email);
+		console.log('👥 Team:', result.user.team_id, '| Role:', result.user.team_role);
 
 		return new Response(JSON.stringify(response), {
 			status: 200,
@@ -409,7 +391,6 @@ export async function handleLogout(
 	env: Env,
 	corsHeaders: Record<string, string>
 ): Promise<Response> {
-	// Simple logout for now - just return success
 	return new Response(JSON.stringify({
 		httpStatus: "OK",
 		message: "Logged out successfully",

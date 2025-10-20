@@ -34,13 +34,11 @@ export class AuthenticationServices {
 		try {
 			console.log('Validating credentials for:', email);
 
-			// Check if email is from @rocketpartners.io domain
 			if (!email.endsWith('@rocketpartners.io')) {
 				console.log('Invalid email domain:', email);
 				return null;
 			}
 
-			// Get user from database
 			const user = await this.dbService.getUserByEmail(email);
 			console.log('User found:', user ? 'Yes' : 'No');
 
@@ -49,7 +47,6 @@ export class AuthenticationServices {
 				return null;
 			}
 
-			// Verify password
 			const isValid = await this.verifyPassword(password, user.passwordHash);
 			console.log('Password valid:', isValid);
 
@@ -58,7 +55,6 @@ export class AuthenticationServices {
 				return null;
 			}
 
-			// Update last login
 			await this.updateLastLogin(user.id);
 
 			return user;
@@ -94,8 +90,6 @@ export class AuthenticationServices {
 
 	/**
 	 * Handle Google OAuth authentication (Mobile Flow)
-	 * @param code - Authorization code from Google
-	 * @param redirectUri - The exact redirect URI used by the mobile app
 	 */
 	async handleGoogleOAuthMobile(code: string, redirectUri: string): Promise<OAuthResult | null> {
 		console.log('🔵 Starting Mobile Google OAuth flow...');
@@ -105,8 +99,6 @@ export class AuthenticationServices {
 
 	/**
 	 * Handle GitHub OAuth authentication (Mobile Flow)
-	 * @param code - Authorization code from GitHub
-	 * @param redirectUri - The exact redirect URI used by the mobile app
 	 */
 	async handleGithubOAuthMobile(code: string, redirectUri: string): Promise<OAuthResult | null> {
 		console.log('🔵 Starting Mobile GitHub OAuth flow...');
@@ -124,7 +116,6 @@ export class AuthenticationServices {
 			console.log('🔵 Processing Google OAuth...');
 			console.log('📍 Using Redirect URI:', redirectUri);
 
-			// Exchange code for tokens
 			const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -147,7 +138,6 @@ export class AuthenticationServices {
 
 			console.log('✅ Token exchange successful');
 
-			// Get user info
 			const userResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
 				headers: { 'Authorization': `Bearer ${tokens.access_token}` }
 			});
@@ -155,13 +145,11 @@ export class AuthenticationServices {
 			const userInfo: OAuthUserInfo = await userResponse.json();
 			console.log('✅ User info retrieved:', userInfo.email);
 
-			// Validate email domain
 			if (!userInfo.email.endsWith('@rocketpartners.io')) {
 				console.error('❌ Invalid email domain:', userInfo.email);
 				return null;
 			}
 
-			// Find or create user
 			const user = await this.findOrCreateOAuthUser('google', userInfo);
 
 			if (!user) {
@@ -171,10 +159,12 @@ export class AuthenticationServices {
 
 			console.log('✅ User ready:', user.email);
 
-			// Generate JWT token
-			const token = await this.generateJWT(user);
+			// ✅ NEW: Enrich user with team information
+			const enrichedUser = await this.enrichUserWithTeamInfo(user);
 
-			return { user, token };
+			const token = await this.generateJWT(enrichedUser);
+
+			return { user: enrichedUser, token };
 
 		} catch (error) {
 			console.error('❌ Google OAuth error:', error);
@@ -190,7 +180,6 @@ export class AuthenticationServices {
 			console.log('🔵 Processing GitHub OAuth...');
 			console.log('📍 Using Redirect URI:', redirectUri);
 
-			// Exchange code for access token
 			const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
 				method: 'POST',
 				headers: {
@@ -215,7 +204,6 @@ export class AuthenticationServices {
 
 			console.log('✅ Token exchange successful');
 
-			// Get user info
 			const userResponse = await fetch('https://api.github.com/user', {
 				headers: {
 					'Authorization': `Bearer ${tokens.access_token}`,
@@ -226,7 +214,6 @@ export class AuthenticationServices {
 
 			const userInfo: OAuthUserInfo = await userResponse.json();
 
-			// Get user emails
 			const emailResponse = await fetch('https://api.github.com/user/emails', {
 				headers: {
 					'Authorization': `Bearer ${tokens.access_token}`,
@@ -241,13 +228,11 @@ export class AuthenticationServices {
 
 			console.log('✅ User info retrieved:', userInfo.email);
 
-			// Validate email domain
 			if (!userInfo.email.endsWith('@rocketpartners.io')) {
 				console.error('❌ Invalid email domain:', userInfo.email);
 				return null;
 			}
 
-			// Find or create user
 			const user = await this.findOrCreateOAuthUser('github', userInfo);
 
 			if (!user) {
@@ -257,10 +242,12 @@ export class AuthenticationServices {
 
 			console.log('✅ User ready:', user.email);
 
-			// Generate JWT token
-			const token = await this.generateJWT(user);
+			// ✅ NEW: Enrich user with team information
+			const enrichedUser = await this.enrichUserWithTeamInfo(user);
 
-			return { user, token };
+			const token = await this.generateJWT(enrichedUser);
+
+			return { user: enrichedUser, token };
 
 		} catch (error) {
 			console.error('❌ GitHub OAuth error:', error);
@@ -269,6 +256,56 @@ export class AuthenticationServices {
 	}
 
 	// --- UTILITY FUNCTIONS ---
+
+	/**
+	 * ✅ NEW: Enrich user object with team information
+	 * Queries oncall_team_members to add team_id, team_role, and team_name
+	 */
+	async enrichUserWithTeamInfo(user: any): Promise<any> {
+		try {
+			console.log('🔍 Fetching team info for user:', user.id);
+
+			const teamMembership = await this.env.DB.prepare(`
+				SELECT
+					otm.team_id,
+					otm.role as team_role,
+					ot.name as team_name
+				FROM oncall_team_members otm
+						 JOIN oncall_teams ot ON otm.team_id = ot.id
+				WHERE otm.user_id = ?
+				  AND otm.is_active = 1
+				  AND ot.is_active = 1
+				LIMIT 1
+			`).bind(user.id).first();
+
+			if (teamMembership) {
+				console.log('✅ Team found:', teamMembership.team_name, '| Role:', teamMembership.team_role);
+
+				return {
+					...user,
+					team_id: teamMembership.team_id,
+					team_role: teamMembership.team_role,
+					team_name: teamMembership.team_name
+				};
+			} else {
+				console.log('⚠️ No team membership found for user');
+				return {
+					...user,
+					team_id: null,
+					team_role: null,
+					team_name: null
+				};
+			}
+		} catch (error) {
+			console.error('❌ Error enriching user with team info:', error);
+			return {
+				...user,
+				team_id: null,
+				team_role: null,
+				team_name: null
+			};
+		}
+	}
 
 	/**
 	 * Find or create OAuth user (safe against duplicate email constraint)
@@ -287,12 +324,8 @@ export class AuthenticationServices {
 				return null;
 			}
 
-			// Step 1: Try to find user by provider + oauth_id first
 			let user = await this.env.DB.prepare(
-				`SELECT *
-				 FROM users
-				 WHERE oauth_provider = ?
-				   AND oauth_id = ?`
+				`SELECT * FROM users WHERE oauth_provider = ? AND oauth_id = ?`
 			).bind(provider, oauthId).first();
 
 			if (user) {
@@ -301,11 +334,8 @@ export class AuthenticationServices {
 				return user;
 			}
 
-			// Step 2: If not found, check by email
 			const existingByEmail = await this.env.DB.prepare(
-				`SELECT *
-				 FROM users
-				 WHERE email = ?`
+				`SELECT * FROM users WHERE email = ?`
 			).bind(userInfo.email).first();
 
 			if (existingByEmail) {
@@ -329,17 +359,13 @@ export class AuthenticationServices {
 
 				await this.updateLastLogin(existingByEmail.id);
 
-				// Re-fetch updated user
 				user = await this.env.DB.prepare(
-					`SELECT *
-					 FROM users
-					 WHERE email = ?`
+					`SELECT * FROM users WHERE email = ?`
 				).bind(userInfo.email).first();
 
 				return user;
 			}
 
-			// Step 3: Create new user with password and username
 			console.log('📝 Creating new user...');
 			const userId = crypto.randomUUID();
 			const nameParts = userInfo.name?.split(' ') || [];
@@ -352,11 +378,9 @@ export class AuthenticationServices {
 			const displayName = userInfo.name || userInfo.login || userInfo.email;
 			const avatarUrl = provider === 'google' ? userInfo.picture : userInfo.avatar_url;
 
-			// ✅ Generate username (first letter of first name + last name)
 			const username = this.generateUsername(firstName || 'user', lastName || 'name');
 			console.log('Generated username:', username);
 
-			// ✅ Hash default password 'password123'
 			const defaultPassword = 'password123';
 			const passwordHash = await this.hashPassword(defaultPassword);
 			console.log('Default password set for OAuth user');
@@ -369,8 +393,8 @@ export class AuthenticationServices {
 			`).bind(
 				userId,
 				userInfo.email,
-				username,           // ✅ Generated username
-				passwordHash,       // ✅ Hashed password
+				username,
+				passwordHash,
 				firstName,
 				lastName,
 				displayName,
@@ -380,9 +404,7 @@ export class AuthenticationServices {
 			).run();
 
 			user = await this.env.DB.prepare(
-				`SELECT *
-				 FROM users
-				 WHERE id = ?`
+				`SELECT * FROM users WHERE id = ?`
 			).bind(userId).first();
 
 			console.log(`✅ Created new ${provider} user:`, userInfo.email);
@@ -463,12 +485,12 @@ export class AuthenticationServices {
 	 */
 	private async hashPassword(password: string): Promise<string> {
 		const encoder = new TextEncoder();
-		// Using a simple salt for now - replace with proper bcrypt in production
 		const data = encoder.encode(password + 'rp-fire-force-salt');
 		const hashBuffer = await crypto.subtle.digest('SHA-256', data);
 		const hashArray = Array.from(new Uint8Array(hashBuffer));
 		return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 	}
+
 	/**
 	 * Verify JWT token and extract payload
 	 */
@@ -476,7 +498,6 @@ export class AuthenticationServices {
 		try {
 			console.log('🔐 Verifying JWT token...');
 
-			// Split token into parts
 			const parts = token.split('.');
 			if (parts.length !== 3) {
 				console.error('❌ Invalid token format');
@@ -485,24 +506,20 @@ export class AuthenticationServices {
 
 			const [headerB64, payloadB64, signatureB64] = parts;
 
-			// Decode payload
 			const payloadJson = atob(payloadB64);
 			const payload = JSON.parse(payloadJson);
 
-			// Check expiration
 			const now = Math.floor(Date.now() / 1000);
 			if (payload.exp && payload.exp < now) {
 				console.error('❌ Token has expired');
 				return null;
 			}
 
-			// Verify signature
 			const data = `${headerB64}.${payloadB64}`;
 			const encoder = new TextEncoder();
 			const keyData = encoder.encode(this.env.JWT_SECRET);
 			const dataToSign = encoder.encode(data);
 
-			// Import key
 			const key = await crypto.subtle.importKey(
 				'raw',
 				keyData,
@@ -511,13 +528,11 @@ export class AuthenticationServices {
 				['verify']
 			);
 
-			// Decode the signature from base64url
 			const signatureBytes = Uint8Array.from(
 				atob(signatureB64.replace(/-/g, '+').replace(/_/g, '/')),
 				c => c.charCodeAt(0)
 			);
 
-			// Verify signature
 			const isValid = await crypto.subtle.verify(
 				'HMAC',
 				key,
@@ -530,7 +545,6 @@ export class AuthenticationServices {
 				return null;
 			}
 
-			// Validate required fields
 			if (!payload.userId || !payload.email) {
 				console.error('❌ Invalid token payload - missing userId or email');
 				return null;
@@ -563,7 +577,7 @@ export class AuthenticationServices {
 			return null;
 		}
 
-		const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+		const token = authHeader.substring(7);
 
 		if (!token || token.trim() === '') {
 			console.log('❌ Empty token');
