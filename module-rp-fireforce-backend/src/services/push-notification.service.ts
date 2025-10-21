@@ -245,36 +245,44 @@ export class PushNotificationService {
 			.prepare('SELECT * FROM incidents WHERE id = ?')
 			.bind(incidentId)
 			.first();
+
 		if (!incidentRow) {
 			console.warn('[push] [all_clear] incident not found:', incidentId);
 			return { notifiedCount: 0, users: [] };
 		}
 
 		// 2) Find everyone who previously received 'alert' for this incident
+		// ✅ FIXED: Proper JOIN using user_id and correct SQLite concatenation
 		const { results } = await this.dbService.db
 			.prepare(`
 				SELECT DISTINCT
 					n.token,
 					n.fcm_token,
-					u.name,
-					u.email
+					u.first_name || ' ' || u.last_name AS name,
+					u.email,
+					u.id AS user_id
 				FROM incident_notifications n
-				LEFT JOIN users u ON n.token = u.expo_token OR n.fcm_token = u.fcm_token
-				WHERE n.incident_id = ? AND n.kind = 'alert'
+						 INNER JOIN users u ON n.user_id = u.id
+				WHERE n.incident_id = ?
+				  AND n.kind = 'alert'
+				  AND (n.token IS NOT NULL OR n.fcm_token IS NOT NULL)
 			`)
 			.bind(incidentId)
 			.all();
 
 		const recipients = (results as any[]) || [];
+
 		if (recipients.length === 0) {
 			console.log('[push] [all_clear] no prior recipients to notify for', incidentId);
 			return { notifiedCount: 0, users: [] };
 		}
 
+		console.log(`[push] [all_clear] found ${recipients.length} recipients for ${incidentId}`);
+
 		// 3) Build an all-clear message (gentle sound/channel)
 		const message: Omit<PushMessage, 'to'> = {
-			title: `ALL CLEAR: ${incidentRow.title ?? 'Incident resolved'}`,
-			body: 'The incident has been resolved. Thanks for jumping in!',
+			title: `✅ ALL CLEAR: ${incidentRow.title ?? 'Incident resolved'}`,
+			body: 'The incident has been resolved. Thanks for your attention!',
 			data: {
 				type: 'all_clear',
 				incidentId,
@@ -290,10 +298,15 @@ export class PushNotificationService {
 		const notifiedUsers: Array<{ name: string; email: string }> = [];
 
 		for (const r of recipients) {
+			// Use FCM token if available, otherwise Expo token
 			const tokenUsed = r.fcm_token || r.token;
-			if (!tokenUsed) continue;
+			if (!tokenUsed) {
+				console.warn('[push] [all_clear] no valid token for user:', r.user_id);
+				continue;
+			}
 
 			const ok = await this.sendPushNotification(tokenUsed, message);
+
 			if (ok) {
 				sent++;
 
@@ -304,16 +317,23 @@ export class PushNotificationService {
 					});
 				}
 
+				// Log the all_clear notification
 				await this.logDelivery(
 					incidentId,
 					'all_clear',
 					tokenUsed.startsWith('ExponentPushToken') ? tokenUsed : undefined,
-					tokenUsed.startsWith('ExponentPushToken') ? undefined : tokenUsed
+					tokenUsed.startsWith('ExponentPushToken') ? undefined : tokenUsed,
+					r.user_id
 				);
+			} else {
+				console.error('[push] [all_clear] failed to send to token:', tokenUsed);
 			}
 		}
 
-		console.log(`[push] [all_clear] sent to ${sent}/${recipients.length} recipients`, { incidentId });
+		console.log(`[push] [all_clear] sent to ${sent}/${recipients.length} recipients`, {
+			incidentId,
+			notifiedUsers: notifiedUsers.map(u => u.name)
+		});
 
 		return {
 			notifiedCount: sent,
